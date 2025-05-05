@@ -10,6 +10,8 @@ export interface Post {
   latitude: number;
   longitude: number;
   createdAt: string; // Store as ISO string (TEXT in SQLite)
+  mediaUrl?: string | null; // Optional URL for image/video (stored as TEXT/Data URL)
+  mediaType?: 'image' | 'video' | null; // Type of media
 }
 
 // Define the structure for adding a new post (omit id and createdAt)
@@ -34,8 +36,12 @@ try {
     db = new DatabaseConstructor(dbPath, { verbose: console.log }); // Enable verbose logging for debugging
     console.log('Database connection established.');
 
-    // Create the posts table if it doesn't exist
-    db.exec(`
+    // Get existing columns
+    const tableInfo = db.prepare("PRAGMA table_info(posts)").all();
+    const columns = tableInfo.map((col: any) => col.name);
+
+    // Create the posts table if it doesn't exist (idempotent)
+     db.exec(`
         CREATE TABLE IF NOT EXISTS posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             content TEXT NOT NULL,
@@ -45,6 +51,18 @@ try {
         );
     `);
      console.log('Checked/Created posts table.');
+
+     // Add mediaUrl column if it doesn't exist
+    if (!columns.includes('mediaUrl')) {
+        db.exec('ALTER TABLE posts ADD COLUMN mediaUrl TEXT NULL');
+        console.log('Added mediaUrl column to posts table.');
+    }
+    // Add mediaType column if it doesn't exist
+    if (!columns.includes('mediaType')) {
+        db.exec('ALTER TABLE posts ADD COLUMN mediaType TEXT NULL');
+        console.log('Added mediaType column to posts table.');
+    }
+
 
 } catch (error) {
     console.error('Error initializing database:', error);
@@ -56,7 +74,7 @@ try {
 // Function to get all posts, ordered by creation date descending
 export function getPosts(): Post[] {
    try {
-      const stmt = db.prepare('SELECT id, content, latitude, longitude, createdAt FROM posts ORDER BY createdAt DESC');
+      const stmt = db.prepare('SELECT id, content, latitude, longitude, createdAt, mediaUrl, mediaType FROM posts ORDER BY createdAt DESC');
       const posts = stmt.all() as Post[];
        console.log(`Fetched ${posts.length} posts.`);
       return posts;
@@ -70,12 +88,19 @@ export function getPosts(): Post[] {
 export function addPost(newPost: NewPost): Post {
     try {
         const createdAt = new Date().toISOString(); // Get current time in ISO format
-        const stmt = db.prepare('INSERT INTO posts (content, latitude, longitude, createdAt) VALUES (?, ?, ?, ?)');
-        const info = stmt.run(newPost.content, newPost.latitude, newPost.longitude, createdAt);
+        const stmt = db.prepare('INSERT INTO posts (content, latitude, longitude, createdAt, mediaUrl, mediaType) VALUES (?, ?, ?, ?, ?, ?)');
+        const info = stmt.run(
+            newPost.content,
+            newPost.latitude,
+            newPost.longitude,
+            createdAt,
+            newPost.mediaUrl ?? null, // Use null if undefined
+            newPost.mediaType ?? null // Use null if undefined
+        );
          console.log(`Added post with ID: ${info.lastInsertRowid}`);
 
         // Retrieve the newly inserted post to return it including the ID and timestamp
-        const insertedPost = db.prepare('SELECT id, content, latitude, longitude, createdAt FROM posts WHERE id = ?').get(info.lastInsertRowid) as Post;
+        const insertedPost = db.prepare('SELECT id, content, latitude, longitude, createdAt, mediaUrl, mediaType FROM posts WHERE id = ?').get(info.lastInsertRowid) as Post;
 
         if (!insertedPost) {
             throw new Error('Failed to retrieve the newly inserted post.');
