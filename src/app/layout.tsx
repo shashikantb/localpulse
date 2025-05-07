@@ -1,3 +1,4 @@
+
 import type { Metadata } from 'next';
 import { Geist } from 'next/font/google';
 import './globals.css';
@@ -26,7 +27,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geistSans.variable} antialiased`}>
-        <main className="flex min-h-screen flex-col items-center p-4 sm:p-8 md:p-12 lg:p-24">
+        <main className="flex min-h-screen flex-col items-center p-4 sm:p-6 md:p-8 lg:p-16">
           {children}
         </main>
         <Toaster /> {/* Add Toaster for notifications */}

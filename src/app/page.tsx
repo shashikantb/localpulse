@@ -9,7 +9,7 @@ import { PostCard } from '@/components/post-card';
 import { PostForm } from '@/components/post-form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { MapPin, Terminal } from 'lucide-react';
+import { MapPin, Terminal, Zap } from 'lucide-react'; // Added Zap icon
 import { useToast } from "@/hooks/use-toast"; // Import useToast
 
 const Home: FC = () => {
@@ -164,8 +164,11 @@ const Home: FC = () => {
 
   return (
     <div className="container mx-auto max-w-3xl space-y-8">
-      <header className="text-center space-y-2">
-        <h1 className="text-4xl font-bold text-primary">LocalPulse</h1>
+      <header className="text-center space-y-2 mb-8">
+        <div className="flex items-center justify-center space-x-2">
+           <Zap className="h-10 w-10 text-accent" />
+           <h1 className="text-4xl font-bold text-primary">LocalPulse</h1>
+        </div>
         <p className="text-lg text-muted-foreground">See what's buzzing around you</p>
       </header>
 
@@ -191,7 +194,7 @@ const Home: FC = () => {
         <div className="space-y-6">
            {/* Render PostForm only if location is available */}
            {location && (
-               <div className="p-4 bg-card rounded-lg shadow">
+               <div className="p-6 bg-card rounded-lg shadow-lg"> {/* Increased padding and shadow */}
                  <h2 className="text-xl font-semibold mb-4 text-primary">Post Something Nearby</h2>
                  <PostForm onSubmit={handleAddPost} submitting={formSubmitting} />
                  <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">

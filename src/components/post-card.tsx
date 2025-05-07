@@ -1,3 +1,4 @@
+
 import type { FC } from 'react';
 import Image from 'next/image'; // Import next/image
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -35,27 +36,26 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
       {post.mediaUrl && post.mediaType && (
         <div className="px-6 pb-4 pt-0"> {/* Use CardContent padding */}
           {post.mediaType === 'image' && post.mediaUrl.startsWith('data:image') && (
-            <div className="relative w-full h-64 overflow-hidden rounded-md border">
-               {/* Ensure mediaUrl is treated as a string for src */}
+            <div className="relative w-full aspect-video overflow-hidden rounded-md border">
               <Image
                   src={post.mediaUrl as string}
                   alt="Post image"
-                  layout="fill"
-                  objectFit="cover"
+                  fill
+                  style={{ objectFit: "cover" }}
+                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                   data-ai-hint="user generated content"
               />
             </div>
           )}
           {post.mediaType === 'video' && post.mediaUrl.startsWith('data:video') && (
             <div className="mt-2">
-              {/* Ensure mediaUrl is treated as a string for src */}
-              <video controls src={post.mediaUrl as string} className="w-full max-h-64 rounded-md border" />
+              <video controls src={post.mediaUrl as string} className="w-full aspect-video rounded-md border" />
             </div>
           )}
         </div>
       )}
       <CardContent className={post.mediaUrl ? 'pt-0' : ''}> {/* Remove top padding if media is shown */}
-        <p className="text-foreground">{post.content}</p>
+        <p className="text-foreground leading-relaxed">{post.content}</p>
       </CardContent>
       <CardFooter className="text-xs text-muted-foreground flex items-center justify-between pt-2">
          <div className="flex items-center gap-1">
