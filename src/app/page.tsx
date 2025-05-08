@@ -246,114 +246,116 @@ const Home: FC = () => {
 
 
   return (
-    <div className="container mx-auto max-w-2xl space-y-8 py-8">
-      <header className="text-center space-y-3 py-6 bg-card/80 backdrop-blur-sm rounded-xl shadow-xl border border-border/70 sticky top-4 z-40">
-        <div className="flex items-center justify-center space-x-3">
-          <Zap className="h-12 w-12 text-accent drop-shadow-lg" />
-          <h1 className="text-5xl font-extrabold text-primary tracking-tight drop-shadow-md">LocalPulse</h1>
-        </div>
-        <p className="text-xl text-muted-foreground">See what's buzzing around you</p>
-      </header>
+    <main className="flex min-h-screen flex-col items-center p-4 sm:p-6 md:p-8 lg:p-16">
+        <div className="container mx-auto max-w-2xl space-y-8 py-8">
+        <header className="text-center space-y-3 py-6 bg-card/80 backdrop-blur-sm rounded-xl shadow-xl border border-border/70 sticky top-4 z-40">
+            <div className="flex items-center justify-center space-x-3">
+            <Zap className="h-12 w-12 text-accent drop-shadow-lg" />
+            <h1 className="text-5xl font-extrabold text-primary tracking-tight drop-shadow-md">LocalPulse</h1>
+            </div>
+            <p className="text-xl text-muted-foreground">See what's buzzing around you</p>
+        </header>
 
-      {loadingLocation && (
-        <Card className="flex flex-col items-center justify-center space-y-3 p-6 rounded-lg shadow-lg">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">Fetching your location...</p>
-          <Skeleton className="h-4 w-3/4 bg-muted-foreground/20" />
-          <Skeleton className="h-4 w-1/2 bg-muted-foreground/20" />
-        </Card>
-      )}
-
-      {locationError && !loadingLocation && (
-        <Alert variant="destructive" className="shadow-lg">
-          <Terminal className="h-5 w-5" />
-          <AlertTitle className="font-semibold">Location Error</AlertTitle>
-          <AlertDescription>{locationError}</AlertDescription>
-        </Alert>
-      )}
-
-      {!loadingLocation && (
-        <div className="space-y-8">
-          {location && (
-            <Card className="overflow-hidden shadow-2xl border border-border/50 rounded-xl">
-              <CardHeader>
-                <CardTitle className="text-2xl font-semibold text-primary flex items-center">
-                  <MapPin className="w-6 h-6 mr-2 text-accent" />
-                  Share Your Pulse
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <PostForm onSubmit={handleAddPost} submitting={formSubmitting} />
-                <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-primary" />
-                  Posting from: {location.latitude.toFixed(3)}, {location.longitude.toFixed(3)}
-                </p>
-              </CardContent>
+        {loadingLocation && (
+            <Card className="flex flex-col items-center justify-center space-y-3 p-6 rounded-lg shadow-lg">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-muted-foreground">Fetching your location...</p>
+            <Skeleton className="h-4 w-3/4 bg-muted-foreground/20" />
+            <Skeleton className="h-4 w-1/2 bg-muted-foreground/20" />
             </Card>
-          )}
+        )}
 
-          <div className="flex justify-end">
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="outline" className="shadow-md hover:shadow-lg transition-shadow">
-                  <SlidersHorizontal className="w-4 h-4 mr-2" />
-                  Filters
-                </Button>
-              </SheetTrigger>
-              <SheetContent>
-                <FilterSheetContent />
-              </SheetContent>
-            </Sheet>
-          </div>
+        {locationError && !loadingLocation && (
+            <Alert variant="destructive" className="shadow-lg">
+            <Terminal className="h-5 w-5" />
+            <AlertTitle className="font-semibold">Location Error</AlertTitle>
+            <AlertDescription>{locationError}</AlertDescription>
+            </Alert>
+        )}
 
-
-          <div className="space-y-6">
-            <h2 className="text-3xl font-semibold text-primary pl-1 flex items-center">
-              <Zap className="w-7 h-7 mr-2 text-accent opacity-80" />
-              Nearby Pulses
-            </h2>
-            {loadingPosts && !allPosts.length ? ( 
-              Array.from({ length: 3 }).map((_, index) => (
-                <div key={index} className="space-y-4 p-5 bg-card rounded-xl shadow-xl animate-pulse border border-border/30">
-                  <div className="flex items-center space-x-3">
-                    <Skeleton className="h-10 w-10 rounded-full bg-muted" />
-                    <div className="space-y-2 flex-1">
-                      <Skeleton className="h-4 w-1/3 bg-muted" />
-                      <Skeleton className="h-3 w-1/4 bg-muted" />
-                    </div>
-                  </div>
-                  <Skeleton className="h-5 w-full bg-muted" />
-                  <Skeleton className="h-5 w-5/6 bg-muted" />
-                  <Skeleton className="h-40 w-full bg-muted rounded-md" />
-                </div>
-              ))
-            ) : displayedPosts.length > 0 ? (
-              displayedPosts.map((post) => (
-                <PostCard
-                  key={post.id}
-                  post={post}
-                  userLocation={location}
-                  calculateDistance={calculateDistance}
-                />
-              ))
-            ) : (
-              <Card className="text-center py-12 rounded-xl shadow-lg border border-border/40">
-                <CardContent className="flex flex-col items-center">
-                  <Zap className="mx-auto h-16 w-16 text-muted-foreground/40 mb-4" />
-                  <p className="text-xl text-muted-foreground">
-                    {allPosts.length > 0 && !showAnyDistance ? "No pulses found within this range." : "No pulses found nearby yet."}
-                  </p>
-                  <p className="text-sm text-muted-foreground/80 mt-1">
-                    {allPosts.length > 0 && !showAnyDistance ? "Try expanding the distance or " : ""}
-                    Be the first to share what's happening!
-                  </p>
+        {!loadingLocation && (
+            <div className="space-y-8">
+            {location && (
+                <Card className="overflow-hidden shadow-2xl border border-border/50 rounded-xl">
+                <CardHeader>
+                    <CardTitle className="text-2xl font-semibold text-primary flex items-center">
+                    <MapPin className="w-6 h-6 mr-2 text-accent" />
+                    Share Your Pulse
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <PostForm onSubmit={handleAddPost} submitting={formSubmitting} />
+                    <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-primary" />
+                    Posting from: {location.latitude.toFixed(3)}, {location.longitude.toFixed(3)}
+                    </p>
                 </CardContent>
-              </Card>
+                </Card>
             )}
-          </div>
+
+            <div className="flex justify-end">
+                <Sheet>
+                <SheetTrigger asChild>
+                    <Button variant="outline" className="shadow-md hover:shadow-lg transition-shadow">
+                    <SlidersHorizontal className="w-4 h-4 mr-2" />
+                    Filters
+                    </Button>
+                </SheetTrigger>
+                <SheetContent>
+                    <FilterSheetContent />
+                </SheetContent>
+                </Sheet>
+            </div>
+
+
+            <div className="space-y-6">
+                <h2 className="text-3xl font-semibold text-primary pl-1 flex items-center">
+                <Zap className="w-7 h-7 mr-2 text-accent opacity-80" />
+                Nearby Pulses
+                </h2>
+                {loadingPosts && !allPosts.length ? ( 
+                Array.from({ length: 3 }).map((_, index) => (
+                    <div key={index} className="space-y-4 p-5 bg-card rounded-xl shadow-xl animate-pulse border border-border/30">
+                    <div className="flex items-center space-x-3">
+                        <Skeleton className="h-10 w-10 rounded-full bg-muted" />
+                        <div className="space-y-2 flex-1">
+                        <Skeleton className="h-4 w-1/3 bg-muted" />
+                        <Skeleton className="h-3 w-1/4 bg-muted" />
+                        </div>
+                    </div>
+                    <Skeleton className="h-5 w-full bg-muted" />
+                    <Skeleton className="h-5 w-5/6 bg-muted" />
+                    <Skeleton className="h-40 w-full bg-muted rounded-md" />
+                    </div>
+                ))
+                ) : displayedPosts.length > 0 ? (
+                displayedPosts.map((post) => (
+                    <PostCard
+                    key={post.id}
+                    post={post}
+                    userLocation={location}
+                    calculateDistance={calculateDistance}
+                    />
+                ))
+                ) : (
+                <Card className="text-center py-12 rounded-xl shadow-lg border border-border/40">
+                    <CardContent className="flex flex-col items-center">
+                    <Zap className="mx-auto h-16 w-16 text-muted-foreground/40 mb-4" />
+                    <p className="text-xl text-muted-foreground">
+                        {allPosts.length > 0 && !showAnyDistance ? "No pulses found within this range." : "No pulses found nearby yet."}
+                    </p>
+                    <p className="text-sm text-muted-foreground/80 mt-1">
+                        {allPosts.length > 0 && !showAnyDistance ? "Try expanding the distance or " : ""}
+                        Be the first to share what's happening!
+                    </p>
+                    </CardContent>
+                </Card>
+                )}
+            </div>
+            </div>
+        )}
         </div>
-      )}
-    </div>
+    </main>
   );
 };
 

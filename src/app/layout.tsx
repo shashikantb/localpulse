@@ -9,14 +9,9 @@ const geistSans = Geist({
   subsets: ['latin'],
 });
 
-// const geistMono = Geist_Mono({ // Removing mono font as it's not used
-//   variable: '--font-geist-mono',
-//   subsets: ['latin'],
-// });
-
 export const metadata: Metadata = {
-  title: 'LocalPulse', // Update title
-  description: 'Share and discover what\'s happening around you', // Update description
+  title: 'LocalPulse',
+  description: 'Share and discover what\'s happening around you',
 };
 
 export default function RootLayout({
@@ -26,11 +21,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} antialiased`}>
-        <main className="flex min-h-screen flex-col items-center p-4 sm:p-6 md:p-8 lg:p-16">
-          {children}
-        </main>
-        <Toaster /> {/* Add Toaster for notifications */}
+      <body className={`${geistSans.variable} antialiased bg-background text-foreground`}>
+        {/* The main tag is removed from here to allow admin layout to take full screen */}
+        {children}
+        <Toaster /> {/* Add Toaster for notifications globally */}
       </body>
     </html>
   );
