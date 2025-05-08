@@ -21,15 +21,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full"> {/* Ensure html takes full height */}
-      <body className={`${geistSans.variable} antialiased bg-background text-foreground flex flex-col min-h-screen`}> {/* Use flex-col and min-h-screen */}
-        <div className="flex-grow"> {/* Main content wrapper that grows */}
+    <html lang="en" className="h-full">
+      <head>
+        {/* Next.js will populate this head based on metadata and other conventions */}
+      </head>
+      <body className={`${geistSans.variable} antialiased bg-background text-foreground flex flex-col min-h-screen`}>
+        <div className="flex-grow">
           {children}
         </div>
-        <Footer /> {/* Add Footer component */}
-        <Toaster /> {/* Add Toaster for notifications globally */}
+        <Footer />
+        <Toaster />
       </body>
     </html>
   );
 }
-
