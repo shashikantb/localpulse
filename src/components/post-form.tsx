@@ -9,13 +9,14 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Loader2, Paperclip, XCircle, UploadCloud, Film, Image as ImageIcon } from 'lucide-react';
+import { Loader2, Paperclip, XCircle, UploadCloud, Film, Image as ImageIcon, Settings2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const VIDEO_OPTIMIZATION_THRESHOLD = 1 * 1024 * 1024; // 1MB - videos larger than this will show "optimizing" message
 
 const formSchema = z.object({
   content: z.string().min(1, "Post cannot be empty").max(280, "Post cannot exceed 280 characters"),
@@ -33,7 +34,8 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<'image' | 'video' | null>(null);
-  const [isProcessingFile, setIsProcessingFile] = useState(false);
+  const [isReadingFile, setIsReadingFile] = useState(false);
+  const [isOptimizingVideo, setIsOptimizingVideo] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -50,56 +52,84 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
       setSelectedFile(null);
       setMediaType(null);
       setFileError(null);
+      setIsReadingFile(false);
+      setIsOptimizingVideo(false);
 
       if (file) {
           if (file.size > MAX_FILE_SIZE) {
-              setFileError(`File size exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB.`);
+              setFileError(`File is too large. Max size: ${MAX_FILE_SIZE / 1024 / 1024}MB.`);
               setSelectedFile(null);
               if (fileInputRef.current) fileInputRef.current.value = '';
               return;
           }
 
-          const type = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : null;
+          const currentFileType = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : null;
 
-          if (!type) {
+          if (!currentFileType) {
               setFileError('Invalid file type. Please select an image or video.');
               setSelectedFile(null);
               if (fileInputRef.current) fileInputRef.current.value = '';
               return;
           }
 
-          setIsProcessingFile(true);
+          setIsReadingFile(true);
+          let  shouldOptimizeThisFile = false;
+
+          if (currentFileType === 'video' && file.size > VIDEO_OPTIMIZATION_THRESHOLD) {
+              shouldOptimizeThisFile = true;
+              setIsOptimizingVideo(true);
+              toast({
+                  title: "Optimizing Video",
+                  description: "Larger videos are being prepared. This might take a moment. Actual size reduction is a planned feature.",
+                  duration: 4000,
+              });
+          }
+
           const reader = new FileReader();
           reader.onloadend = () => {
+              // In a real app with compression, reader.result would be the compressed Data URL for videos.
+              // For now, it's the original Data URL.
               setPreviewUrl(reader.result as string);
-              setSelectedFile(file);
-              setMediaType(type);
-              setIsProcessingFile(false);
+              setSelectedFile(file); // Store original file for info like name, size
+              setMediaType(currentFileType);
+              setIsReadingFile(false); // Done reading
+
+              if (shouldOptimizeThisFile) {
+                  setIsOptimizingVideo(false); // Done "optimizing"
+                  toast({
+                      title: "Video Ready",
+                      description: "Video is now ready to be included in your post.",
+                      duration: 3000,
+                  });
+              }
           };
           reader.onerror = () => {
               setFileError('Error reading file.');
               setSelectedFile(null);
               setPreviewUrl(null);
               setMediaType(null);
-              setIsProcessingFile(false);
+              setIsReadingFile(false);
+              setIsOptimizingVideo(false);
               if (fileInputRef.current) fileInputRef.current.value = '';
           };
           reader.readAsDataURL(file);
       }
-   }, []);
+   }, [toast]);
 
   const removeMedia = () => {
       setSelectedFile(null);
       setPreviewUrl(null);
       setMediaType(null);
       setFileError(null);
+      setIsReadingFile(false);
+      setIsOptimizingVideo(false);
       if (fileInputRef.current) {
           fileInputRef.current.value = '';
       }
   };
 
-  const handleSubmit: SubmitHandler<FormData> = async (data) => {
-      if (submitting || isProcessingFile) return;
+  const handleSubmitForm: SubmitHandler<FormData> = async (data) => {
+      if (submitting || isReadingFile || isOptimizingVideo) return;
 
       if (fileError) {
         toast({
@@ -110,17 +140,29 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
         return;
       }
 
+      // The previewUrl here would be the (potentially compressed) data URL.
+      // mediaType is correctly set.
       await onSubmit(data.content, previewUrl ?? undefined, mediaType ?? undefined);
 
       form.reset();
       removeMedia();
   };
 
-  const isButtonDisabled = submitting || isProcessingFile;
+  const isButtonDisabled = submitting || isReadingFile || isOptimizingVideo;
+
+  let buttonText = 'Share Your Pulse';
+  if (isOptimizingVideo) {
+    buttonText = 'Optimizing Video...';
+  } else if (isReadingFile) {
+    buttonText = 'Processing File...';
+  } else if (submitting) {
+    buttonText = 'Pulsing...';
+  }
+
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(handleSubmitForm)} className="space-y-6">
         <FormField
           control={form.control}
           name="content"
@@ -131,7 +173,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
                 <Textarea
                   id="post-content"
                   placeholder="Share your local pulse..."
-                  className="resize-none min-h-[100px] text-base shadow-sm focus:ring-2 focus:ring-primary/50"
+                  className="resize-none min-h-[100px] text-base shadow-sm focus:ring-2 focus:ring-primary/50 rounded-lg"
                   rows={4}
                   {...field}
                   disabled={isButtonDisabled}
@@ -165,44 +207,45 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
               />
             </FormControl>
 
-            {!selectedFile && !isProcessingFile && (
+            {!selectedFile && !isReadingFile && !isOptimizingVideo && (
               <div className="text-center">
                 <UploadCloud className="mx-auto h-10 w-10 text-muted-foreground mb-2" />
                 <p className="text-sm text-muted-foreground">
                   <span className="font-semibold text-primary">Click to upload</span> or drag and drop
                 </p>
-                <p className="text-xs text-muted-foreground/80">Image or Video (Max 5MB)</p>
+                <p className="text-xs text-muted-foreground/80">Image or Video (Max {MAX_FILE_SIZE / 1024 / 1024}MB)</p>
               </div>
             )}
 
-            {isProcessingFile && (
-              <div className="flex flex-col items-center text-muted-foreground">
-                <Loader2 className="h-8 w-8 animate-spin mb-2" />
-                <p className="text-sm">Processing media...</p>
+            {(isReadingFile || isOptimizingVideo) && (
+              <div className="flex flex-col items-center text-muted-foreground py-4">
+                <Loader2 className="h-8 w-8 animate-spin mb-2 text-primary" />
+                <p className="text-sm">{isOptimizingVideo ? 'Optimizing video...' : 'Reading file...'}</p>
               </div>
             )}
 
-            {selectedFile && !isProcessingFile && previewUrl && (
+            {selectedFile && !isReadingFile && !isOptimizingVideo && previewUrl && (
               <div className="w-full text-center">
                 {mediaType === 'image' && (
-                  <div className="relative w-full max-w-xs mx-auto aspect-video overflow-hidden rounded-md border shadow-md mb-2">
+                  <div className="relative w-full max-w-xs mx-auto aspect-video overflow-hidden rounded-md border shadow-md mb-2 bg-muted">
                     <Image src={previewUrl} alt="Preview" layout="fill" objectFit="cover" />
                   </div>
                 )}
                 {mediaType === 'video' && (
-                  <div className="relative w-full max-w-xs mx-auto aspect-video overflow-hidden rounded-md border shadow-md mb-2">
-                    <video controls src={previewUrl} className="w-full h-full object-contain bg-black" />
+                  <div className="relative w-full max-w-xs mx-auto aspect-video overflow-hidden rounded-md border shadow-md mb-2 bg-black">
+                    <video controls src={previewUrl} className="w-full h-full object-contain" />
                   </div>
                 )}
-                <div className="flex items-center justify-center space-x-2 text-sm text-foreground">
+                <div className="flex items-center justify-center space-x-2 text-sm text-foreground bg-background/70 p-1 rounded-md">
                   {mediaType === 'image' ? <ImageIcon className="h-4 w-4 text-primary" /> : <Film className="h-4 w-4 text-primary" />}
                   <span className="truncate max-w-[200px]">{selectedFile.name}</span>
+                   <span className="text-xs text-muted-foreground">({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)</span>
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
                     onClick={(e) => { e.stopPropagation(); removeMedia(); }}
-                    disabled={submitting}
+                    disabled={submitting} // Only disable if main form is submitting
                     className="text-destructive hover:text-destructive/80 h-6 w-6 ml-auto"
                     aria-label="Remove media"
                   >
@@ -219,17 +262,14 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
           )}
         </FormItem>
 
-        <Button type="submit" disabled={isButtonDisabled} className="w-full text-base py-3 shadow-md hover:shadow-lg transition-shadow bg-accent hover:bg-accent/90 text-accent-foreground">
-          {submitting || isProcessingFile ? (
-            <>
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              {submitting ? 'Pulsing...' : 'Processing...'}
-            </>
-          ) : (
-            'Share Your Pulse'
-          )}
+        <Button type="submit" disabled={isButtonDisabled} className="w-full text-base py-3 shadow-md hover:shadow-lg transition-shadow bg-accent hover:bg-accent/90 text-accent-foreground rounded-lg">
+          {isButtonDisabled && !(submitting && !isReadingFile && !isOptimizingVideo) ? ( // Show loader if processing/optimizing or submitting
+            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+          ) : null}
+          {buttonText}
         </Button>
       </form>
     </Form>
   );
 };
+
