@@ -7,13 +7,11 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader } from '@/co
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import type { Post, Comment as CommentType } from '@/lib/db'; // Renamed to avoid conflict
 import { formatDistanceToNowStrict } from 'date-fns';
-import { MapPin, Image as ImageIcon, Video, UserCircle, Heart, MessageCircle, Send } from 'lucide-react';
+import { MapPin, Image as ImageIcon, Video, UserCircle, Heart, MessageCircle, Send, Map } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-// import { Input } from '@/components/ui/input'; // Removed unused Input
 import { toggleLikePost, addComment, getComments } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
-// import { Separator } from '@/components/ui/separator'; // Removed unused Separator
 
 interface PostCardProps {
   post: Post;
@@ -129,13 +127,16 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
 
   return (
     <Card className="overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-300 ease-out border border-border/60 rounded-xl bg-card hover:border-primary/50">
-      <CardHeader className="pb-3 pt-4 px-5 flex flex-row items-center space-x-3">
+      <CardHeader className="pb-3 pt-4 px-5 flex flex-row items-start space-x-3">
         <Avatar className="h-10 w-10 border-2 border-primary/50 shadow-sm">
+          {/* Placeholder for user avatar if available, otherwise fallback */}
+          {/* <AvatarImage src={post.authorAvatarUrl} alt={post.authorName} /> */}
           <AvatarFallback className="bg-muted">
             <UserCircle className="h-6 w-6 text-muted-foreground" />
           </AvatarFallback>
         </Avatar>
-        <div>
+        <div className="flex-1">
+          {/* <CardTitle className="text-base font-semibold">{post.authorName || 'Anonymous User'}</CardTitle> */}
           <CardDescription className="text-xs text-muted-foreground">
             {timeAgo}
           </CardDescription>
@@ -167,12 +168,15 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
         <p className="text-foreground leading-relaxed text-base whitespace-pre-wrap break-words">{post.content}</p>
       </CardContent>
 
-      <CardFooter className="text-xs text-muted-foreground flex items-center justify-between pt-2 pb-3 px-5 border-t border-border/40 mt-1">
-        <div className="flex items-center gap-1.5">
-          <MapPin className="w-3.5 h-3.5 text-primary" />
-          <span>{post.latitude.toFixed(3)}, {post.longitude.toFixed(3)}</span>
+      <CardFooter className="text-xs text-muted-foreground flex flex-wrap items-center justify-between pt-2 pb-3 px-5 border-t border-border/40 mt-1 gap-y-1">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <MapPin className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+          {post.city && post.city !== "Unknown City" && <span className="font-medium text-primary/90">{post.city}</span>}
+          <span className={post.city && post.city !== "Unknown City" ? "text-muted-foreground/80" : ""}>
+            ({post.latitude.toFixed(3)}, {post.longitude.toFixed(3)})
+          </span>
           {distance !== null && (
-            <span className="ml-2 text-primary/80 font-medium">
+            <span className="ml-1 text-primary/80 font-medium">
               ({distance < 0.1 ? '< 100m' : `${distance.toFixed(1)} km`})
             </span>
           )}

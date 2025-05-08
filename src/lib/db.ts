@@ -13,11 +13,16 @@ export interface Post {
   createdAt: string; // Store as ISO string (TEXT in SQLite)
   mediaUrl?: string | null; // Optional URL for image/video (stored as TEXT/Data URL)
   mediaType?: 'image' | 'video' | null; // Type of media
-  likeCount: number; // Added for likes
+  likeCount: number;
+  city?: string | null; // City where the post was made
 }
 
-// Define the structure for adding a new post (omit id, createdAt, and likeCount)
-export type NewPost = Omit<Post, 'id' | 'createdAt' | 'likeCount'>;
+// Define the structure for adding a new post from the client (omit id, createdAt, likeCount, and city)
+export type NewPost = Omit<Post, 'id' | 'createdAt' | 'likeCount' | 'city'>;
+
+// Define the structure for inserting a new post into the DB (includes city)
+export type DbNewPost = Omit<Post, 'id' | 'createdAt' | 'likeCount'>;
+
 
 // Define the structure of a Comment
 export interface Comment {
@@ -58,7 +63,9 @@ try {
             longitude REAL NOT NULL,
             createdAt TEXT NOT NULL,
             mediaUrl TEXT NULL,
-            mediaType TEXT NULL
+            mediaType TEXT NULL,
+            likeCount INTEGER NOT NULL DEFAULT 0,
+            city TEXT NULL
         );
     `);
     console.log('Checked/Created posts table structure.');
@@ -74,6 +81,10 @@ try {
     if (!postColumns.includes('likeCount')) {
         db.exec('ALTER TABLE posts ADD COLUMN likeCount INTEGER NOT NULL DEFAULT 0');
         console.log('Added likeCount column to posts table.');
+    }
+    if (!postColumns.includes('city')) {
+        db.exec('ALTER TABLE posts ADD COLUMN city TEXT NULL');
+        console.log('Added city column to posts table.');
     }
 
     // Create the comments table if it doesn't exist
@@ -97,7 +108,7 @@ try {
 // Function to get all posts, ordered by creation date descending
 export function getPostsDb(): Post[] {
    try {
-      const stmt = db.prepare('SELECT id, content, latitude, longitude, createdAt, mediaUrl, mediaType, likeCount FROM posts ORDER BY createdAt DESC');
+      const stmt = db.prepare('SELECT id, content, latitude, longitude, createdAt, mediaUrl, mediaType, likeCount, city FROM posts ORDER BY createdAt DESC');
       const posts = stmt.all() as Post[];
       console.log(`Fetched ${posts.length} posts.`);
       return posts;
@@ -108,21 +119,22 @@ export function getPostsDb(): Post[] {
 }
 
 // Function to add a new post
-export function addPostDb(newPost: NewPost): Post {
+export function addPostDb(newPost: DbNewPost): Post {
     try {
         const createdAt = new Date().toISOString();
         // likeCount defaults to 0 due to table definition
-        const stmt = db.prepare('INSERT INTO posts (content, latitude, longitude, createdAt, mediaUrl, mediaType) VALUES (?, ?, ?, ?, ?, ?)');
+        const stmt = db.prepare('INSERT INTO posts (content, latitude, longitude, createdAt, mediaUrl, mediaType, city) VALUES (?, ?, ?, ?, ?, ?, ?)');
         const info = stmt.run(
             newPost.content,
             newPost.latitude,
             newPost.longitude,
             createdAt,
             newPost.mediaUrl ?? null,
-            newPost.mediaType ?? null
+            newPost.mediaType ?? null,
+            newPost.city ?? null
         );
         console.log(`Added post with ID: ${info.lastInsertRowid}`);
-        const insertedPost = db.prepare('SELECT id, content, latitude, longitude, createdAt, mediaUrl, mediaType, likeCount FROM posts WHERE id = ?').get(info.lastInsertRowid) as Post;
+        const insertedPost = db.prepare('SELECT id, content, latitude, longitude, createdAt, mediaUrl, mediaType, likeCount, city FROM posts WHERE id = ?').get(info.lastInsertRowid) as Post;
         if (!insertedPost) throw new Error('Failed to retrieve the newly inserted post.');
         return insertedPost;
     } catch (error) {
