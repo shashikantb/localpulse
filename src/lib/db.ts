@@ -36,6 +36,12 @@ export interface Comment {
 // Define the structure for adding a new comment
 export type NewComment = Omit<Comment, 'id' | 'createdAt'>;
 
+// Visitor stats structure
+export interface VisitorCounts {
+  totalVisits: number;
+  dailyVisits: number;
+}
+
 
 // Ensure the data directory exists
 const dataDir = path.join(process.cwd(), 'data');
@@ -99,6 +105,10 @@ try {
         );
     `);
     console.log('Checked/Created comments table.');
+
+    // Initialize visitor statistics
+    initializeVisitorStatsDb();
+
 
 } catch (error) {
     console.error('Error initializing database:', error);
@@ -199,6 +209,84 @@ export function getCommentsByPostIdDb(postId: number): Comment[] {
         console.error(`Error fetching comments for post ${postId}:`, error);
         return [];
     }
+}
+
+// Visitor Statistics Functions
+function initializeVisitorStatsDb() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS visitor_stats (
+      stat_name TEXT PRIMARY KEY,
+      stat_value TEXT NULL
+    );
+  `);
+  const todayStr = new Date().toISOString().split('T')[0];
+  db.prepare("INSERT OR IGNORE INTO visitor_stats (stat_name, stat_value) VALUES ('total_visits', '0')").run();
+  db.prepare("INSERT OR IGNORE INTO visitor_stats (stat_name, stat_value) VALUES ('daily_visits_date', ?)").run(todayStr);
+  db.prepare("INSERT OR IGNORE INTO visitor_stats (stat_name, stat_value) VALUES ('daily_visits_count', '0')").run();
+  console.log('Checked/Initialized visitor_stats table.');
+}
+
+export function incrementAndGetVisitorCountsDb(): VisitorCounts {
+  const todayStr = new Date().toISOString().split('T')[0];
+  let dailyVisits: number;
+  let totalVisits: number;
+
+  db.transaction(() => {
+    // Ensure rows exist (handles first ever run gracefully)
+    db.prepare("INSERT OR IGNORE INTO visitor_stats (stat_name, stat_value) VALUES ('total_visits', '0')").run();
+    db.prepare("INSERT OR IGNORE INTO visitor_stats (stat_name, stat_value) VALUES ('daily_visits_date', ?)").run(todayStr);
+    db.prepare("INSERT OR IGNORE INTO visitor_stats (stat_name, stat_value) VALUES ('daily_visits_count', '0')").run();
+
+    // Handle daily visits
+    const dailyDateRow = db.prepare("SELECT stat_value FROM visitor_stats WHERE stat_name = 'daily_visits_date'").get() as { stat_value: string } | undefined;
+    const dailyCountRow = db.prepare("SELECT stat_value FROM visitor_stats WHERE stat_name = 'daily_visits_count'").get() as { stat_value: string } | undefined;
+
+    if (dailyDateRow?.stat_value === todayStr) {
+      const currentDailyCount = parseInt(dailyCountRow?.stat_value || '0', 10);
+      dailyVisits = currentDailyCount + 1;
+      db.prepare("UPDATE visitor_stats SET stat_value = ? WHERE stat_name = 'daily_visits_count'").run(dailyVisits.toString());
+    } else {
+      dailyVisits = 1;
+      db.prepare("UPDATE visitor_stats SET stat_value = ? WHERE stat_name = 'daily_visits_date'").run(todayStr);
+      db.prepare("UPDATE visitor_stats SET stat_value = ? WHERE stat_name = 'daily_visits_count'").run('1');
+    }
+
+    // Handle total visits
+    const totalCountRow = db.prepare("SELECT stat_value FROM visitor_stats WHERE stat_name = 'total_visits'").get() as { stat_value: string } | undefined;
+    const currentTotalCount = parseInt(totalCountRow?.stat_value || '0', 10);
+    totalVisits = currentTotalCount + 1;
+    db.prepare("UPDATE visitor_stats SET stat_value = ? WHERE stat_name = 'total_visits'").run(totalVisits.toString());
+  })();
+
+  // These will be assigned within the transaction
+  // @ts-ignore
+  return { totalVisits, dailyVisits };
+}
+
+export function getVisitorCountsDb(): VisitorCounts {
+  const todayStr = new Date().toISOString().split('T')[0];
+
+   // Ensure rows exist for reading
+  db.prepare("INSERT OR IGNORE INTO visitor_stats (stat_name, stat_value) VALUES ('total_visits', '0')").run();
+  db.prepare("INSERT OR IGNORE INTO visitor_stats (stat_name, stat_value) VALUES ('daily_visits_date', ?)").run(todayStr);
+  db.prepare("INSERT OR IGNORE INTO visitor_stats (stat_name, stat_value) VALUES ('daily_visits_count', '0')").run();
+
+  const totalRow = db.prepare("SELECT stat_value FROM visitor_stats WHERE stat_name = 'total_visits'").get() as { stat_value: string } | undefined;
+  const totalVisits = parseInt(totalRow?.stat_value || '0', 10);
+
+  const dailyDateRow = db.prepare("SELECT stat_value FROM visitor_stats WHERE stat_name = 'daily_visits_date'").get() as { stat_value: string } | undefined;
+  const dailyCountRow = db.prepare("SELECT stat_value FROM visitor_stats WHERE stat_name = 'daily_visits_count'").get() as { stat_value: string } | undefined;
+
+  let dailyVisits = 0;
+  if (dailyDateRow?.stat_value === todayStr) {
+    dailyVisits = parseInt(dailyCountRow?.stat_value || '0', 10);
+  } else {
+    // If date is not today, it means today's count is effectively 0 until the first visit increments it.
+    // We might want to reset daily_visits_count to 0 and update daily_visits_date to todayStr here if just fetching.
+    // For simplicity now, if date is old, daily is 0. incrementAndGet will fix it on next actual visit.
+  }
+
+  return { totalVisits, dailyVisits };
 }
 
 

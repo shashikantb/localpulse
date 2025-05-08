@@ -2,7 +2,7 @@
 'use server';
 
 import * as db from '@/lib/db';
-import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost } from '@/lib/db'; // Renamed NewPost to ClientNewPost
+import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts } from '@/lib/db'; // Renamed NewPost to ClientNewPost
 import { revalidatePath } from 'next/cache';
 
 // Placeholder for geocoding service - replace with actual API call in a real app
@@ -100,5 +100,30 @@ export async function getComments(postId: number): Promise<Comment[]> {
   } catch (error) {
     console.error(`Server action error fetching comments for post ${postId}:`, error);
     return [];
+  }
+}
+
+// Action to record a visit and get current counts
+export async function recordVisitAndGetCounts(): Promise<VisitorCounts> {
+  try {
+    const counts = db.incrementAndGetVisitorCountsDb();
+    // No revalidation needed as this doesn't directly change cached page content that users see,
+    // but rather updates data that will be fetched by a client component.
+    return counts;
+  } catch (error) {
+    console.error("Server action error recording visit and getting counts:", error);
+    // Return 0 counts on error to prevent breaking client
+    return { totalVisits: 0, dailyVisits: 0 }; 
+  }
+}
+
+// Action to get current visitor counts without incrementing
+export async function getCurrentVisitorCounts(): Promise<VisitorCounts> {
+  try {
+    const counts = db.getVisitorCountsDb();
+    return counts;
+  } catch (error) {
+    console.error("Server action error getting current visitor counts:", error);
+    return { totalVisits: 0, dailyVisits: 0 };
   }
 }
