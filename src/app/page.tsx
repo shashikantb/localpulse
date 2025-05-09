@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { FC } from 'react';
@@ -155,28 +154,44 @@ const Home: FC = () => {
     }
     setFormSubmitting(true);
     try {
-      const postData: NewPost = { // Uses NewPost from db-types
+      const postData: NewPost = { 
         content,
         latitude: location.latitude,
         longitude: location.longitude,
         mediaUrl: mediaUrl,
         mediaType: mediaType,
       };
-      const newPost = await addPost(postData);
-      setAllPosts(prevPosts => [newPost, ...prevPosts]); // newPost already mapped by server action
-      toast({
-        title: "Post Added!",
-        description: "Your pulse is now live!",
-        variant: "default",
-        className: "bg-primary text-primary-foreground",
-      });
+      
+      const result = await addPost(postData);
 
-    } catch (error) {
-      console.error("Error adding post:", error);
+      if (result.error) {
+        toast({
+          variant: "destructive",
+          title: "Post Error",
+          description: result.error || "Failed to add your post. Please try again.",
+        });
+      } else if (result.post) {
+        setAllPosts(prevPosts => [result.post!, ...prevPosts]); 
+        toast({
+          title: "Post Added!",
+          description: "Your pulse is now live!",
+          variant: "default",
+          className: "bg-primary text-primary-foreground",
+        });
+      } else {
+         toast({
+          variant: "destructive",
+          title: "Post Error",
+          description: "An unexpected issue occurred. Failed to add your post.",
+        });
+      }
+
+    } catch (error: any) { // Catch any errors not handled by the server action's return type
+      console.error("Error adding post (client-side catch):", error);
       toast({
         variant: "destructive",
         title: "Post Error",
-        description: "Failed to add your post. Please try again.",
+        description: error.message || "An unexpected client-side error occurred. Please try again.",
       });
     } finally {
       setFormSubmitting(false);
@@ -213,7 +228,7 @@ const Home: FC = () => {
             min={1}
             max={101} 
             step={1}
-            defaultValue={[showAnyDistance ? 101 : distanceFilterKm]} // Use showAnyDistance to set initial slider
+            defaultValue={[showAnyDistance ? 101 : distanceFilterKm]} 
             onValueChange={handleDistanceChange}
             disabled={!location || loadingPosts}
             aria-label="Distance filter"
@@ -363,3 +378,4 @@ const Home: FC = () => {
 };
 
 export default Home;
+

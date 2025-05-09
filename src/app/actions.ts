@@ -1,4 +1,3 @@
-
 'use server';
 
 import * as db from '@/lib/db';
@@ -53,7 +52,7 @@ export async function getPosts(): Promise<Post[]> {
 }
 
 // Action to add a new post
-export async function addPost(newPostData: ClientNewPost): Promise<Post> {
+export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post; error?: string }> {
   try {
     const cityName = await geocodeCoordinates(newPostData.latitude, newPostData.longitude);
 
@@ -65,15 +64,18 @@ export async function addPost(newPostData: ClientNewPost): Promise<Post> {
     const addedPost = await db.addPostDb(postDataForDb);
     revalidatePath('/'); 
     return {
-        ...addedPost,
-        createdAt: addedPost.createdat, // map db 'createdat' to 'createdAt' for client
-        likeCount: addedPost.likecount,
-        mediaUrl: addedPost.mediaurl,
-        mediaType: addedPost.mediatype,
+        post: {
+          ...addedPost,
+          createdAt: addedPost.createdat, // map db 'createdat' to 'createdAt' for client
+          likeCount: addedPost.likecount,
+          mediaUrl: addedPost.mediaurl,
+          mediaType: addedPost.mediatype,
+        }
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Server action error adding post:", error);
-    throw new Error('Failed to add post via server action.');
+    // Return an error object instead of throwing, so client can handle it gracefully
+    return { error: error.message || 'Failed to add post due to an unknown server error.' };
   }
 }
 
@@ -108,9 +110,9 @@ export async function addComment(commentData: NewComment): Promise<Comment> {
         postId: addedComment.postid,
         createdAt: addedComment.createdat,
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error(`Server action error adding comment to post ${commentData.postId}:`, error);
-    throw new Error('Failed to add comment via server action.');
+    throw new Error(error.message || 'Failed to add comment via server action.');
   }
 }
 
@@ -150,3 +152,4 @@ export async function getCurrentVisitorCounts(): Promise<VisitorCounts> {
     return { totalVisits: 0, dailyVisits: 0 };
   }
 }
+

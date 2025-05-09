@@ -1,4 +1,3 @@
-
 import { Pool, type QueryResult } from 'pg';
 import type { Post, NewPost, DbNewPost, Comment, NewComment, VisitorCounts } from './db-types';
 
@@ -129,12 +128,15 @@ export async function addPostDb(newPost: DbNewPost): Promise<Post> {
       ]
     );
     const insertedPost = result.rows[0];
-    if (!insertedPost) throw new Error('Failed to retrieve the newly inserted post.');
+    if (!insertedPost) throw new Error('Failed to retrieve the newly inserted post. The INSERT operation may have failed silently.');
     console.log(`Added post with ID: ${insertedPost.id}`);
     return insertedPost;
-  } catch (error) {
-    console.error('Error adding post:', error);
-    throw new Error('Failed to add post to the database.');
+  } catch (error: any) {
+    console.error('Error adding post to database:', error);
+    const message = error.message || 'Failed to add post to the database due to an unknown issue.';
+    // Include more details if it's a known pg error structure, e.g., error.detail or error.code
+    const detailedMessage = error.detail ? `${message} Detail: ${error.detail}` : message;
+    throw new Error(`Database operation failed: ${detailedMessage}`);
   }
 }
 
@@ -194,9 +196,11 @@ export async function addCommentDb(commentData: NewComment): Promise<Comment> {
     if (!insertedComment) throw new Error('Failed to retrieve the newly inserted comment.');
     console.log(`Added comment with ID: ${insertedComment.id} to post ${commentData.postId}`);
     return insertedComment;
-  } catch (error) {
+  } catch (error: any) {
     console.error(`Error adding comment to post ${commentData.postId}:`, error);
-    throw new Error('Failed to add comment.');
+    const message = error.message || 'Failed to add comment to the database.';
+    const detailedMessage = error.detail ? `${message} Detail: ${error.detail}` : message;
+    throw new Error(`Database operation failed: ${detailedMessage}`);
   }
 }
 
@@ -302,3 +306,4 @@ export async function closeDb(): Promise<void> {
 process.on('exit', () => closeDb());
 process.on('SIGINT', async () => { await closeDb(); process.exit(0); });
 process.on('SIGTERM', async () => { await closeDb(); process.exit(0); });
+
