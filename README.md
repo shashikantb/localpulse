@@ -7,7 +7,7 @@ This is a NextJS starter application, now configured to use PostgreSQL as its da
 Before you begin, ensure you have the following installed:
 - Node.js (v18 or later recommended)
 - npm or yarn
-- A running PostgreSQL instance
+- A running PostgreSQL instance (either local or cloud-hosted like Google Cloud SQL)
 
 ## Environment Variables
 
@@ -15,10 +15,13 @@ Create a `.env.local` file in the root of your project and add the following env
 
 ```env
 # PostgreSQL Connection URL
-# Example: postgresql://youruser:yourpassword@yourhost:yourport/yourdatabase
+# Format: postgresql://USERNAME:PASSWORD@HOST:PORT/DATABASE
+# Example for a local DB: postgresql://youruser:yourpassword@localhost:5432/yourdatabase
+# Example for a cloud DB: postgresql://youruser:yourpassword@your-cloud-host.com:5432/yourdatabase
 POSTGRES_URL=your_postgresql_connection_string
 
-# Optional: If your PostgreSQL instance requires SSL
+# Optional: If your PostgreSQL instance requires SSL (common for cloud databases)
+# Set to true if SSL is required, e.g., for Google Cloud SQL, AWS RDS, Azure PostgreSQL.
 # POSTGRES_SSL=true 
 
 # Google Generative AI API Key (if using Genkit features)
@@ -32,6 +35,10 @@ ADMIN_PASSWORD=password123
 Replace `your_postgresql_connection_string` with the actual connection string for your PostgreSQL database.
 Update `ADMIN_USERNAME` and `ADMIN_PASSWORD` to secure values, especially for production.
 
+**Important Notes for `POSTGRES_URL`:**
+- **URL Encoding:** If your username or password contains special characters (e.g., `@`, `#`, `!`, `:`, `/`, `?`, `[`, `]`), they **must be URL-encoded**. For example, if your password is `my@secret#pass`, it should be `my%40secret%23pass` in the connection string.
+- **SSL:** For cloud-hosted PostgreSQL (like Google Cloud SQL, AWS RDS, Azure Database for PostgreSQL), you will likely need to enable SSL. Set `POSTGRES_SSL=true` in your `.env.local` file if your provider requires it. For Google Cloud SQL, SSL is generally recommended.
+
 ## Getting Started
 
 1.  **Install Dependencies:**
@@ -42,18 +49,22 @@ Update `ADMIN_USERNAME` and `ADMIN_PASSWORD` to secure values, especially for pr
     # yarn install
     ```
 
-2.  **Initialize Database Schema:**
+2.  **Set Up Environment Variables:**
+    Create or update the `.env.local` file as described above with your PostgreSQL connection string and other necessary variables.
+
+3.  **Initialize Database Schema:**
     The application will attempt to create the necessary tables in your PostgreSQL database on startup if they don't already exist. Ensure your PostgreSQL server is running and accessible using the `POSTGRES_URL` you provided.
 
-3.  **Run the Development Server:**
+4.  **Run the Development Server:**
     ```bash
     npm run dev
     # or
     # yarn dev
     ```
     This will start the Next.js development server, typically on `http://localhost:9002`.
+    **Important:** If you created or modified the `.env.local` file, you **must restart** the development server for the changes to take effect.
 
-4.  **Access the Application:**
+5.  **Access the Application:**
     Open your web browser and go to `http://localhost:9002` to see the application.
     The admin panel can be accessed at `http://localhost:9002/admin/login` using the credentials defined in your `.env.local` file.
 
@@ -65,10 +76,30 @@ Update `ADMIN_USERNAME` and `ADMIN_PASSWORD` to secure values, especially for pr
 - **Styling:** Tailwind CSS, ShadCN UI
 - **AI Integration (Optional):** Genkit with Google AI
 
+## Troubleshooting
+
+### PostgreSQL Connection Errors (e.g., `ECONNREFUSED 127.0.0.1:5432`)
+
+This error means the application tried to connect to a PostgreSQL server at `127.0.0.1` (localhost) on port `5432` but failed.
+
+- **Check `.env.local`:**
+    - Ensure the `POSTGRES_URL` is correctly set and points to your intended PostgreSQL server (local or remote).
+    - **Verify URL Encoding:** If your password or username in `POSTGRES_URL` contains special characters (like `@`, `#`, `!`), they must be URL-encoded. For example, `@` becomes `%40`, `#` becomes `%23`.
+      Incorrect: `postgresql://user:pass@word@host:port/db`
+      Correct: `postgresql://user:pass%40word@host:port/db`
+- **Restart Dev Server:** After any changes to `.env.local`, **stop and restart** your Next.js development server (`npm run dev`).
+- **SSL Configuration:** If connecting to a cloud database (like Google Cloud SQL), you might need SSL. Add `POSTGRES_SSL=true` to your `.env.local` file.
+- **Firewall Rules (for remote DBs):** If connecting to a remote database (e.g., on Google Cloud SQL), ensure its firewall rules allow incoming connections from your IP address (your local machine's public IP for development, or your deployment server's IP).
+- **Local PostgreSQL Server:** If you intend to use a local PostgreSQL server:
+    - Ensure it's installed and running.
+    - Verify it's configured to listen on `127.0.0.1` (or `localhost`) and port `5432`.
+    - Check if your local firewall is blocking connections.
+- **Database/User Existence:** Ensure the database and user specified in your `POSTGRES_URL` exist and the user has the necessary permissions.
+
 ## Data Migration (If applicable)
 
-If you were previously using SQLite and have existing data, you will need to manually migrate that data to your new PostgreSQL database. This process is outside the scope of this application's codebase and typically involves:
-1. Exporting data from SQLite (e.g., to CSV or SQL dump).
+If you were previously using SQLite or another database and have existing data, you will need to manually migrate that data to your new PostgreSQL database. This process is outside the scope of this application's codebase and typically involves:
+1. Exporting data from the old database (e.g., to CSV or SQL dump).
 2. Transforming the data/schema if necessary to match PostgreSQL.
 3. Importing the data into your PostgreSQL instance.
 Tools like `pgloader` or custom scripts can be helpful for this.
