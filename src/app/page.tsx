@@ -3,18 +3,18 @@
 
 import type { FC } from 'react';
 import { useState, useEffect, useCallback } from 'react';
-import type { Post, NewPost } from '@/lib/db';
+import type { Post, NewPost } from '@/lib/db-types';
 import { getPosts, addPost } from './actions';
 import { PostCard } from '@/components/post-card';
 import { PostForm } from '@/components/post-form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { MapPin, Terminal, Zap, Loader2, Filter, SlidersHorizontal } from 'lucide-react';
+import { MapPin, Terminal, Zap, Loader2, Filter, SlidersHorizontal, Rss } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Button } from "@/components/ui/button";
 import {
   Sheet,
   SheetContent,
@@ -65,12 +65,12 @@ const Home: FC = () => {
         const distA = calculateDistance(currentLocation.latitude, currentLocation.longitude, a.latitude, a.longitude);
         const distB = calculateDistance(currentLocation.latitude, currentLocation.longitude, b.latitude, b.longitude);
         if (Math.abs(distA - distB) < 0.1) { 
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
         }
         return distA - distB; 
       });
     } else {
-      sorted.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      sorted.sort((a, b) => new Date(b.createdat).getTime() - new Date(a.createdat).getTime());
     }
     setDisplayedPosts(sorted);
   }, [calculateDistance]);
@@ -130,13 +130,13 @@ const Home: FC = () => {
       }
     };
     
-    if (!loadingLocation) {
+    if (!loadingLocation) { // Only fetch posts after location attempt is complete
         fetchInitialPosts();
     }
   }, [loadingLocation, toast]);
 
   useEffect(() => {
-    if (!loadingPosts) { 
+    if (!loadingPosts) { // Only process if posts are loaded
         processAndSetPosts(allPosts, location, distanceFilterKm, showAnyDistance);
     }
   }, [allPosts, location, distanceFilterKm, showAnyDistance, processAndSetPosts, loadingPosts]);
@@ -155,7 +155,7 @@ const Home: FC = () => {
     }
     setFormSubmitting(true);
     try {
-      const postData: NewPost = {
+      const postData: NewPost = { // Uses NewPost from db-types
         content,
         latitude: location.latitude,
         longitude: location.longitude,
@@ -163,7 +163,7 @@ const Home: FC = () => {
         mediaType: mediaType,
       };
       const newPost = await addPost(postData);
-      setAllPosts(prevPosts => [newPost, ...prevPosts]);
+      setAllPosts(prevPosts => [newPost, ...prevPosts]); // newPost already mapped by server action
       toast({
         title: "Post Added!",
         description: "Your pulse is now live!",
@@ -185,7 +185,7 @@ const Home: FC = () => {
 
   const handleDistanceChange = (value: number[]) => {
     setDistanceFilterKm(value[0]);
-    if (value[0] > 100) { // Max value of slider if used for "Any"
+    if (value[0] > 100) { 
         setShowAnyDistance(true);
     } else {
         setShowAnyDistance(false);
@@ -211,9 +211,9 @@ const Home: FC = () => {
           <Slider
             id="distance-filter-slider"
             min={1}
-            max={101} // 101 represents "Any" via showAnyDistance toggle
+            max={101} 
             step={1}
-            defaultValue={[distanceFilterKm > 100 && showAnyDistance ? 101 : distanceFilterKm]}
+            defaultValue={[showAnyDistance ? 101 : distanceFilterKm]} // Use showAnyDistance to set initial slider
             onValueChange={handleDistanceChange}
             disabled={!location || loadingPosts}
             aria-label="Distance filter"
@@ -223,11 +223,12 @@ const Home: FC = () => {
         <Button 
             variant={showAnyDistance ? "default" : "outline"} 
             onClick={() => {
-                setShowAnyDistance(!showAnyDistance);
-                if (!showAnyDistance) { // If toggling to "Any"
-                    setDistanceFilterKm(101); // Set slider to max to reflect "Any"
-                } else { // If toggling off "Any"
-                    setDistanceFilterKm(50); // Reset to default or last used
+                const newShowAnyDistance = !showAnyDistance;
+                setShowAnyDistance(newShowAnyDistance);
+                if (newShowAnyDistance) { 
+                    setDistanceFilterKm(101); 
+                } else { 
+                    setDistanceFilterKm(50); 
                 }
             }}
             disabled={!location || loadingPosts}
@@ -246,62 +247,64 @@ const Home: FC = () => {
 
 
   return (
-    <main className="flex min-h-screen flex-col items-center p-4 sm:p-6 md:p-8 lg:p-16">
+    <main className="flex min-h-screen flex-col items-center p-4 sm:p-6 md:p-8 lg:p-16 bg-gradient-to-br from-background to-muted/30">
         <div className="container mx-auto max-w-2xl space-y-8 py-8">
-        <header className="text-center space-y-3 py-6 bg-card/80 backdrop-blur-sm rounded-xl shadow-xl border border-border/70 sticky top-4 z-40">
-            <div className="flex items-center justify-center space-x-3">
-            <Zap className="h-12 w-12 text-accent drop-shadow-lg" />
-            <h1 className="text-5xl font-extrabold text-primary tracking-tight drop-shadow-md">LocalPulse</h1>
+        <header className="text-center space-y-3 py-8 bg-card/90 backdrop-blur-lg rounded-xl shadow-2xl border border-border/50 sticky top-4 z-40 transform hover:scale-[1.01] transition-transform duration-300">
+            <div className="flex items-center justify-center space-x-3 animate-pulse-slow">
+              <Rss className="h-16 w-16 text-accent drop-shadow-[0_0_15px_rgba(var(--accent-hsl),0.5)]" />
+              <h1 className="text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-primary via-accent to-primary tracking-tight drop-shadow-lg">
+                LocalPulse
+              </h1>
             </div>
-            <p className="text-xl text-muted-foreground">See what's buzzing around you</p>
+            <p className="text-xl text-muted-foreground font-medium">Catch the Vibe, Share the Pulse.</p>
         </header>
 
         {loadingLocation && (
-            <Card className="flex flex-col items-center justify-center space-y-3 p-6 rounded-lg shadow-lg">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-muted-foreground">Fetching your location...</p>
-            <Skeleton className="h-4 w-3/4 bg-muted-foreground/20" />
-            <Skeleton className="h-4 w-1/2 bg-muted-foreground/20" />
+            <Card className="flex flex-col items-center justify-center space-y-3 p-6 rounded-lg shadow-xl border border-border/40 bg-card/80 backdrop-blur-sm">
+            <Loader2 className="h-10 w-10 animate-spin text-primary" />
+            <p className="text-lg text-muted-foreground">Locating Your Vibe...</p>
+            <Skeleton className="h-4 w-3/4 bg-muted-foreground/10 rounded-md" />
+            <Skeleton className="h-4 w-1/2 bg-muted-foreground/10 rounded-md" />
             </Card>
         )}
 
         {locationError && !loadingLocation && (
-            <Alert variant="destructive" className="shadow-lg">
-            <Terminal className="h-5 w-5" />
-            <AlertTitle className="font-semibold">Location Error</AlertTitle>
-            <AlertDescription>{locationError}</AlertDescription>
+            <Alert variant="destructive" className="shadow-xl border-destructive/70">
+            <Terminal className="h-6 w-6" />
+            <AlertTitle className="text-lg font-semibold">Location Access Denied</AlertTitle>
+            <AlertDescription className="text-base">{locationError} Functionality might be limited.</AlertDescription>
             </Alert>
         )}
 
         {!loadingLocation && (
             <div className="space-y-8">
             {location && (
-                <Card className="overflow-hidden shadow-2xl border border-border/50 rounded-xl">
-                <CardHeader>
+                <Card className="overflow-hidden shadow-2xl border border-primary/30 rounded-xl bg-card/90 backdrop-blur-md transform hover:shadow-primary/20 transition-all duration-300 hover:border-primary/60">
+                <CardHeader className="bg-gradient-to-br from-primary/10 to-accent/5 p-5">
                     <CardTitle className="text-2xl font-semibold text-primary flex items-center">
-                    <MapPin className="w-6 h-6 mr-2 text-accent" />
+                    <Zap className="w-7 h-7 mr-2 text-accent drop-shadow-sm" />
                     Share Your Pulse
                     </CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-5">
                     <PostForm onSubmit={handleAddPost} submitting={formSubmitting} />
-                    <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1.5">
-                    <MapPin className="w-3.5 h-3.5 text-primary" />
-                    Posting from: {location.latitude.toFixed(3)}, {location.longitude.toFixed(3)}
+                    <p className="text-xs text-muted-foreground mt-4 flex items-center gap-1.5">
+                    <MapPin className="w-4 h-4 text-primary/80" />
+                    Pulse Origin: {location.latitude.toFixed(3)}, {location.longitude.toFixed(3)}
                     </p>
                 </CardContent>
                 </Card>
             )}
 
-            <div className="flex justify-end">
+            <div className="flex justify-end sticky top-24 z-30 -mt-4 mb-4">
                 <Sheet>
                 <SheetTrigger asChild>
-                    <Button variant="outline" className="shadow-md hover:shadow-lg transition-shadow">
-                    <SlidersHorizontal className="w-4 h-4 mr-2" />
+                    <Button variant="outline" className="shadow-lg hover:shadow-xl transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary">
+                    <SlidersHorizontal className="w-5 h-5 mr-2" />
                     Filters
                     </Button>
                 </SheetTrigger>
-                <SheetContent>
+                <SheetContent className="bg-card/95 backdrop-blur-md border-border">
                     <FilterSheetContent />
                 </SheetContent>
                 </Sheet>
@@ -309,23 +312,23 @@ const Home: FC = () => {
 
 
             <div className="space-y-6">
-                <h2 className="text-3xl font-semibold text-primary pl-1 flex items-center">
-                <Zap className="w-7 h-7 mr-2 text-accent opacity-80" />
+                <h2 className="text-4xl font-bold text-primary pl-1 flex items-center border-b-2 border-primary/30 pb-3 mb-6">
+                <Rss className="w-9 h-9 mr-3 text-accent opacity-90" />
                 Nearby Pulses
                 </h2>
                 {loadingPosts && !allPosts.length ? ( 
                 Array.from({ length: 3 }).map((_, index) => (
-                    <div key={index} className="space-y-4 p-5 bg-card rounded-xl shadow-xl animate-pulse border border-border/30">
+                    <div key={index} className="space-y-4 p-5 bg-card/70 backdrop-blur-sm rounded-xl shadow-xl animate-pulse border border-border/30">
                     <div className="flex items-center space-x-3">
-                        <Skeleton className="h-10 w-10 rounded-full bg-muted" />
+                        <Skeleton className="h-12 w-12 rounded-full bg-muted/50" />
                         <div className="space-y-2 flex-1">
-                        <Skeleton className="h-4 w-1/3 bg-muted" />
-                        <Skeleton className="h-3 w-1/4 bg-muted" />
+                        <Skeleton className="h-4 w-1/3 bg-muted/50" />
+                        <Skeleton className="h-3 w-1/4 bg-muted/50" />
                         </div>
                     </div>
-                    <Skeleton className="h-5 w-full bg-muted" />
-                    <Skeleton className="h-5 w-5/6 bg-muted" />
-                    <Skeleton className="h-40 w-full bg-muted rounded-md" />
+                    <Skeleton className="h-5 w-full bg-muted/50" />
+                    <Skeleton className="h-5 w-5/6 bg-muted/50" />
+                    <Skeleton className="h-40 w-full bg-muted/50 rounded-md" />
                     </div>
                 ))
                 ) : displayedPosts.length > 0 ? (
@@ -338,15 +341,15 @@ const Home: FC = () => {
                     />
                 ))
                 ) : (
-                <Card className="text-center py-12 rounded-xl shadow-lg border border-border/40">
+                <Card className="text-center py-16 rounded-xl shadow-xl border border-border/40 bg-card/80 backdrop-blur-sm">
                     <CardContent className="flex flex-col items-center">
-                    <Zap className="mx-auto h-16 w-16 text-muted-foreground/40 mb-4" />
-                    <p className="text-xl text-muted-foreground">
-                        {allPosts.length > 0 && !showAnyDistance ? "No pulses found within this range." : "No pulses found nearby yet."}
+                    <Zap className="mx-auto h-20 w-20 text-muted-foreground/30 mb-6" />
+                    <p className="text-2xl text-muted-foreground font-semibold">
+                        {allPosts.length > 0 && !showAnyDistance ? "No pulses found in this range." : "The air is quiet here..."}
                     </p>
-                    <p className="text-sm text-muted-foreground/80 mt-1">
+                    <p className="text-md text-muted-foreground/80 mt-2">
                         {allPosts.length > 0 && !showAnyDistance ? "Try expanding the distance or " : ""}
-                        Be the first to share what's happening!
+                        Be the first to make some noise!
                     </p>
                     </CardContent>
                 </Card>

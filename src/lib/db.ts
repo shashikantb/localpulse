@@ -1,302 +1,304 @@
 
-import type { Database } from 'better-sqlite3';
-import DatabaseConstructor from 'better-sqlite3';
-import path from 'path';
-import fs from 'fs';
+import { Pool, type QueryResult } from 'pg';
+import type { Post, NewPost, DbNewPost, Comment, NewComment, VisitorCounts } from './db-types';
 
-// Define the structure of a Post
-export interface Post {
-  id: number;
-  content: string;
-  latitude: number;
-  longitude: number;
-  createdAt: string; // Store as ISO string (TEXT in SQLite)
-  mediaUrl?: string | null; // Optional URL for image/video (stored as TEXT/Data URL)
-  mediaType?: 'image' | 'video' | null; // Type of media
-  likeCount: number;
-  city?: string | null; // City where the post was made
-}
-
-// Define the structure for adding a new post from the client (omit id, createdAt, likeCount, and city)
-export type NewPost = Omit<Post, 'id' | 'createdAt' | 'likeCount' | 'city'>;
-
-// Define the structure for inserting a new post into the DB (includes city)
-export type DbNewPost = Omit<Post, 'id' | 'createdAt' | 'likeCount'>;
+// Define the structure of a Post, Comment, VisitorCounts, etc. in db-types.ts if not already
+export * from './db-types';
 
 
-// Define the structure of a Comment
-export interface Comment {
-  id: number;
-  postId: number;
-  author: string;
-  content: string;
-  createdAt: string;
-}
+const pool = new Pool({
+  connectionString: process.env.POSTGRES_URL, // Example: postgres://user:password@host:port/database
+  // Or use individual environment variables:
+  // user: process.env.POSTGRES_USER,
+  // host: process.env.POSTGRES_HOST,
+  // database: process.env.POSTGRES_DATABASE,
+  // password: process.env.POSTGRES_PASSWORD,
+  // port: parseInt(process.env.POSTGRES_PORT || "5432"),
+  ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
+});
 
-// Define the structure for adding a new comment
-export type NewComment = Omit<Comment, 'id' | 'createdAt'>;
+pool.on('connect', () => {
+  console.log('PostgreSQL connected');
+});
 
-// Visitor stats structure
-export interface VisitorCounts {
-  totalVisits: number;
-  dailyVisits: number;
-}
+pool.on('error', (err) => {
+  console.error('PostgreSQL client error:', err);
+});
 
-
-// Ensure the data directory exists
-const dataDir = path.join(process.cwd(), 'data');
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir);
-}
-
-const dbPath = path.join(dataDir, 'localpulse.db');
-let db: Database;
-
-try {
-    const dbExists = fs.existsSync(dbPath);
-    db = new DatabaseConstructor(dbPath, { verbose: console.log });
-    console.log('Database connection established.');
-
-    const postTableInfo = db.prepare("PRAGMA table_info(posts)").all();
-    const postColumns = postTableInfo.map((col: any) => col.name);
+async function initializeDatabaseSchema(): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
     // Create/Update the posts table
-    db.exec(`
-        CREATE TABLE IF NOT EXISTS posts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            content TEXT NOT NULL,
-            latitude REAL NOT NULL,
-            longitude REAL NOT NULL,
-            createdAt TEXT NOT NULL,
-            mediaUrl TEXT NULL,
-            mediaType TEXT NULL,
-            likeCount INTEGER NOT NULL DEFAULT 0,
-            city TEXT NULL
-        );
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS posts (
+        id SERIAL PRIMARY KEY,
+        content TEXT NOT NULL,
+        latitude REAL NOT NULL,
+        longitude REAL NOT NULL,
+        createdAt TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        mediaUrl TEXT NULL,
+        mediaType TEXT NULL,
+        likeCount INTEGER NOT NULL DEFAULT 0,
+        city TEXT NULL
+      );
     `);
     console.log('Checked/Created posts table structure.');
 
-    if (!postColumns.includes('mediaUrl')) {
-        db.exec('ALTER TABLE posts ADD COLUMN mediaUrl TEXT NULL');
-        console.log('Added mediaUrl column to posts table.');
-    }
-    if (!postColumns.includes('mediaType')) {
-        db.exec('ALTER TABLE posts ADD COLUMN mediaType TEXT NULL');
-        console.log('Added mediaType column to posts table.');
-    }
-    if (!postColumns.includes('likeCount')) {
-        db.exec('ALTER TABLE posts ADD COLUMN likeCount INTEGER NOT NULL DEFAULT 0');
-        console.log('Added likeCount column to posts table.');
-    }
-    if (!postColumns.includes('city')) {
-        db.exec('ALTER TABLE posts ADD COLUMN city TEXT NULL');
-        console.log('Added city column to posts table.');
-    }
-
     // Create the comments table if it doesn't exist
-    db.exec(`
-        CREATE TABLE IF NOT EXISTS comments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            postId INTEGER NOT NULL,
-            author TEXT NOT NULL DEFAULT 'Anonymous',
-            content TEXT NOT NULL,
-            createdAt TEXT NOT NULL,
-            FOREIGN KEY (postId) REFERENCES posts(id) ON DELETE CASCADE
-        );
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS comments (
+        id SERIAL PRIMARY KEY,
+        postId INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+        author TEXT NOT NULL DEFAULT 'Anonymous',
+        content TEXT NOT NULL,
+        createdAt TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
     `);
     console.log('Checked/Created comments table.');
 
+    // Create visitor_stats table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS visitor_stats (
+        stat_name VARCHAR(255) PRIMARY KEY,
+        stat_value TEXT NULL
+      );
+    `);
+     console.log('Checked/Created visitor_stats table.');
+
     // Initialize visitor statistics
-    initializeVisitorStatsDb();
-
-
-} catch (error) {
-    console.error('Error initializing database:', error);
-    throw new Error('Failed to initialize database');
+    const todayStr = new Date().toISOString().split('T')[0];
+    await client.query(
+      "INSERT INTO visitor_stats (stat_name, stat_value) VALUES ('total_visits', '0') ON CONFLICT (stat_name) DO NOTHING"
+    );
+    await client.query(
+      "INSERT INTO visitor_stats (stat_name, stat_value) VALUES ('daily_visits_date', $1) ON CONFLICT (stat_name) DO UPDATE SET stat_value = EXCLUDED.stat_value WHERE visitor_stats.stat_name = 'daily_visits_date' AND visitor_stats.stat_value IS NULL",
+      [todayStr]
+    );
+     await client.query(
+      "INSERT INTO visitor_stats (stat_name, stat_value) VALUES ('daily_visits_count', '0') ON CONFLICT (stat_name) DO NOTHING"
+    );
+    console.log('Initialized visitor_stats data.');
+    
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error initializing database schema:', error);
+    throw new Error('Failed to initialize database schema');
+  } finally {
+    client.release();
+  }
 }
 
+// Initialize schema on startup
+initializeDatabaseSchema().catch(err => {
+    console.error("Failed to initialize DB schema on startup:", err);
+    // Optionally exit or handle critical failure
+});
+
+
 // Function to get all posts, ordered by creation date descending
-export function getPostsDb(): Post[] {
-   try {
-      const stmt = db.prepare('SELECT id, content, latitude, longitude, createdAt, mediaUrl, mediaType, likeCount, city FROM posts ORDER BY createdAt DESC');
-      const posts = stmt.all() as Post[];
-      console.log(`Fetched ${posts.length} posts.`);
-      return posts;
-   } catch (error) {
-      console.error('Error fetching posts:', error);
-      return [];
-   }
+export async function getPostsDb(): Promise<Post[]> {
+  try {
+    const result: QueryResult<Post> = await pool.query(
+      'SELECT id, content, latitude, longitude, createdAt, mediaUrl, mediaType, likeCount, city FROM posts ORDER BY createdAt DESC'
+    );
+    console.log(`Fetched ${result.rowCount} posts.`);
+    return result.rows;
+  } catch (error) {
+    console.error('Error fetching posts:', error);
+    return [];
+  }
 }
 
 // Function to add a new post
-export function addPostDb(newPost: DbNewPost): Post {
-    try {
-        const createdAt = new Date().toISOString();
-        // likeCount defaults to 0 due to table definition
-        const stmt = db.prepare('INSERT INTO posts (content, latitude, longitude, createdAt, mediaUrl, mediaType, city) VALUES (?, ?, ?, ?, ?, ?, ?)');
-        const info = stmt.run(
-            newPost.content,
-            newPost.latitude,
-            newPost.longitude,
-            createdAt,
-            newPost.mediaUrl ?? null,
-            newPost.mediaType ?? null,
-            newPost.city ?? null
-        );
-        console.log(`Added post with ID: ${info.lastInsertRowid}`);
-        const insertedPost = db.prepare('SELECT id, content, latitude, longitude, createdAt, mediaUrl, mediaType, likeCount, city FROM posts WHERE id = ?').get(info.lastInsertRowid) as Post;
-        if (!insertedPost) throw new Error('Failed to retrieve the newly inserted post.');
-        return insertedPost;
-    } catch (error) {
-        console.error('Error adding post:', error);
-        throw new Error('Failed to add post to the database.');
-    }
+export async function addPostDb(newPost: DbNewPost): Promise<Post> {
+  try {
+    const createdAt = new Date(); // PostgreSQL will use TIMESTAMPTZ
+    const result: QueryResult<Post> = await pool.query(
+      'INSERT INTO posts (content, latitude, longitude, createdAt, mediaUrl, mediaType, city) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, content, latitude, longitude, createdAt, mediaUrl, mediaType, likeCount, city',
+      [
+        newPost.content,
+        newPost.latitude,
+        newPost.longitude,
+        createdAt,
+        newPost.mediaUrl ?? null,
+        newPost.mediaType ?? null,
+        newPost.city ?? null
+      ]
+    );
+    const insertedPost = result.rows[0];
+    if (!insertedPost) throw new Error('Failed to retrieve the newly inserted post.');
+    console.log(`Added post with ID: ${insertedPost.id}`);
+    return insertedPost;
+  } catch (error) {
+    console.error('Error adding post:', error);
+    throw new Error('Failed to add post to the database.');
+  }
 }
 
 // Function to update like count for a post
-export function updatePostLikeCountDb(postId: number, increment: boolean): Post | null {
-    try {
-        const currentPost = db.prepare('SELECT likeCount FROM posts WHERE id = ?').get(postId) as Pick<Post, 'likeCount'> | undefined;
-        if (!currentPost) {
-            console.error(`Post with id ${postId} not found for like update.`);
-            return null;
-        }
+export async function updatePostLikeCountDb(postId: number, increment: boolean): Promise<Post | null> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const postResult = await client.query('SELECT likeCount FROM posts WHERE id = $1 FOR UPDATE', [postId]);
+    const currentPost = postResult.rows[0] as Pick<Post, 'likeCount'> | undefined;
 
-        let newLikeCount = currentPost.likeCount;
-        if (increment) {
-            newLikeCount += 1;
-        } else {
-            newLikeCount = Math.max(0, newLikeCount - 1); // Ensure like count doesn't go below 0
-        }
-
-        const stmt = db.prepare('UPDATE posts SET likeCount = ? WHERE id = ?');
-        stmt.run(newLikeCount, postId);
-        console.log(`Updated like count for post ${postId} to ${newLikeCount}`);
-
-        return db.prepare('SELECT * FROM posts WHERE id = ?').get(postId) as Post | null;
-    } catch (error) {
-        console.error(`Error updating like count for post ${postId}:`, error);
-        throw new Error('Failed to update like count.');
+    if (!currentPost) {
+      console.error(`Post with id ${postId} not found for like update.`);
+      await client.query('ROLLBACK');
+      return null;
     }
+
+    let newLikeCount = currentPost.likeCount;
+    if (increment) {
+      newLikeCount += 1;
+    } else {
+      newLikeCount = Math.max(0, newLikeCount - 1);
+    }
+
+    const updateResult: QueryResult<Post> = await client.query(
+      'UPDATE posts SET likeCount = $1 WHERE id = $2 RETURNING *',
+      [newLikeCount, postId]
+    );
+    await client.query('COMMIT');
+    
+    const updatedPost = updateResult.rows[0];
+    if (updatedPost) {
+        console.log(`Updated like count for post ${postId} to ${newLikeCount}`);
+        return updatedPost;
+    }
+    return null;
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error(`Error updating like count for post ${postId}:`, error);
+    throw new Error('Failed to update like count.');
+  } finally {
+    client.release();
+  }
 }
 
 // Function to add a comment
-export function addCommentDb(commentData: NewComment): Comment {
-    try {
-        const createdAt = new Date().toISOString();
-        const author = commentData.author || 'Anonymous';
-        const stmt = db.prepare('INSERT INTO comments (postId, author, content, createdAt) VALUES (?, ?, ?, ?)');
-        const info = stmt.run(commentData.postId, author, commentData.content, createdAt);
-        console.log(`Added comment with ID: ${info.lastInsertRowid} to post ${commentData.postId}`);
-
-        const insertedComment = db.prepare('SELECT * FROM comments WHERE id = ?').get(info.lastInsertRowid) as Comment;
-        if (!insertedComment) throw new Error('Failed to retrieve the newly inserted comment.');
-        return insertedComment;
-    } catch (error) {
-        console.error(`Error adding comment to post ${commentData.postId}:`, error);
-        throw new Error('Failed to add comment.');
-    }
+export async function addCommentDb(commentData: NewComment): Promise<Comment> {
+  try {
+    const createdAt = new Date();
+    const author = commentData.author || 'Anonymous';
+    const result: QueryResult<Comment> = await pool.query(
+      'INSERT INTO comments (postId, author, content, createdAt) VALUES ($1, $2, $3, $4) RETURNING *',
+      [commentData.postId, author, commentData.content, createdAt]
+    );
+    const insertedComment = result.rows[0];
+    if (!insertedComment) throw new Error('Failed to retrieve the newly inserted comment.');
+    console.log(`Added comment with ID: ${insertedComment.id} to post ${commentData.postId}`);
+    return insertedComment;
+  } catch (error) {
+    console.error(`Error adding comment to post ${commentData.postId}:`, error);
+    throw new Error('Failed to add comment.');
+  }
 }
 
 // Function to get comments for a post
-export function getCommentsByPostIdDb(postId: number): Comment[] {
-    try {
-        const stmt = db.prepare('SELECT * FROM comments WHERE postId = ? ORDER BY createdAt ASC');
-        const comments = stmt.all(postId) as Comment[];
-        console.log(`Fetched ${comments.length} comments for post ${postId}.`);
-        return comments;
-    } catch (error) {
-        console.error(`Error fetching comments for post ${postId}:`, error);
-        return [];
-    }
+export async function getCommentsByPostIdDb(postId: number): Promise<Comment[]> {
+  try {
+    const result: QueryResult<Comment> = await pool.query(
+      'SELECT * FROM comments WHERE postId = $1 ORDER BY createdAt ASC',
+      [postId]
+    );
+    console.log(`Fetched ${result.rowCount} comments for post ${postId}.`);
+    return result.rows;
+  } catch (error) {
+    console.error(`Error fetching comments for post ${postId}:`, error);
+    return [];
+  }
 }
+
 
 // Visitor Statistics Functions
-function initializeVisitorStatsDb() {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS visitor_stats (
-      stat_name TEXT PRIMARY KEY,
-      stat_value TEXT NULL
+export async function incrementAndGetVisitorCountsDb(): Promise<VisitorCounts> {
+  const todayStr = new Date().toISOString().split('T')[0];
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Increment total visits
+    const totalUpdateResult = await client.query<{ stat_value: string }>(
+      "UPDATE visitor_stats SET stat_value = (COALESCE(stat_value, '0')::INTEGER + 1)::TEXT WHERE stat_name = 'total_visits' RETURNING stat_value"
     );
-  `);
-  const todayStr = new Date().toISOString().split('T')[0];
-  db.prepare("INSERT OR IGNORE INTO visitor_stats (stat_name, stat_value) VALUES ('total_visits', '0')").run();
-  db.prepare("INSERT OR IGNORE INTO visitor_stats (stat_name, stat_value) VALUES ('daily_visits_date', ?)").run(todayStr);
-  db.prepare("INSERT OR IGNORE INTO visitor_stats (stat_name, stat_value) VALUES ('daily_visits_count', '0')").run();
-  console.log('Checked/Initialized visitor_stats table.');
-}
-
-export function incrementAndGetVisitorCountsDb(): VisitorCounts {
-  const todayStr = new Date().toISOString().split('T')[0];
-  let dailyVisits: number;
-  let totalVisits: number;
-
-  db.transaction(() => {
-    // Ensure rows exist (handles first ever run gracefully)
-    db.prepare("INSERT OR IGNORE INTO visitor_stats (stat_name, stat_value) VALUES ('total_visits', '0')").run();
-    db.prepare("INSERT OR IGNORE INTO visitor_stats (stat_name, stat_value) VALUES ('daily_visits_date', ?)").run(todayStr);
-    db.prepare("INSERT OR IGNORE INTO visitor_stats (stat_name, stat_value) VALUES ('daily_visits_count', '0')").run();
+    const totalVisits = parseInt(totalUpdateResult.rows[0]?.stat_value || '0', 10);
 
     // Handle daily visits
-    const dailyDateRow = db.prepare("SELECT stat_value FROM visitor_stats WHERE stat_name = 'daily_visits_date'").get() as { stat_value: string } | undefined;
-    const dailyCountRow = db.prepare("SELECT stat_value FROM visitor_stats WHERE stat_name = 'daily_visits_count'").get() as { stat_value: string } | undefined;
+    const dailyDateRow = await client.query<{ stat_value: string }>(
+      "SELECT stat_value FROM visitor_stats WHERE stat_name = 'daily_visits_date'"
+    );
 
-    if (dailyDateRow?.stat_value === todayStr) {
-      const currentDailyCount = parseInt(dailyCountRow?.stat_value || '0', 10);
-      dailyVisits = currentDailyCount + 1;
-      db.prepare("UPDATE visitor_stats SET stat_value = ? WHERE stat_name = 'daily_visits_count'").run(dailyVisits.toString());
+    let dailyVisits: number;
+    if (dailyDateRow.rows[0]?.stat_value === todayStr) {
+      const dailyUpdateResult = await client.query<{ stat_value: string }>(
+        "UPDATE visitor_stats SET stat_value = (COALESCE(stat_value, '0')::INTEGER + 1)::TEXT WHERE stat_name = 'daily_visits_count' RETURNING stat_value"
+      );
+      dailyVisits = parseInt(dailyUpdateResult.rows[0]?.stat_value || '0', 10);
     } else {
+      await client.query(
+        "UPDATE visitor_stats SET stat_value = $1 WHERE stat_name = 'daily_visits_date'",
+        [todayStr]
+      );
+      await client.query(
+        "UPDATE visitor_stats SET stat_value = '1' WHERE stat_name = 'daily_visits_count'"
+      );
       dailyVisits = 1;
-      db.prepare("UPDATE visitor_stats SET stat_value = ? WHERE stat_name = 'daily_visits_date'").run(todayStr);
-      db.prepare("UPDATE visitor_stats SET stat_value = ? WHERE stat_name = 'daily_visits_count'").run('1');
     }
-
-    // Handle total visits
-    const totalCountRow = db.prepare("SELECT stat_value FROM visitor_stats WHERE stat_name = 'total_visits'").get() as { stat_value: string } | undefined;
-    const currentTotalCount = parseInt(totalCountRow?.stat_value || '0', 10);
-    totalVisits = currentTotalCount + 1;
-    db.prepare("UPDATE visitor_stats SET stat_value = ? WHERE stat_name = 'total_visits'").run(totalVisits.toString());
-  })();
-
-  // These will be assigned within the transaction
-  // @ts-ignore
-  return { totalVisits, dailyVisits };
-}
-
-export function getVisitorCountsDb(): VisitorCounts {
-  const todayStr = new Date().toISOString().split('T')[0];
-
-   // Ensure rows exist for reading
-  db.prepare("INSERT OR IGNORE INTO visitor_stats (stat_name, stat_value) VALUES ('total_visits', '0')").run();
-  db.prepare("INSERT OR IGNORE INTO visitor_stats (stat_name, stat_value) VALUES ('daily_visits_date', ?)").run(todayStr);
-  db.prepare("INSERT OR IGNORE INTO visitor_stats (stat_name, stat_value) VALUES ('daily_visits_count', '0')").run();
-
-  const totalRow = db.prepare("SELECT stat_value FROM visitor_stats WHERE stat_name = 'total_visits'").get() as { stat_value: string } | undefined;
-  const totalVisits = parseInt(totalRow?.stat_value || '0', 10);
-
-  const dailyDateRow = db.prepare("SELECT stat_value FROM visitor_stats WHERE stat_name = 'daily_visits_date'").get() as { stat_value: string } | undefined;
-  const dailyCountRow = db.prepare("SELECT stat_value FROM visitor_stats WHERE stat_name = 'daily_visits_count'").get() as { stat_value: string } | undefined;
-
-  let dailyVisits = 0;
-  if (dailyDateRow?.stat_value === todayStr) {
-    dailyVisits = parseInt(dailyCountRow?.stat_value || '0', 10);
-  } else {
-    // If date is not today, it means today's count is effectively 0 until the first visit increments it.
-    // We might want to reset daily_visits_count to 0 and update daily_visits_date to todayStr here if just fetching.
-    // For simplicity now, if date is old, daily is 0. incrementAndGet will fix it on next actual visit.
+    
+    await client.query('COMMIT');
+    return { totalVisits, dailyVisits };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error incrementing visitor counts:', error);
+    throw error; // Re-throw to be caught by server action
+  } finally {
+    client.release();
   }
+}
 
-  return { totalVisits, dailyVisits };
+export async function getVisitorCountsDb(): Promise<VisitorCounts> {
+ try {
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    const totalRowResult = await pool.query<{ stat_value: string }>(
+      "SELECT stat_value FROM visitor_stats WHERE stat_name = 'total_visits'"
+    );
+    const totalVisits = parseInt(totalRowResult.rows[0]?.stat_value || '0', 10);
+
+    const dailyDateRowResult = await pool.query<{ stat_value: string }>(
+      "SELECT stat_value FROM visitor_stats WHERE stat_name = 'daily_visits_date'"
+    );
+    
+    let dailyVisits = 0;
+    if (dailyDateRowResult.rows[0]?.stat_value === todayStr) {
+      const dailyCountRowResult = await pool.query<{ stat_value: string }>(
+        "SELECT stat_value FROM visitor_stats WHERE stat_name = 'daily_visits_count'"
+      );
+      dailyVisits = parseInt(dailyCountRowResult.rows[0]?.stat_value || '0', 10);
+    }
+    return { totalVisits, dailyVisits };
+  } catch (error) {
+    console.error('Error getting visitor counts:', error);
+    return { totalVisits: 0, dailyVisits: 0 }; // Fallback on error
+  }
 }
 
 
-export function closeDb() {
-  if (db) {
-    db.close();
-    console.log('Database connection closed.');
+export async function closeDb(): Promise<void> {
+  try {
+    await pool.end();
+    console.log('PostgreSQL pool has ended');
+  } catch (error) {
+    console.error('Error closing PostgreSQL pool:', error);
   }
 }
 
 process.on('exit', () => closeDb());
-process.on('SIGINT', () => { closeDb(); process.exit(0); });
-process.on('SIGTERM', () => { closeDb(); process.exit(0); });
+process.on('SIGINT', async () => { await closeDb(); process.exit(0); });
+process.on('SIGTERM', async () => { await closeDb(); process.exit(0); });

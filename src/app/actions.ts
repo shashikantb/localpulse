@@ -2,7 +2,7 @@
 'use server';
 
 import * as db from '@/lib/db';
-import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts } from '@/lib/db'; // Renamed NewPost to ClientNewPost
+import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 
 // Placeholder for geocoding service - replace with actual API call in a real app
@@ -37,8 +37,15 @@ async function geocodeCoordinates(latitude: number, longitude: number): Promise<
 // Action to get all posts
 export async function getPosts(): Promise<Post[]> {
   try {
-    const posts = db.getPostsDb();
-    return posts;
+    const posts = await db.getPostsDb();
+    // Map to ensure frontend consistent casing if needed, though pg might return lowercase
+    return posts.map(post => ({
+      ...post,
+      createdAt: post.createdat, // map db 'createdat' to 'createdAt' for client
+      likeCount: post.likecount,
+      mediaUrl: post.mediaurl,
+      mediaType: post.mediatype,
+    }));
   } catch (error) {
     console.error("Server action error fetching posts:", error);
     return [];
@@ -55,9 +62,15 @@ export async function addPost(newPostData: ClientNewPost): Promise<Post> {
       city: cityName,
     };
 
-    const addedPost = db.addPostDb(postDataForDb);
+    const addedPost = await db.addPostDb(postDataForDb);
     revalidatePath('/'); 
-    return addedPost;
+    return {
+        ...addedPost,
+        createdAt: addedPost.createdat, // map db 'createdat' to 'createdAt' for client
+        likeCount: addedPost.likecount,
+        mediaUrl: addedPost.mediaurl,
+        mediaType: addedPost.mediatype,
+    };
   } catch (error) {
     console.error("Server action error adding post:", error);
     throw new Error('Failed to add post via server action.');
@@ -67,12 +80,18 @@ export async function addPost(newPostData: ClientNewPost): Promise<Post> {
 // Action to toggle like on a post
 export async function toggleLikePost(postId: number, increment: boolean): Promise<Post | null> {
   try {
-    const updatedPost = db.updatePostLikeCountDb(postId, increment);
+    const updatedPost = await db.updatePostLikeCountDb(postId, increment);
     if (updatedPost) {
-      revalidatePath('/'); // Revalidate to show updated like count
-      // Consider revalidating specific post path if you have individual post pages: revalidatePath(`/posts/${postId}`);
+      revalidatePath('/');
+       return {
+        ...updatedPost,
+        createdAt: updatedPost.createdat,
+        likeCount: updatedPost.likecount,
+        mediaUrl: updatedPost.mediaurl,
+        mediaType: updatedPost.mediatype,
+      };
     }
-    return updatedPost;
+    return null;
   } catch (error) {
     console.error(`Server action error toggling like for post ${postId}:`, error);
     return null;
@@ -82,10 +101,13 @@ export async function toggleLikePost(postId: number, increment: boolean): Promis
 // Action to add a comment
 export async function addComment(commentData: NewComment): Promise<Comment> {
   try {
-    const addedComment = db.addCommentDb(commentData);
-    revalidatePath('/'); // Revalidate to show new comment
-    // Consider revalidating specific post path: revalidatePath(`/posts/${commentData.postId}`);
-    return addedComment;
+    const addedComment = await db.addCommentDb(commentData);
+    revalidatePath('/'); 
+    return {
+        ...addedComment,
+        postId: addedComment.postid,
+        createdAt: addedComment.createdat,
+    };
   } catch (error) {
     console.error(`Server action error adding comment to post ${commentData.postId}:`, error);
     throw new Error('Failed to add comment via server action.');
@@ -95,8 +117,12 @@ export async function addComment(commentData: NewComment): Promise<Comment> {
 // Action to get comments for a post
 export async function getComments(postId: number): Promise<Comment[]> {
   try {
-    const comments = db.getCommentsByPostIdDb(postId);
-    return comments;
+    const comments = await db.getCommentsByPostIdDb(postId);
+    return comments.map(comment => ({
+        ...comment,
+        postId: comment.postid,
+        createdAt: comment.createdat,
+    }));
   } catch (error) {
     console.error(`Server action error fetching comments for post ${postId}:`, error);
     return [];
@@ -106,13 +132,10 @@ export async function getComments(postId: number): Promise<Comment[]> {
 // Action to record a visit and get current counts
 export async function recordVisitAndGetCounts(): Promise<VisitorCounts> {
   try {
-    const counts = db.incrementAndGetVisitorCountsDb();
-    // No revalidation needed as this doesn't directly change cached page content that users see,
-    // but rather updates data that will be fetched by a client component.
+    const counts = await db.incrementAndGetVisitorCountsDb();
     return counts;
   } catch (error) {
     console.error("Server action error recording visit and getting counts:", error);
-    // Return 0 counts on error to prevent breaking client
     return { totalVisits: 0, dailyVisits: 0 }; 
   }
 }
@@ -120,7 +143,7 @@ export async function recordVisitAndGetCounts(): Promise<VisitorCounts> {
 // Action to get current visitor counts without incrementing
 export async function getCurrentVisitorCounts(): Promise<VisitorCounts> {
   try {
-    const counts = db.getVisitorCountsDb();
+    const counts = await db.getVisitorCountsDb();
     return counts;
   } catch (error) {
     console.error("Server action error getting current visitor counts:", error);
