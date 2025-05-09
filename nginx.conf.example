@@ -1,0 +1,34 @@
+
+server {
+    listen 80;
+    # Ensure this line is correct in your Nginx config file
+    # It should be: server_name your_actual_hostname_or_domain;
+    # In your case, if using the hostname:
+    server_name srv821347; # Or localpulse.in if you have mapped the domain
+
+    # If you have localpulse.in mapped and SSL configured, it might look like:
+    # server_name localpulse.in www.localpulse.in;
+
+    # listen 443 ssl; # Uncomment if SSL is configured
+    # ssl_certificate /etc/letsencrypt/live/localpulse.in/fullchain.pem; # Path to your SSL certificate
+    # ssl_certificate_key /etc/letsencrypt/live/localpulse.in/privkey.pem; # Path to your SSL private key
+    # include /etc/letsencrypt/options-ssl-nginx.conf; # Recommended SSL options
+    # ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # Diffie-Hellman parameters
+
+    location / {
+        proxy_pass http://localhost:3000; # Ensure this port matches your Next.js app's port (usually 3000 or 9002 for your setup)
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    # Optional: Redirect HTTP to HTTPS if SSL is enabled
+    # if ($scheme != "https") {
+    #   return 301 https://$host$request_uri;
+    # }
+}
