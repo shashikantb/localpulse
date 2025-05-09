@@ -1,0 +1,74 @@
+
+# Specifies the version of the App Hosting YAML schema.
+# For more information, visit https://cloud.google.com/app-hosting/docs/configuration#yaml-schema-versions
+# yamllint disable-line rule:comment-style
+apiVersion: v1alpha1
+
+# Specifies the port that your application listens on.
+# For more information, visit https://cloud.google.com/app-hosting/docs/configuration#runconfig_port
+runConfig:
+  port: 3000
+
+# Specifies the build commands for your application.
+# For more information, visit https://cloud.google.com/app-hosting/docs/configuration#buildconfig
+buildConfig:
+  # Command to build your Next.js application
+  buildCommand: npm run build
+
+# Defines environment variables for your application.
+# It's recommended to use Secret Manager for sensitive data.
+# For more information, visit https://cloud.google.com/app-hosting/docs/configuration#env
+# and https://cloud.google.com/app-hosting/docs/manage-secrets
+env:
+  - variable: NODE_ENV
+    value: production
+  # Example for PostgreSQL URL (better to use Secret Manager for this)
+  # - variable: POSTGRES_URL
+  #   value: "your_postgres_connection_string_here_or_from_secret_manager"
+  # Example for Genkit API Key (better to use Secret Manager for this)
+  # - variable: GOOGLE_GENAI_API_KEY
+  #   value: "your_genai_api_key_here_or_from_secret_manager"
+  # Example for Admin Credentials (better to use Secret Manager for these)
+  # - variable: ADMIN_USERNAME
+  #   value: "your_admin_username"
+  # - variable: ADMIN_PASSWORD
+  #   value: "your_admin_password"
+
+# Settings for the main web server that App Hosting provisions.
+# For more information, visit https://cloud.google.com/app-hosting/docs/configuration#servingconfig
+# servingConfig:
+  # staticAssets:
+  #   - path: /.next/static
+  #     headers:
+  #       Cache-Control: public, max-age=31536000, immutable
+  #   - path: /static
+  #     headers:
+  #       Cache-Control: public, max-age=31536000, immutable
+  # routes:
+  #   - type: FALLBACK
+  #     path: / # Default route for Next.js dynamic rendering
+
+# Specifies the base image for your application.
+# For more information, visit https://cloud.google.com/app-hosting/docs/configuration#image
+image:
+  name: us-docker.pkg.dev/google-samples/containers/gcs/cloudrun/custom/nextjs:latest
+
+# Health check configuration
+# For more information, visit https://cloud.google.com/app-hosting/docs/configuration#healthchecks
+healthChecks:
+  livenessProbe:
+    httpGet:
+      path: / # A simple path that should return 200 OK
+      port: 3000 # Should match runConfig.port
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      path: / # A simple path that should return 200 OK
+      port: 3000 # Should match runConfig.port
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
