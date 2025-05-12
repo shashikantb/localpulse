@@ -34,8 +34,8 @@ const Home: FC = () => {
   const [loadingLocation, setLoadingLocation] = useState(true);
   const [loadingPosts, setLoadingPosts] = useState(true);
   const [formSubmitting, setFormSubmitting] = useState(false);
-  const [distanceFilterKm, setDistanceFilterKm] = useState<number>(50); // Max distance in KM
-  const [showAnyDistance, setShowAnyDistance] = useState<boolean>(false); // Toggle for "Any Distance"
+  const [distanceFilterKm, setDistanceFilterKm] = useState<number>(101); // Default to max (Any Distance)
+  const [showAnyDistance, setShowAnyDistance] = useState<boolean>(true); // Default to "Any Distance"
 
   const calculateDistance = useCallback((lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371; // Radius of the Earth in km
@@ -52,8 +52,8 @@ const Home: FC = () => {
 
   const processAndSetPosts = useCallback((postsToProcess: Post[], currentLocation: { latitude: number; longitude: number } | null, currentDistanceFilterKm: number, currentShowAnyDistance: boolean) => {
     let filtered = postsToProcess;
-    if (currentLocation && !currentShowAnyDistance) { 
-      filtered = postsToProcess.filter(p => 
+    if (currentLocation && !currentShowAnyDistance) {
+      filtered = postsToProcess.filter(p =>
         calculateDistance(currentLocation.latitude, currentLocation.longitude, p.latitude, p.longitude) <= currentDistanceFilterKm
       );
     }
@@ -63,10 +63,10 @@ const Home: FC = () => {
       sorted.sort((a, b) => {
         const distA = calculateDistance(currentLocation.latitude, currentLocation.longitude, a.latitude, a.longitude);
         const distB = calculateDistance(currentLocation.latitude, currentLocation.longitude, b.latitude, b.longitude);
-        if (Math.abs(distA - distB) < 0.1) { 
+        if (Math.abs(distA - distB) < 0.1) {
           return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
         }
-        return distA - distB; 
+        return distA - distB;
       });
     } else {
       sorted.sort((a, b) => new Date(b.createdat).getTime() - new Date(a.createdat).getTime());
@@ -89,12 +89,17 @@ const Home: FC = () => {
         },
         (error) => {
           console.error("Geolocation error:", error);
-          setLocationError(`Error getting location: ${error.message}. Please ensure location services are enabled.`);
+          let errorMessage = `Error getting location: ${error.message}. Please ensure location services are enabled.`;
+           // Handle insecure origin error specifically
+          if (error.code === error.PERMISSION_DENIED && error.message.includes('secure origins')) {
+            errorMessage = `Error getting location: Location access is only available on secure (HTTPS) connections. Functionality might be limited.`;
+          }
+          setLocationError(errorMessage);
           setLoadingLocation(false);
           toast({
             variant: "destructive",
             title: "Location Error",
-            description: `Could not get location: ${error.message}. Filters and sorting by distance will be affected.`,
+            description: errorMessage,
           });
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
@@ -128,7 +133,7 @@ const Home: FC = () => {
         setLoadingPosts(false);
       }
     };
-    
+
     if (!loadingLocation) { // Only fetch posts after location attempt is complete
         fetchInitialPosts();
     }
@@ -154,14 +159,14 @@ const Home: FC = () => {
     }
     setFormSubmitting(true);
     try {
-      const postData: NewPost = { 
+      const postData: NewPost = {
         content,
         latitude: location.latitude,
         longitude: location.longitude,
         mediaUrl: mediaUrl,
         mediaType: mediaType,
       };
-      
+
       const result = await addPost(postData);
 
       if (result.error) {
@@ -171,7 +176,7 @@ const Home: FC = () => {
           description: result.error || "Failed to add your post. Please try again.",
         });
       } else if (result.post) {
-        setAllPosts(prevPosts => [result.post!, ...prevPosts]); 
+        setAllPosts(prevPosts => [result.post!, ...prevPosts]);
         toast({
           title: "Post Added!",
           description: "Your pulse is now live!",
@@ -200,7 +205,7 @@ const Home: FC = () => {
 
   const handleDistanceChange = (value: number[]) => {
     setDistanceFilterKm(value[0]);
-    if (value[0] > 100) { 
+    if (value[0] > 100) {
         setShowAnyDistance(true);
     } else {
         setShowAnyDistance(false);
@@ -226,24 +231,24 @@ const Home: FC = () => {
           <Slider
             id="distance-filter-slider"
             min={1}
-            max={101} 
+            max={101}
             step={1}
-            defaultValue={[showAnyDistance ? 101 : distanceFilterKm]} 
+            defaultValue={[distanceFilterKm]} // Use the state variable as default
             onValueChange={handleDistanceChange}
             disabled={!location || loadingPosts}
             aria-label="Distance filter"
           />
           {!location && <p className="text-xs text-destructive mt-1">Enable location services to use distance filter.</p>}
         </div>
-        <Button 
-            variant={showAnyDistance ? "default" : "outline"} 
+        <Button
+            variant={showAnyDistance ? "default" : "outline"}
             onClick={() => {
                 const newShowAnyDistance = !showAnyDistance;
                 setShowAnyDistance(newShowAnyDistance);
-                if (newShowAnyDistance) { 
-                    setDistanceFilterKm(101); 
-                } else { 
-                    setDistanceFilterKm(50); 
+                if (newShowAnyDistance) {
+                    setDistanceFilterKm(101);
+                } else {
+                    setDistanceFilterKm(50);
                 }
             }}
             disabled={!location || loadingPosts}
@@ -272,6 +277,7 @@ const Home: FC = () => {
               </h1>
             </div>
             <p className="text-xl text-muted-foreground font-medium">Catch the Vibe, Share the Pulse.</p>
+            <p className="text-xs text-muted-foreground/80">Developed by S. P. Borgavakar</p>
         </header>
 
         {loadingLocation && (
@@ -287,7 +293,7 @@ const Home: FC = () => {
             <Alert variant="destructive" className="shadow-xl border-destructive/70">
             <Terminal className="h-6 w-6" />
             <AlertTitle className="text-lg font-semibold">Location Access Denied</AlertTitle>
-            <AlertDescription className="text-base">{locationError} Functionality might be limited.</AlertDescription>
+            <AlertDescription className="text-base">{locationError}</AlertDescription>
             </Alert>
         )}
 
@@ -308,10 +314,11 @@ const Home: FC = () => {
                     Pulse Origin: {location.latitude.toFixed(3)}, {location.longitude.toFixed(3)}
                     </p>
                 </CardContent>
+                 <p className="text-xs text-center pb-2 text-muted-foreground/80">Developed by S. P. Borgavakar</p>
                 </Card>
             )}
 
-            <div className="flex justify-end sticky top-24 z-30 -mt-4 mb-4">
+            <div className="flex justify-end sticky top-28 z-30 -mt-4 mb-4"> {/* Adjusted top value */}
                 <Sheet>
                 <SheetTrigger asChild>
                     <Button variant="outline" className="shadow-lg hover:shadow-xl transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary">
@@ -321,6 +328,7 @@ const Home: FC = () => {
                 </SheetTrigger>
                 <SheetContent className="bg-card/95 backdrop-blur-md border-border">
                     <FilterSheetContent />
+                     <p className="text-xs text-center pt-4 text-muted-foreground/80">Developed by S. P. Borgavakar</p>
                 </SheetContent>
                 </Sheet>
             </div>
@@ -331,7 +339,7 @@ const Home: FC = () => {
                 <Rss className="w-9 h-9 mr-3 text-accent opacity-90" />
                 Nearby Pulses
                 </h2>
-                {loadingPosts && !allPosts.length ? ( 
+                {loadingPosts && !allPosts.length ? (
                 Array.from({ length: 3 }).map((_, index) => (
                     <div key={index} className="space-y-4 p-5 bg-card/70 backdrop-blur-sm rounded-xl shadow-xl animate-pulse border border-border/30">
                     <div className="flex items-center space-x-3">
@@ -366,6 +374,7 @@ const Home: FC = () => {
                         {allPosts.length > 0 && !showAnyDistance ? "Try expanding the distance or " : ""}
                         Be the first to make some noise!
                     </p>
+                     <p className="text-xs pt-4 text-muted-foreground/80">Developed by S. P. Borgavakar</p>
                     </CardContent>
                 </Card>
                 )}
@@ -378,4 +387,3 @@ const Home: FC = () => {
 };
 
 export default Home;
-
