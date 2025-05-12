@@ -7,6 +7,12 @@ export * from './db-types';
 
 const pool = new Pool({
   connectionString: process.env.POSTGRES_URL, // Example: postgres://user:password@host:port/database
+  // Or use individual environment variables:
+  // user: process.env.POSTGRES_USER,
+  // host: process.env.POSTGRES_HOST,
+  // database: process.env.POSTGRES_DATABASE,
+  // password: process.env.POSTGRES_PASSWORD,
+  // port: parseInt(process.env.POSTGRES_PORT || "5432"),
   ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
 });
 
@@ -33,7 +39,7 @@ async function initializeDatabaseSchema(): Promise<void> {
         createdAt TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
         mediaUrl TEXT NULL,
         mediaType TEXT NULL,
-        likeCount INTEGER NOT NULL DEFAULT 0,
+        likeCount INTEGER NOT NULL DEFAULT 0 CHECK (likeCount >= 0), -- Ensure likeCount doesn't go below 0
         city TEXT NULL
       );
     `);
@@ -65,23 +71,24 @@ async function initializeDatabaseSchema(): Promise<void> {
     await client.query(
       "INSERT INTO visitor_stats (stat_name, stat_value) VALUES ('total_visits', '0') ON CONFLICT (stat_name) DO NOTHING"
     );
+    // Use DO UPDATE for daily_visits_date to ensure it gets set if it was NULL or missing
     await client.query(
-      "INSERT INTO visitor_stats (stat_name, stat_value) VALUES ('daily_visits_date', $1) ON CONFLICT (stat_name) DO NOTHING", // Ensure it's only inserted if null before or doesn't exist
-      [todayStr]
+        "INSERT INTO visitor_stats (stat_name, stat_value) VALUES ('daily_visits_date', $1) ON CONFLICT (stat_name) DO UPDATE SET stat_value = EXCLUDED.stat_value",
+        [todayStr]
     );
      await client.query(
       "INSERT INTO visitor_stats (stat_name, stat_value) VALUES ('daily_visits_count', '0') ON CONFLICT (stat_name) DO NOTHING"
     );
     console.log('Initialized/Verified visitor_stats data.');
-    
+
     await client.query('COMMIT');
   } catch (error: any) {
     await client.query('ROLLBACK');
     let specificMessage = 'Failed to initialize database schema';
-    let loggedError = error; 
+    let loggedError = error;
 
     if (error && typeof error.code === 'string' && error.code === '42501') { // PostgreSQL "insufficient_privilege"
-      specificMessage = `Failed to initialize database schema due to insufficient PostgreSQL permissions. User (e.g., 'localpulse' from your POSTGRES_URL) likely lacks CREATE TABLE, USAGE ON SCHEMA public, or other necessary DDL/DML privileges on the target database. Please grant required permissions. Original PostgreSQL error: ${error.message} (Code: ${error.code})`;
+      specificMessage = `Failed to initialize database schema due to insufficient PostgreSQL permissions. User (e.g., from your POSTGRES_URL) likely lacks CREATE TABLE, USAGE ON SCHEMA public, or other necessary DDL/DML privileges on the target database. Please grant required permissions. Original PostgreSQL error: ${error.message} (Code: ${error.code})`;
       console.error("Database Permission Error During Schema Initialization:", specificMessage);
       console.error("Full PostgreSQL error object for diagnostics:", error);
       loggedError = new Error(specificMessage, { cause: error });
@@ -91,7 +98,7 @@ async function initializeDatabaseSchema(): Promise<void> {
       console.error('Generic Error Initializing Database Schema:', error);
       loggedError = new Error(specificMessage, { cause: error });
     }
-    throw loggedError;
+    throw loggedError; // Re-throw the enriched or original error
   } finally {
     client.release();
   }
@@ -101,7 +108,7 @@ async function initializeDatabaseSchema(): Promise<void> {
 initializeDatabaseSchema().catch(err => {
     console.error("Critical: Failed to initialize DB schema on startup. Application might not function correctly.", err);
     // Depending on the application's needs, you might want to exit here
-    // process.exit(1); 
+    // process.exit(1);
 });
 
 
@@ -111,10 +118,11 @@ export async function getPostsDb(): Promise<Post[]> {
     const result: QueryResult<Post> = await pool.query(
       'SELECT id, content, latitude, longitude, createdAt, mediaUrl, mediaType, likeCount, city FROM posts ORDER BY createdAt DESC'
     );
-    // console.log(`Fetched ${result.rowCount} posts.`); // Less verbose logging for frequent operations
+    // console.log(`Fetched ${result.rowCount} posts.`); // Less verbose logging
     return result.rows;
   } catch (error) {
     console.error('Error fetching posts from DB:', error);
+    // In a real app, you might want to throw an error or return a specific error indicator
     return [];
   }
 }
@@ -122,7 +130,7 @@ export async function getPostsDb(): Promise<Post[]> {
 // Function to add a new post
 export async function addPostDb(newPost: DbNewPost): Promise<Post> {
   try {
-    const createdAt = new Date(); 
+    const createdAt = new Date();
     const result: QueryResult<Post> = await pool.query(
       'INSERT INTO posts (content, latitude, longitude, createdAt, mediaUrl, mediaType, city) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, content, latitude, longitude, createdAt, mediaUrl, mediaType, likeCount, city',
       [
@@ -147,48 +155,29 @@ export async function addPostDb(newPost: DbNewPost): Promise<Post> {
   }
 }
 
-// Function to update like count for a post
-export async function updatePostLikeCountDb(postId: number, increment: boolean): Promise<Post | null> {
-  const client = await pool.connect();
+// Function to increment the like count for a post
+export async function incrementPostLikeCountDb(postId: number): Promise<Post | null> {
   try {
-    await client.query('BEGIN');
-    const postResult = await client.query('SELECT likeCount FROM posts WHERE id = $1 FOR UPDATE', [postId]);
-    const currentPost = postResult.rows[0] as Pick<Post, 'likeCount'> | undefined;
-
-    if (!currentPost) {
-      console.warn(`Post with id ${postId} not found for like update.`);
-      await client.query('ROLLBACK');
-      return null;
-    }
-
-    let newLikeCount = currentPost.likeCount;
-    if (increment) {
-      newLikeCount += 1;
-    } else {
-      newLikeCount = Math.max(0, newLikeCount - 1);
-    }
-
-    const updateResult: QueryResult<Post> = await client.query(
-      'UPDATE posts SET likeCount = $1 WHERE id = $2 RETURNING *',
-      [newLikeCount, postId]
+    // Atomically increment the like count
+    const updateResult: QueryResult<Post> = await pool.query(
+      'UPDATE posts SET likeCount = likeCount + 1 WHERE id = $1 RETURNING *',
+      [postId]
     );
-    await client.query('COMMIT');
-    
+
     const updatedPost = updateResult.rows[0];
     if (updatedPost) {
-        // console.log(`Updated like count for post ${postId} to ${newLikeCount}`);
+        console.log(`Incremented like count for post ${postId} to ${updatedPost.likecount}`);
         return updatedPost;
+    } else {
+        console.warn(`Post with id ${postId} not found for like increment.`);
+        return null; // Post not found
     }
-    return null;
-
   } catch (error) {
-    await client.query('ROLLBACK');
-    console.error(`Error updating like count for post ${postId} in DB:`, error);
-    throw new Error('Failed to update like count in DB.');
-  } finally {
-    client.release();
+    console.error(`Error incrementing like count for post ${postId} in DB:`, error);
+    throw new Error('Failed to increment like count in DB.');
   }
 }
+
 
 // Function to add a comment
 export async function addCommentDb(commentData: NewComment): Promise<Comment> {
@@ -259,13 +248,13 @@ export async function incrementAndGetVisitorCountsDb(): Promise<VisitorCounts> {
       );
       dailyVisits = 1;
     }
-    
+
     await client.query('COMMIT');
     return { totalVisits, dailyVisits };
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Error incrementing visitor counts in DB:', error);
-    throw error; 
+    throw error;
   } finally {
     client.release();
   }
@@ -283,7 +272,7 @@ export async function getVisitorCountsDb(): Promise<VisitorCounts> {
     const dailyDateRowResult = await pool.query<{ stat_value: string }>(
       "SELECT stat_value FROM visitor_stats WHERE stat_name = 'daily_visits_date'"
     );
-    
+
     let dailyVisits = 0;
     if (dailyDateRowResult.rows[0]?.stat_value === todayStr) {
       const dailyCountRowResult = await pool.query<{ stat_value: string }>(
@@ -299,7 +288,7 @@ export async function getVisitorCountsDb(): Promise<VisitorCounts> {
     return { totalVisits, dailyVisits };
   } catch (error) {
     console.error('Error getting visitor counts from DB:', error);
-    return { totalVisits: 0, dailyVisits: 0 }; 
+    return { totalVisits: 0, dailyVisits: 0 };
   }
 }
 
@@ -326,5 +315,3 @@ process.on('exit', () => {
   console.log('Application exiting. Ensuring DB pool is closed if not already.');
   // closeDb(); // Call closeDb directly here might be problematic if already called by SIGINT/SIGTERM
 });
-
-    

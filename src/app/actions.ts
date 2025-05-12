@@ -62,7 +62,7 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
     };
 
     const addedPost = await db.addPostDb(postDataForDb);
-    revalidatePath('/'); 
+    revalidatePath('/');
     return {
         post: {
           ...addedPost,
@@ -79,32 +79,35 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
   }
 }
 
-// Action to toggle like on a post
-export async function toggleLikePost(postId: number, increment: boolean): Promise<Post | null> {
+// Action to increment the like on a post
+export async function likePost(postId: number): Promise<{ post?: Post; error?: string }> {
   try {
-    const updatedPost = await db.updatePostLikeCountDb(postId, increment);
+    const updatedPost = await db.incrementPostLikeCountDb(postId);
     if (updatedPost) {
       revalidatePath('/');
-       return {
-        ...updatedPost,
-        createdAt: updatedPost.createdat,
-        likeCount: updatedPost.likecount,
-        mediaUrl: updatedPost.mediaurl,
-        mediaType: updatedPost.mediatype,
+      return {
+        post: {
+          ...updatedPost,
+          createdAt: updatedPost.createdat,
+          likeCount: updatedPost.likecount,
+          mediaUrl: updatedPost.mediaurl,
+          mediaType: updatedPost.mediatype,
+        }
       };
     }
-    return null;
-  } catch (error) {
-    console.error(`Server action error toggling like for post ${postId}:`, error);
-    return null;
+    return { error: 'Post not found or failed to update.' };
+  } catch (error: any) {
+    console.error(`Server action error liking post ${postId}:`, error);
+    return { error: error.message || `Failed to like post ${postId} due to a server error.` };
   }
 }
+
 
 // Action to add a comment
 export async function addComment(commentData: NewComment): Promise<Comment> {
   try {
     const addedComment = await db.addCommentDb(commentData);
-    revalidatePath('/'); 
+    revalidatePath('/');
     return {
         ...addedComment,
         postId: addedComment.postid,
@@ -138,7 +141,7 @@ export async function recordVisitAndGetCounts(): Promise<VisitorCounts> {
     return counts;
   } catch (error) {
     console.error("Server action error recording visit and getting counts:", error);
-    return { totalVisits: 0, dailyVisits: 0 }; 
+    return { totalVisits: 0, dailyVisits: 0 };
   }
 }
 
@@ -152,4 +155,3 @@ export async function getCurrentVisitorCounts(): Promise<VisitorCounts> {
     return { totalVisits: 0, dailyVisits: 0 };
   }
 }
-

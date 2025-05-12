@@ -7,10 +7,10 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader } from '@/co
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import type { Post, Comment as CommentType } from '@/lib/db-types';
 import { formatDistanceToNowStrict } from 'date-fns';
-import { MapPin, UserCircle, Heart, MessageCircle, Send, Map, CornerDownRight, Instagram, Share2, Rss } from 'lucide-react';
+import { MapPin, UserCircle, Heart, MessageCircle, Send, Map, CornerDownRight, Instagram, Share2, Rss, ThumbsUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { toggleLikePost, addComment, getComments } from '@/app/actions';
+import { likePost, addComment, getComments } from '@/app/actions'; // Updated import
 import { useToast } from '@/hooks/use-toast';
 
 interface PostCardProps {
@@ -65,8 +65,8 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
   const timeAgo = formatDistanceToNowStrict(new Date(post.createdat), { addSuffix: true });
   const distance = userLocation ? calculateDistance(userLocation.latitude, userLocation.longitude, post.latitude, post.longitude) : null;
 
-  const [isLiked, setIsLiked] = useState<boolean>(false);
   const [displayLikeCount, setDisplayLikeCount] = useState<number>(post.likecount);
+  const [isLiking, setIsLiking] = useState<boolean>(false); // Track if like action is in progress
   const [comments, setComments] = useState<CommentType[]>([]);
   const [newComment, setNewComment] = useState('');
   const [isLoadingComments, setIsLoadingComments] = useState(false);
@@ -80,15 +80,8 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
     }
   }, []);
 
-  useEffect(() => {
-    const likedStatus = localStorage.getItem(`post-liked-${post.id}`);
-    if (likedStatus) {
-      setIsLiked(JSON.parse(likedStatus));
-    }
-  }, [post.id]);
-
   const fetchPostComments = useCallback(async () => {
-    if (!showComments) return; 
+    if (!showComments) return;
     setIsLoadingComments(true);
     try {
       const fetchedComments = await getComments(post.id);
@@ -99,35 +92,42 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
       setIsLoadingComments(false);
     }
   }, [post.id, showComments, toast]);
-  
+
   useEffect(() => {
     fetchPostComments();
   }, [fetchPostComments]);
 
 
   const handleLikeClick = async () => {
-    const newLikedState = !isLiked;
-    const newLikeCount = displayLikeCount + (newLikedState ? 1 : -1);
+    if (isLiking) return; // Prevent multiple clicks while liking
 
-    setIsLiked(newLikedState);
-    setDisplayLikeCount(newLikeCount);
-    localStorage.setItem(`post-liked-${post.id}`, JSON.stringify(newLikedState));
+    setIsLiking(true);
+    const previousLikeCount = displayLikeCount;
+    // Optimistically update UI
+    setDisplayLikeCount(prevCount => prevCount + 1);
 
     try {
-      const updatedPostData = await toggleLikePost(post.id, newLikedState); 
-      if (updatedPostData) {
-        setDisplayLikeCount(updatedPostData.likecount); 
+      const result = await likePost(post.id);
+      if (result.error || !result.post) {
+        // Revert optimistic update on error
+        setDisplayLikeCount(previousLikeCount);
+        toast({ variant: 'destructive', title: 'Like Error', description: result.error || 'Could not like the post.' });
       } else {
-        setIsLiked(!newLikedState);
-        setDisplayLikeCount(displayLikeCount); 
-        localStorage.setItem(`post-liked-${post.id}`, JSON.stringify(!newLikedState));
-        toast({ variant: 'destructive', title: 'Error', description: 'Could not update like.' });
+        // Update with actual count from server if different (though usually should match optimistic)
+        setDisplayLikeCount(result.post.likecount);
+         toast({
+          title: 'Liked!',
+          description: 'Pulse liked successfully.',
+          variant: 'default',
+          duration: 2000, // Shorter duration for success toast
+        });
       }
-    } catch (error) {
-      setIsLiked(!newLikedState);
-      setDisplayLikeCount(displayLikeCount);
-      localStorage.setItem(`post-liked-${post.id}`, JSON.stringify(!newLikedState));
-      toast({ variant: 'destructive', title: 'Error', description: 'Could not update like.' });
+    } catch (error: any) {
+      // Revert optimistic update on unexpected error
+      setDisplayLikeCount(previousLikeCount);
+      toast({ variant: 'destructive', title: 'Like Error', description: error.message || 'An unexpected error occurred.' });
+    } finally {
+      setIsLiking(false);
     }
   };
 
@@ -140,7 +140,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
     setIsSubmittingComment(true);
     try {
       const added = await addComment({ postId: post.id, content: newComment.trim(), author: 'PulseFan' }); // Assuming 'PulseFan' as default author
-      setComments(prev => [added, ...prev]); 
+      setComments(prev => [added, ...prev]);
       setNewComment('');
       toast({ title: 'Comment Pulsed!', description: 'Your thoughts are now part of the vibe.', className:"bg-accent text-accent-foreground" });
     } catch (error) {
@@ -190,14 +190,14 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
         <div className="flex-1">
           <div className="flex items-center justify-between">
             <p className="text-sm text-primary font-semibold flex items-center">
-              <Rss className="w-4 h-4 mr-1.5 text-accent flex-shrink-0 opacity-80" /> 
+              <Rss className="w-4 h-4 mr-1.5 text-accent flex-shrink-0 opacity-80" />
               Anonymous Pulsar
             </p>
             <CardDescription className="text-xs text-muted-foreground font-medium">
               {timeAgo}
             </CardDescription>
           </div>
-           
+
             {post.city && post.city !== "Unknown City" && (
                  <p className="text-sm text-muted-foreground flex items-center mt-0.5">
                     <MapPin className="w-4 h-4 mr-1.5 text-primary/70 flex-shrink-0" /> {post.city}
@@ -246,12 +246,12 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
             </span>
           )}
         </div>
-         <p className="text-xs text-muted-foreground/80">Developed by S. P. Borgavakar</p>
+         {/* Removed "Developed by..." text from here */}
       </CardFooter>
-      
+
       <div className="px-5 pb-4 pt-2 flex items-center space-x-2 border-t border-border/30 bg-card/20 flex-wrap gap-y-2">
-        <Button variant="ghost" size="sm" onClick={handleLikeClick} className="flex items-center space-x-1.5 text-muted-foreground hover:text-primary transition-colors duration-150 group">
-          <Heart className={`w-5 h-5 transition-all duration-200 group-hover:scale-110 ${isLiked ? 'fill-red-500 text-red-500 animate-pulse' : 'text-muted-foreground group-hover:text-red-400'}`} />
+        <Button variant="ghost" size="sm" onClick={handleLikeClick} disabled={isLiking} className="flex items-center space-x-1.5 text-muted-foreground hover:text-primary transition-colors duration-150 group disabled:opacity-50 disabled:cursor-not-allowed">
+          <ThumbsUp className={`w-5 h-5 transition-all duration-200 group-hover:scale-110 group-hover:text-blue-500 ${isLiking ? 'text-blue-500 animate-pulse' : 'text-muted-foreground'}`} />
           <span className="font-medium text-sm">{displayLikeCount} {displayLikeCount === 1 ? 'Like' : 'Likes'}</span>
         </Button>
         <Button variant="ghost" size="sm" onClick={() => { setShowComments(!showComments); if(!showComments) fetchPostComments(); }} className="flex items-center space-x-1.5 text-muted-foreground hover:text-primary transition-colors duration-150 group">
@@ -324,7 +324,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
 
           {isLoadingComments && <p className="text-xs text-center text-muted-foreground py-3">Loading comments...</p>}
           {!isLoadingComments && comments.length === 0 && <p className="text-sm text-center text-muted-foreground py-4 italic">No thoughts shared yet. Be the first to vibe!</p>}
-          
+
           {!isLoadingComments && comments.length > 0 && (
             <div className="space-y-2 max-h-72 overflow-y-auto pr-2 rounded-md border-t border-border/20 pt-3 mt-3 custom-scrollbar">
               {comments.map(comment => <CommentCard key={comment.id} comment={comment} />)}

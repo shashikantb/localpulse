@@ -91,8 +91,8 @@ const Home: FC = () => {
           console.error("Geolocation error:", error);
           let errorMessage = `Error getting location: ${error.message}. Please ensure location services are enabled.`;
            // Handle insecure origin error specifically
-          if (error.code === error.PERMISSION_DENIED && error.message.includes('secure origins')) {
-            errorMessage = `Error getting location: Location access is only available on secure (HTTPS) connections. Functionality might be limited.`;
+          if (error.code === error.PERMISSION_DENIED && error.message.includes('Only secure origins are allowed')) {
+            errorMessage = `Error getting location: Location access is only available on secure (HTTPS) connections. Functionality might be limited. Enable HTTPS for your site.`;
           }
           setLocationError(errorMessage);
           setLoadingLocation(false);
@@ -100,6 +100,7 @@ const Home: FC = () => {
             variant: "destructive",
             title: "Location Error",
             description: errorMessage,
+            duration: 9000, // Longer duration for important errors
           });
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
@@ -231,30 +232,26 @@ const Home: FC = () => {
           <Slider
             id="distance-filter-slider"
             min={1}
-            max={101}
+            max={101} // Keep max at 101 to represent "Any Distance"
             step={1}
-            defaultValue={[distanceFilterKm]} // Use the state variable as default
-            onValueChange={handleDistanceChange}
+            value={[distanceFilterKm]} // Use controlled value
+            onValueChange={handleDistanceChange} // Update state on change
             disabled={!location || loadingPosts}
             aria-label="Distance filter"
           />
           {!location && <p className="text-xs text-destructive mt-1">Enable location services to use distance filter.</p>}
         </div>
+        {/* Simplified button to just reset to "Any Distance" */}
         <Button
-            variant={showAnyDistance ? "default" : "outline"}
+            variant="outline"
             onClick={() => {
-                const newShowAnyDistance = !showAnyDistance;
-                setShowAnyDistance(newShowAnyDistance);
-                if (newShowAnyDistance) {
-                    setDistanceFilterKm(101);
-                } else {
-                    setDistanceFilterKm(50);
-                }
+                setDistanceFilterKm(101);
+                setShowAnyDistance(true);
             }}
-            disabled={!location || loadingPosts}
+            disabled={!location || loadingPosts || showAnyDistance} // Disable if already "Any Distance"
             className="w-full"
         >
-            {showAnyDistance ? "Set Specific Distance" : "Show Pulses from Any Distance"}
+            Show Pulses from Any Distance
         </Button>
       </div>
       <SheetFooter>
@@ -262,6 +259,7 @@ const Home: FC = () => {
           <Button variant="outline">Close</Button>
         </SheetClose>
       </SheetFooter>
+      <p className="text-xs text-center pt-4 text-muted-foreground/80">Developed by S. P. Borgavakar</p>
     </>
   );
 
@@ -314,11 +312,11 @@ const Home: FC = () => {
                     Pulse Origin: {location.latitude.toFixed(3)}, {location.longitude.toFixed(3)}
                     </p>
                 </CardContent>
-                 <p className="text-xs text-center pb-2 text-muted-foreground/80">Developed by S. P. Borgavakar</p>
+                {/* Removed "Developed by..." text from here */}
                 </Card>
             )}
 
-            <div className="flex justify-end sticky top-28 z-30 -mt-4 mb-4"> {/* Adjusted top value */}
+            <div className="flex justify-end sticky top-[calc(theme(spacing.4)_+_theme(headerHeight,9rem))] z-30 -mt-4 mb-4"> {/* Adjusted top value based on header */}
                 <Sheet>
                 <SheetTrigger asChild>
                     <Button variant="outline" className="shadow-lg hover:shadow-xl transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary">
@@ -328,7 +326,7 @@ const Home: FC = () => {
                 </SheetTrigger>
                 <SheetContent className="bg-card/95 backdrop-blur-md border-border">
                     <FilterSheetContent />
-                     <p className="text-xs text-center pt-4 text-muted-foreground/80">Developed by S. P. Borgavakar</p>
+                     {/* Removed "Developed by..." text from here */}
                 </SheetContent>
                 </Sheet>
             </div>
@@ -352,6 +350,7 @@ const Home: FC = () => {
                     <Skeleton className="h-5 w-full bg-muted/50" />
                     <Skeleton className="h-5 w-5/6 bg-muted/50" />
                     <Skeleton className="h-40 w-full bg-muted/50 rounded-md" />
+                     {/* Removed "Developed by..." text from skeleton */}
                     </div>
                 ))
                 ) : displayedPosts.length > 0 ? (
@@ -374,7 +373,7 @@ const Home: FC = () => {
                         {allPosts.length > 0 && !showAnyDistance ? "Try expanding the distance or " : ""}
                         Be the first to make some noise!
                     </p>
-                     <p className="text-xs pt-4 text-muted-foreground/80">Developed by S. P. Borgavakar</p>
+                     {/* Removed "Developed by..." text from here */}
                     </CardContent>
                 </Card>
                 )}
