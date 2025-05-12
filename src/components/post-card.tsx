@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader } from '@/co
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import type { Post, Comment as CommentType } from '@/lib/db-types';
 import { formatDistanceToNowStrict } from 'date-fns';
-import { MapPin, Image as ImageIcon, Video, UserCircle, Heart, MessageCircle, Send, Map, CornerDownRight } from 'lucide-react';
+import { MapPin, UserCircle, Heart, MessageCircle, Send, Map, CornerDownRight, Instagram, Share2, Rss } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { toggleLikePost, addComment, getComments } from '@/app/actions';
@@ -18,6 +18,26 @@ interface PostCardProps {
   userLocation: { latitude: number; longitude: number } | null;
   calculateDistance: (lat1: number, lon1: number, lat2: number, lon2: number) => number;
 }
+
+// Inline SVG for WhatsApp icon
+const WhatsAppIcon: FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    {...props}
+  >
+    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+    <path d="m10.4 8.3-2.2 4.7a.8.8 0 0 0 .2 1l2.4 1.5a.8.8 0 0 0 1-.2l1-1.7a.8.8 0 0 0-.3-1l-2.3-2.1a.8.8 0 0 0-1 .2Z"></path>
+  </svg>
+);
+
 
 const CommentCard: FC<{ comment: CommentType }> = ({ comment }) => {
   return (
@@ -52,7 +72,13 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
   const [isLoadingComments, setIsLoadingComments] = useState(false);
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [showComments, setShowComments] = useState(false);
+  const [currentOrigin, setCurrentOrigin] = useState('');
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setCurrentOrigin(window.location.origin);
+    }
+  }, []);
 
   useEffect(() => {
     const likedStatus = localStorage.getItem(`post-liked-${post.id}`);
@@ -90,17 +116,14 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
     try {
       const updatedPostData = await toggleLikePost(post.id, newLikedState); 
       if (updatedPostData) {
-        // Use likecount from the response as it's the source of truth
         setDisplayLikeCount(updatedPostData.likecount); 
       } else {
-        // Revert optimistic update on failure
         setIsLiked(!newLikedState);
-        setDisplayLikeCount(displayLikeCount); // Revert to original count
+        setDisplayLikeCount(displayLikeCount); 
         localStorage.setItem(`post-liked-${post.id}`, JSON.stringify(!newLikedState));
         toast({ variant: 'destructive', title: 'Error', description: 'Could not update like.' });
       }
     } catch (error) {
-      // Revert optimistic update on error
       setIsLiked(!newLikedState);
       setDisplayLikeCount(displayLikeCount);
       localStorage.setItem(`post-liked-${post.id}`, JSON.stringify(!newLikedState));
@@ -116,7 +139,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
     }
     setIsSubmittingComment(true);
     try {
-      const added = await addComment({ postId: post.id, content: newComment.trim(), author: 'PulseFan' }); // Changed author
+      const added = await addComment({ postId: post.id, content: newComment.trim(), author: 'PulseFan' }); // Assuming 'PulseFan' as default author
       setComments(prev => [added, ...prev]); 
       setNewComment('');
       toast({ title: 'Comment Pulsed!', description: 'Your thoughts are now part of the vibe.', className:"bg-accent text-accent-foreground" });
@@ -127,21 +150,57 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
     }
   };
 
+  const handleShareWhatsApp = () => {
+    const shareText = `Check out this pulse: ${post.content}\n\nSee more at ${currentOrigin}`;
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleShareInstagram = async () => {
+    try {
+      await navigator.clipboard.writeText(post.content);
+      let toastMessage = "Post content copied to clipboard! Open Instagram and paste it in your story or post.";
+      if (post.mediaurl) {
+        toastMessage = "Post content copied! Remember to save the image/video first, then paste the content on Instagram.";
+      }
+      toast({
+        title: 'Ready for Instagram!',
+        description: toastMessage,
+      });
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Could not copy content. Please try again.',
+      });
+    }
+  };
+
+
   return (
     <Card className="overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-300 ease-out border border-border/60 rounded-xl bg-card/80 backdrop-blur-sm hover:border-primary/50 transform hover:scale-[1.005]">
-      <CardHeader className="pb-3 pt-5 px-5 flex flex-row items-start space-x-4">
+      <CardHeader className="pb-3 pt-5 px-5 flex flex-row items-start space-x-4 bg-gradient-to-br from-card to-muted/10">
         <Avatar className="h-12 w-12 border-2 border-primary/60 shadow-md">
+          {/* Placeholder for user image - can be replaced with actual image if available */}
           <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20">
             <UserCircle className="h-7 w-7 text-primary/80" />
           </AvatarFallback>
         </Avatar>
         <div className="flex-1">
-          <CardDescription className="text-xs text-muted-foreground font-medium">
-            Pulsed {timeAgo}
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-primary font-semibold flex items-center">
+              <Rss className="w-4 h-4 mr-1.5 text-accent flex-shrink-0 opacity-80" /> 
+              Anonymous Pulsar
+            </p>
+            <CardDescription className="text-xs text-muted-foreground font-medium">
+              {timeAgo}
+            </CardDescription>
+          </div>
+           
             {post.city && post.city !== "Unknown City" && (
-                 <p className="text-sm text-primary font-semibold flex items-center mt-0.5">
-                    <MapPin className="w-4 h-4 mr-1.5 text-accent flex-shrink-0" /> {post.city}
+                 <p className="text-sm text-muted-foreground flex items-center mt-0.5">
+                    <MapPin className="w-4 h-4 mr-1.5 text-primary/70 flex-shrink-0" /> {post.city}
                 </p>
             )}
         </div>
@@ -187,9 +246,10 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
             </span>
           )}
         </div>
+         <p className="text-xs text-muted-foreground/80">Developed by S. P. Borgavakar</p>
       </CardFooter>
       
-      <div className="px-5 pb-4 pt-2 flex items-center space-x-4 border-t border-border/30 bg-card/20">
+      <div className="px-5 pb-4 pt-2 flex items-center space-x-2 border-t border-border/30 bg-card/20 flex-wrap gap-y-2">
         <Button variant="ghost" size="sm" onClick={handleLikeClick} className="flex items-center space-x-1.5 text-muted-foreground hover:text-primary transition-colors duration-150 group">
           <Heart className={`w-5 h-5 transition-all duration-200 group-hover:scale-110 ${isLiked ? 'fill-red-500 text-red-500 animate-pulse' : 'text-muted-foreground group-hover:text-red-400'}`} />
           <span className="font-medium text-sm">{displayLikeCount} {displayLikeCount === 1 ? 'Like' : 'Likes'}</span>
@@ -197,6 +257,41 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
         <Button variant="ghost" size="sm" onClick={() => { setShowComments(!showComments); if(!showComments) fetchPostComments(); }} className="flex items-center space-x-1.5 text-muted-foreground hover:text-primary transition-colors duration-150 group">
           <MessageCircle className="w-5 h-5 group-hover:scale-110 transition-transform" />
           <span className="font-medium text-sm">{comments.length > 0 ? `${comments.length} ` : ''}{showComments ? 'Hide' : (comments.length > 0 ? 'Comments' : 'Comment')}</span>
+        </Button>
+        <Button variant="ghost" size="sm" onClick={handleShareWhatsApp} className="flex items-center space-x-1.5 text-muted-foreground hover:text-green-500 transition-colors duration-150 group">
+          <WhatsAppIcon className="w-5 h-5 group-hover:scale-110 transition-transform" />
+          <span className="font-medium text-sm">WhatsApp</span>
+        </Button>
+        <Button variant="ghost" size="sm" onClick={handleShareInstagram} className="flex items-center space-x-1.5 text-muted-foreground hover:text-pink-500 transition-colors duration-150 group">
+          <Instagram className="w-5 h-5 group-hover:scale-110 transition-transform" />
+          <span className="font-medium text-sm">Instagram</span>
+        </Button>
+        {/* Generic Share Button */}
+        <Button variant="ghost" size="sm" onClick={async () => {
+             if (navigator.share) {
+                try {
+                    await navigator.share({
+                        title: 'Check out this LocalPulse!',
+                        text: post.content,
+                        url: currentOrigin, // Or a specific post URL if you implement individual post pages
+                    });
+                    toast({ title: 'Shared!', description: 'Pulse shared successfully.' });
+                } catch (error) {
+                    toast({ variant: 'destructive', title: 'Share Error', description: 'Could not share this pulse.' });
+                    console.error('Error sharing:', error);
+                }
+            } else {
+                // Fallback for browsers that don't support navigator.share
+                try {
+                    await navigator.clipboard.writeText(`${post.content}\n\nSee more at ${currentOrigin}`);
+                    toast({ title: 'Link Copied!', description: 'Pulse content and link copied to clipboard.' });
+                } catch (err) {
+                    toast({ variant: 'destructive', title: 'Error', description: 'Could not copy content.' });
+                }
+            }
+        }} className="flex items-center space-x-1.5 text-muted-foreground hover:text-blue-500 transition-colors duration-150 group">
+          <Share2 className="w-5 h-5 group-hover:scale-110 transition-transform" />
+          <span className="font-medium text-sm">Share</span>
         </Button>
       </div>
 
@@ -210,7 +305,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
             <div className="flex items-start space-x-3">
               <Avatar className="h-10 w-10 border-2 border-accent/50 flex-shrink-0 shadow-sm">
                 <AvatarFallback className="bg-muted text-accent font-semibold">
-                  P
+                  P {/* Placeholder for current user initial or icon */}
                 </AvatarFallback>
               </Avatar>
               <Textarea
