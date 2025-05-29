@@ -7,17 +7,13 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader } from '@/co
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import type { Post, Comment as CommentType } from '@/lib/db-types';
 import { formatDistanceToNowStrict } from 'date-fns';
-import { MapPin, UserCircle, Heart, MessageCircle, Send, Map, CornerDownRight, Instagram, Share2, Rss, ThumbsUp } from 'lucide-react';
+import { MapPin, UserCircle, Heart, MessageCircle, Send, Map, CornerDownRight, Instagram, Share2, Rss, ThumbsUp, Tag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { likePost, addComment, getComments } from '@/app/actions'; // Updated import
+import { likePost, addComment, getComments } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
+import { Badge } from '@/components/ui/badge';
 
-interface PostCardProps {
-  post: Post;
-  userLocation: { latitude: number; longitude: number } | null;
-  calculateDistance: (lat1: number, lon1: number, lat2: number, lon2: number) => number;
-}
 
 // Inline SVG for WhatsApp icon
 const WhatsAppIcon: FC<React.SVGProps<SVGSVGElement>> = (props) => (
@@ -66,7 +62,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
   const distance = userLocation ? calculateDistance(userLocation.latitude, userLocation.longitude, post.latitude, post.longitude) : null;
 
   const [displayLikeCount, setDisplayLikeCount] = useState<number>(post.likecount);
-  const [isLiking, setIsLiking] = useState<boolean>(false); // Track if like action is in progress
+  const [isLiking, setIsLiking] = useState<boolean>(false);
   const [comments, setComments] = useState<CommentType[]>([]);
   const [newComment, setNewComment] = useState('');
   const [isLoadingComments, setIsLoadingComments] = useState(false);
@@ -99,31 +95,27 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
 
 
   const handleLikeClick = async () => {
-    if (isLiking) return; // Prevent multiple clicks while liking
+    if (isLiking) return; 
 
     setIsLiking(true);
     const previousLikeCount = displayLikeCount;
-    // Optimistically update UI
     setDisplayLikeCount(prevCount => prevCount + 1);
 
     try {
       const result = await likePost(post.id);
       if (result.error || !result.post) {
-        // Revert optimistic update on error
         setDisplayLikeCount(previousLikeCount);
         toast({ variant: 'destructive', title: 'Like Error', description: result.error || 'Could not like the post.' });
       } else {
-        // Update with actual count from server if different (though usually should match optimistic)
         setDisplayLikeCount(result.post.likecount);
          toast({
           title: 'Liked!',
           description: 'Pulse liked successfully.',
           variant: 'default',
-          duration: 2000, // Shorter duration for success toast
+          duration: 2000,
         });
       }
     } catch (error: any) {
-      // Revert optimistic update on unexpected error
       setDisplayLikeCount(previousLikeCount);
       toast({ variant: 'destructive', title: 'Like Error', description: error.message || 'An unexpected error occurred.' });
     } finally {
@@ -139,7 +131,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
     }
     setIsSubmittingComment(true);
     try {
-      const added = await addComment({ postId: post.id, content: newComment.trim(), author: 'PulseFan' }); // Assuming 'PulseFan' as default author
+      const added = await addComment({ postId: post.id, content: newComment.trim(), author: 'PulseFan' });
       setComments(prev => [added, ...prev]);
       setNewComment('');
       toast({ title: 'Comment Pulsed!', description: 'Your thoughts are now part of the vibe.', className:"bg-accent text-accent-foreground" });
@@ -182,7 +174,6 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
     <Card className="overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-300 ease-out border border-border/60 rounded-xl bg-card/80 backdrop-blur-sm hover:border-primary/50 transform hover:scale-[1.005]">
       <CardHeader className="pb-3 pt-5 px-5 flex flex-row items-start space-x-4 bg-gradient-to-br from-card to-muted/10">
         <Avatar className="h-12 w-12 border-2 border-primary/60 shadow-md">
-          {/* Placeholder for user image - can be replaced with actual image if available */}
           <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20">
             <UserCircle className="h-7 w-7 text-primary/80" />
           </AvatarFallback>
@@ -234,6 +225,18 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
         <p className="text-foreground/90 leading-relaxed text-base whitespace-pre-wrap break-words">{post.content}</p>
       </CardContent>
 
+      {post.hashtags && post.hashtags.length > 0 && (
+        <div className="px-5 pt-1 pb-2 flex flex-wrap gap-2 items-center">
+          {post.hashtags.map(tag => (
+            <Badge key={tag} variant="secondary" className="text-xs bg-primary/10 text-primary hover:bg-primary/20 cursor-default">
+              <Tag className="w-3 h-3 mr-1 opacity-70" />
+              {tag.replace('#','')}
+            </Badge>
+          ))}
+        </div>
+      )}
+
+
       <CardFooter className="text-xs text-muted-foreground flex flex-wrap items-center justify-between pt-2 pb-3 px-5 border-t border-border/40 mt-1 gap-y-2 bg-card/50">
         <div className="flex items-center gap-1.5 flex-wrap">
           <Map className="w-4 h-4 text-primary/70 flex-shrink-0" />
@@ -246,7 +249,6 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
             </span>
           )}
         </div>
-         {/* Removed "Developed by..." text from here */}
       </CardFooter>
 
       <div className="px-5 pb-4 pt-2 flex items-center space-x-2 border-t border-border/30 bg-card/20 flex-wrap gap-y-2">
@@ -266,14 +268,13 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
           <Instagram className="w-5 h-5 group-hover:scale-110 transition-transform" />
           <span className="font-medium text-sm">Instagram</span>
         </Button>
-        {/* Generic Share Button */}
         <Button variant="ghost" size="sm" onClick={async () => {
              if (navigator.share) {
                 try {
                     await navigator.share({
                         title: 'Check out this LocalPulse!',
                         text: post.content,
-                        url: currentOrigin, // Or a specific post URL if you implement individual post pages
+                        url: currentOrigin,
                     });
                     toast({ title: 'Shared!', description: 'Pulse shared successfully.' });
                 } catch (error) {
@@ -281,7 +282,6 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
                     console.error('Error sharing:', error);
                 }
             } else {
-                // Fallback for browsers that don't support navigator.share
                 try {
                     await navigator.clipboard.writeText(`${post.content}\n\nSee more at ${currentOrigin}`);
                     toast({ title: 'Link Copied!', description: 'Pulse content and link copied to clipboard.' });
@@ -305,7 +305,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
             <div className="flex items-start space-x-3">
               <Avatar className="h-10 w-10 border-2 border-accent/50 flex-shrink-0 shadow-sm">
                 <AvatarFallback className="bg-muted text-accent font-semibold">
-                  P {/* Placeholder for current user initial or icon */}
+                  P
                 </AvatarFallback>
               </Avatar>
               <Textarea

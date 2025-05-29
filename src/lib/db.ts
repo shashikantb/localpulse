@@ -1,3 +1,4 @@
+
 import { Pool, type QueryResult } from 'pg';
 import type { Post, NewPost, DbNewPost, Comment, NewComment, VisitorCounts } from './db-types';
 
@@ -7,12 +8,6 @@ export * from './db-types';
 
 const pool = new Pool({
   connectionString: process.env.POSTGRES_URL, // Example: postgres://user:password@host:port/database
-  // Or use individual environment variables:
-  // user: process.env.POSTGRES_USER,
-  // host: process.env.POSTGRES_HOST,
-  // database: process.env.POSTGRES_DATABASE,
-  // password: process.env.POSTGRES_PASSWORD,
-  // port: parseInt(process.env.POSTGRES_PORT || "5432"),
   ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
 });
 
@@ -24,12 +19,26 @@ pool.on('error', (err) => {
   console.error('PostgreSQL client error:', err);
 });
 
+async function checkTableExists(client: any, tableName: string): Promise<boolean> {
+  const res = await client.query(`
+    SELECT EXISTS (
+      SELECT FROM information_schema.tables 
+      WHERE table_schema = 'public'
+      AND table_name = $1
+    );
+  `, [tableName]);
+  return res.rows[0].exists;
+}
+
 async function initializeDatabaseSchema(): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    // Create/Update the posts table
+    const postsTableExists = await checkTableExists(client, 'posts');
+    if (!postsTableExists) {
+      console.log('Posts table does not exist. Creating...');
+    }
     await client.query(`
       CREATE TABLE IF NOT EXISTS posts (
         id SERIAL PRIMARY KEY,
@@ -39,13 +48,32 @@ async function initializeDatabaseSchema(): Promise<void> {
         createdAt TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
         mediaUrl TEXT NULL,
         mediaType TEXT NULL,
-        likeCount INTEGER NOT NULL DEFAULT 0 CHECK (likeCount >= 0), -- Ensure likeCount doesn't go below 0
-        city TEXT NULL
+        likeCount INTEGER NOT NULL DEFAULT 0 CHECK (likeCount >= 0),
+        city TEXT NULL,
+        hashtags TEXT[] NULL
       );
     `);
     console.log('Checked/Created posts table structure.');
+     // Ensure hashtags column exists if table already existed
+    if (postsTableExists) {
+        const hasHashtagsColumn = await client.query(`
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name='posts' AND column_name='hashtags'
+            );
+        `);
+        if (!hasHashtagsColumn.rows[0].exists) {
+            await client.query('ALTER TABLE posts ADD COLUMN hashtags TEXT[] NULL;');
+            console.log('Added hashtags column to existing posts table.');
+        }
+    }
 
-    // Create the comments table if it doesn't exist
+
+    const commentsTableExists = await checkTableExists(client, 'comments');
+     if (!commentsTableExists) {
+      console.log('Comments table does not exist. Creating...');
+    }
     await client.query(`
       CREATE TABLE IF NOT EXISTS comments (
         id SERIAL PRIMARY KEY,
@@ -57,7 +85,10 @@ async function initializeDatabaseSchema(): Promise<void> {
     `);
     console.log('Checked/Created comments table.');
 
-    // Create visitor_stats table
+    const visitorStatsTableExists = await checkTableExists(client, 'visitor_stats');
+    if (!visitorStatsTableExists) {
+      console.log('Visitor_stats table does not exist. Creating...');
+    }
     await client.query(`
       CREATE TABLE IF NOT EXISTS visitor_stats (
         stat_name VARCHAR(255) PRIMARY KEY,
@@ -66,22 +97,21 @@ async function initializeDatabaseSchema(): Promise<void> {
     `);
      console.log('Checked/Created visitor_stats table.');
 
-    // Initialize visitor statistics
     const todayStr = new Date().toISOString().split('T')[0];
     await client.query(
       "INSERT INTO visitor_stats (stat_name, stat_value) VALUES ('total_visits', '0') ON CONFLICT (stat_name) DO NOTHING"
     );
-    // Use DO UPDATE for daily_visits_date to ensure it gets set if it was NULL or missing
     await client.query(
-        "INSERT INTO visitor_stats (stat_name, stat_value) VALUES ('daily_visits_date', $1) ON CONFLICT (stat_name) DO UPDATE SET stat_value = EXCLUDED.stat_value",
-        [todayStr]
+      "INSERT INTO visitor_stats (stat_name, stat_value) VALUES ('daily_visits_date', $1) ON CONFLICT (stat_name) DO UPDATE SET stat_value = EXCLUDED.stat_value WHERE visitor_stats.stat_name = 'daily_visits_date' AND (visitor_stats.stat_value IS NULL OR visitor_stats.stat_value != EXCLUDED.stat_value)",
+      [todayStr]
     );
      await client.query(
       "INSERT INTO visitor_stats (stat_name, stat_value) VALUES ('daily_visits_count', '0') ON CONFLICT (stat_name) DO NOTHING"
     );
     console.log('Initialized/Verified visitor_stats data.');
-
+    
     await client.query('COMMIT');
+    console.log('Database schema initialization complete.');
   } catch (error: any) {
     await client.query('ROLLBACK');
     let specificMessage = 'Failed to initialize database schema';
@@ -90,57 +120,55 @@ async function initializeDatabaseSchema(): Promise<void> {
     if (error && typeof error.code === 'string' && error.code === '42501') { // PostgreSQL "insufficient_privilege"
       specificMessage = `Failed to initialize database schema due to insufficient PostgreSQL permissions. User (e.g., from your POSTGRES_URL) likely lacks CREATE TABLE, USAGE ON SCHEMA public, or other necessary DDL/DML privileges on the target database. Please grant required permissions. Original PostgreSQL error: ${error.message} (Code: ${error.code})`;
       console.error("Database Permission Error During Schema Initialization:", specificMessage);
-      console.error("Full PostgreSQL error object for diagnostics:", error);
       loggedError = new Error(specificMessage, { cause: error });
     } else {
       const originalErrorMessage = error instanceof Error ? error.message : String(error);
       specificMessage = `Failed to initialize database schema. Original error: ${originalErrorMessage}`;
-      console.error('Generic Error Initializing Database Schema:', error);
+      console.error('Generic Error Initializing Database Schema:', error, '\nFull error object:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
       loggedError = new Error(specificMessage, { cause: error });
     }
-    throw loggedError; // Re-throw the enriched or original error
+    throw loggedError;
   } finally {
     client.release();
   }
 }
 
-// Initialize schema on startup
 initializeDatabaseSchema().catch(err => {
     console.error("Critical: Failed to initialize DB schema on startup. Application might not function correctly.", err);
-    // Depending on the application's needs, you might want to exit here
-    // process.exit(1);
 });
 
 
-// Function to get all posts, ordered by creation date descending
 export async function getPostsDb(): Promise<Post[]> {
   try {
     const result: QueryResult<Post> = await pool.query(
-      'SELECT id, content, latitude, longitude, createdAt, mediaUrl, mediaType, likeCount, city FROM posts ORDER BY createdAt DESC'
+      'SELECT id, content, latitude, longitude, createdAt, mediaUrl, mediaType, likeCount, city, hashtags FROM posts ORDER BY createdAt DESC'
     );
-    // console.log(`Fetched ${result.rowCount} posts.`); // Less verbose logging
     return result.rows;
   } catch (error) {
-    console.error('Error fetching posts from DB:', error);
-    // In a real app, you might want to throw an error or return a specific error indicator
-    return [];
+    console.error("Error fetching posts from DB:", error);
+    const postsTableExists = await checkTableExists(await pool.connect(), 'posts');
+    if (!postsTableExists) {
+        console.error("The 'posts' table does not exist. Please ensure the database schema is initialized correctly.");
+        throw new Error("Database schema error: 'posts' table not found. Try restarting the application to initialize the schema.");
+    }
+    throw error; // Re-throw original error if table exists but query failed for other reasons
   }
 }
 
-// Function to add a new post
 export async function addPostDb(newPost: DbNewPost): Promise<Post> {
   try {
     const createdAt = new Date();
     const result: QueryResult<Post> = await pool.query(
-      'INSERT INTO posts (content, latitude, longitude, createdAt, mediaUrl, mediaType, city) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, content, latitude, longitude, createdAt, mediaUrl, mediaType, likeCount, city',
+      'INSERT INTO posts (content, latitude, longitude, createdAt, mediaUrl, mediaType, city, hashtags) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, content, latitude, longitude, createdAt, mediaUrl, mediaType, likeCount, city, hashtags',
       [
         newPost.content,
         newPost.latitude,
         newPost.longitude,
         createdAt,
-        newPost.mediaUrl ?? null,
-        newPost.mediaType ?? null,
-        newPost.city ?? null
+        newPost.mediaurl ?? null, // Use mediaurl (lowercase) from DbNewPost
+        newPost.mediatype ?? null, // Use mediatype (lowercase) from DbNewPost
+        newPost.city ?? null,
+        newPost.hashtags.length > 0 ? newPost.hashtags : null, // Store empty array as NULL or as is if DB supports empty arrays
       ]
     );
     const insertedPost = result.rows[0];
@@ -149,16 +177,19 @@ export async function addPostDb(newPost: DbNewPost): Promise<Post> {
     return insertedPost;
   } catch (error: any) {
     console.error('Error adding post to database:', error);
+    const postsTableExists = await checkTableExists(await pool.connect(), 'posts');
+    if (!postsTableExists) {
+        console.error("The 'posts' table does not exist. Please ensure the database schema is initialized correctly before adding posts.");
+        throw new Error("Database schema error: 'posts' table not found. Cannot add post. Try restarting the application.");
+    }
     const message = error.message || 'Failed to add post to the database due to an unknown issue.';
     const detailedMessage = error.detail ? `${message} Detail: ${error.detail}` : message;
     throw new Error(`Database operation failed for addPostDb: ${detailedMessage}`);
   }
 }
 
-// Function to increment the like count for a post
 export async function incrementPostLikeCountDb(postId: number): Promise<Post | null> {
   try {
-    // Atomically increment the like count
     const updateResult: QueryResult<Post> = await pool.query(
       'UPDATE posts SET likeCount = likeCount + 1 WHERE id = $1 RETURNING *',
       [postId]
@@ -170,7 +201,7 @@ export async function incrementPostLikeCountDb(postId: number): Promise<Post | n
         return updatedPost;
     } else {
         console.warn(`Post with id ${postId} not found for like increment.`);
-        return null; // Post not found
+        return null;
     }
   } catch (error) {
     console.error(`Error incrementing like count for post ${postId} in DB:`, error);
@@ -179,7 +210,6 @@ export async function incrementPostLikeCountDb(postId: number): Promise<Post | n
 }
 
 
-// Function to add a comment
 export async function addCommentDb(commentData: NewComment): Promise<Comment> {
   try {
     const createdAt = new Date();
@@ -190,33 +220,37 @@ export async function addCommentDb(commentData: NewComment): Promise<Comment> {
     );
     const insertedComment = result.rows[0];
     if (!insertedComment) throw new Error('Failed to retrieve the newly inserted comment.');
-    // console.log(`Added comment with ID: ${insertedComment.id} to post ${commentData.postId}`);
     return insertedComment;
   } catch (error: any) {
     console.error(`Error adding comment to post ${commentData.postId} in DB:`, error);
+    const commentsTableExists = await checkTableExists(await pool.connect(), 'comments');
+    if (!commentsTableExists) {
+        console.error("The 'comments' table does not exist. Please ensure the database schema is initialized correctly.");
+        throw new Error("Database schema error: 'comments' table not found. Cannot add comment.");
+    }
     const message = error.message || 'Failed to add comment to the database.';
     const detailedMessage = error.detail ? `${message} Detail: ${error.detail}` : message;
     throw new Error(`Database operation failed for addCommentDb: ${detailedMessage}`);
   }
 }
 
-// Function to get comments for a post
 export async function getCommentsByPostIdDb(postId: number): Promise<Comment[]> {
   try {
     const result: QueryResult<Comment> = await pool.query(
       'SELECT * FROM comments WHERE postId = $1 ORDER BY createdAt ASC',
       [postId]
     );
-    // console.log(`Fetched ${result.rowCount} comments for post ${postId}.`);
     return result.rows;
   } catch (error) {
     console.error(`Error fetching comments for post ${postId} from DB:`, error);
+    const commentsTableExists = await checkTableExists(await pool.connect(), 'comments');
+     if (!commentsTableExists) {
+        console.error("The 'comments' table does not exist. Please ensure the database schema is initialized correctly.");
+    }
     return [];
   }
 }
 
-
-// Visitor Statistics Functions
 export async function incrementAndGetVisitorCountsDb(): Promise<VisitorCounts> {
   const todayStr = new Date().toISOString().split('T')[0];
   const client = await pool.connect();
@@ -254,6 +288,11 @@ export async function incrementAndGetVisitorCountsDb(): Promise<VisitorCounts> {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Error incrementing visitor counts in DB:', error);
+    const visitorTableExists = await checkTableExists(client, 'visitor_stats');
+    if (!visitorTableExists) {
+        console.error("The 'visitor_stats' table does not exist.");
+        throw new Error("Database schema error: 'visitor_stats' table not found.");
+    }
     throw error;
   } finally {
     client.release();
@@ -279,15 +318,14 @@ export async function getVisitorCountsDb(): Promise<VisitorCounts> {
         "SELECT stat_value FROM visitor_stats WHERE stat_name = 'daily_visits_count'"
       );
       dailyVisits = parseInt(dailyCountRowResult.rows[0]?.stat_value || '0', 10);
-    } else {
-      // If the date doesn't match today, daily visits should be 0 for "today"
-      // but we might also want to reset the daily_visits_count for the new day.
-      // The incrementAndGetVisitorCountsDb handles this reset logic.
-      // For just getting, if date is not today, today's count is 0.
     }
     return { totalVisits, dailyVisits };
   } catch (error) {
     console.error('Error getting visitor counts from DB:', error);
+    const visitorTableExists = await checkTableExists(await pool.connect(), 'visitor_stats');
+    if (!visitorTableExists) {
+        console.error("The 'visitor_stats' table does not exist.");
+    }
     return { totalVisits: 0, dailyVisits: 0 };
   }
 }
@@ -302,7 +340,6 @@ export async function closeDb(): Promise<void> {
   }
 }
 
-// Graceful shutdown
 const cleanup = async () => {
   console.log('Closing database pool...');
   await closeDb();
@@ -313,5 +350,4 @@ process.on('SIGINT', cleanup);
 process.on('SIGTERM', cleanup);
 process.on('exit', () => {
   console.log('Application exiting. Ensuring DB pool is closed if not already.');
-  // closeDb(); // Call closeDb directly here might be problematic if already called by SIGINT/SIGTERM
 });

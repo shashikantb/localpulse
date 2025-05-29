@@ -8,24 +8,54 @@ import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Loader2, Paperclip, XCircle, UploadCloud, Film, Image as ImageIcon, Settings2 } from 'lucide-react';
+import { Loader2, Paperclip, XCircle, UploadCloud, Film, Image as ImageIcon, Settings2, Tag } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-const VIDEO_OPTIMIZATION_THRESHOLD = 1 * 1024 * 1024; // 1MB - videos larger than this will show "optimizing" message
+const VIDEO_OPTIMIZATION_THRESHOLD = 1 * 1024 * 1024; // 1MB
+
+export const HASHTAG_CATEGORIES = [
+  {
+    name: 'General Purpose',
+    hashtags: ['#LocalPulse', '#CommunityBuzz', '#YourCityNow', '#LiveUpdates', '#StayInformed'],
+  },
+  {
+    name: 'News & Alerts',
+    hashtags: ['#BreakingNews', '#LocalNews', '#CityAlerts', '#NewsFlash', '#CommunityNews'],
+  },
+  {
+    name: 'Events & Happenings',
+    hashtags: ['#LocalEvents', '#WhatsHappening', '#CityVibes', '#WeekendPlans', '#LocalFestivals'],
+  },
+  {
+    name: 'Information & Updates',
+    hashtags: ['#PublicInfo', '#LocalUpdates', '#KnowYourCity', '#NeighborhoodWatch', '#InfoHub'],
+  },
+  {
+    name: 'Community & Culture',
+    hashtags: ['#PeopleOfOurCity', '#LocalVoices', '#SupportLocal', '#CityCulture', '#OurCommunity'],
+  },
+  {
+    name: 'Local Business',
+    hashtags: ['#ShopLocal', '#SupportSmallBiz', '#LocalMarket', '#CityDeals'],
+  },
+];
 
 const formSchema = z.object({
   content: z.string().min(1, "Post cannot be empty").max(280, "Post cannot exceed 280 characters"),
+  hashtags: z.array(z.string()).min(1, "Please select at least one hashtag"),
 });
 
 type FormData = z.infer<typeof formSchema>;
 
 interface PostFormProps {
-  onSubmit: (content: string, mediaUrl?: string, mediaType?: 'image' | 'video') => Promise<void>;
+  onSubmit: (content: string, hashtags: string[], mediaUrl?: string, mediaType?: 'image' | 'video') => Promise<void>;
   submitting: boolean;
 }
 
@@ -43,6 +73,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
     resolver: zodResolver(formSchema),
     defaultValues: {
       content: '',
+      hashtags: [],
     },
   });
 
@@ -87,15 +118,13 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
 
           const reader = new FileReader();
           reader.onloadend = () => {
-              // In a real app with compression, reader.result would be the compressed Data URL for videos.
-              // For now, it's the original Data URL.
               setPreviewUrl(reader.result as string);
-              setSelectedFile(file); // Store original file for info like name, size
+              setSelectedFile(file);
               setMediaType(currentFileType);
-              setIsReadingFile(false); // Done reading
+              setIsReadingFile(false);
 
               if (shouldOptimizeThisFile) {
-                  setIsOptimizingVideo(false); // Done "optimizing"
+                  setIsOptimizingVideo(false);
                   toast({
                       title: "Video Ready",
                       description: "Video is now ready to be included in your post.",
@@ -139,10 +168,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
         });
         return;
       }
-
-      // The previewUrl here would be the (potentially compressed) data URL.
-      // mediaType is correctly set.
-      await onSubmit(data.content, previewUrl ?? undefined, mediaType ?? undefined);
+      await onSubmit(data.content, data.hashtags, previewUrl ?? undefined, mediaType ?? undefined);
 
       form.reset();
       removeMedia();
@@ -183,6 +209,67 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
             </FormItem>
           )}
         />
+
+        <FormField
+          control={form.control}
+          name="hashtags"
+          render={() => (
+            <FormItem>
+              <div className="mb-2">
+                <FormLabel className="text-base font-semibold text-foreground flex items-center">
+                  <Tag className="w-5 h-5 mr-2 text-primary" />
+                  Select Hashtags
+                </FormLabel>
+                <p className="text-sm text-muted-foreground">Choose at least one relevant tag for your pulse.</p>
+              </div>
+              <ScrollArea className="h-48 p-1 border rounded-md shadow-sm bg-background/50">
+                <div className="space-y-4 p-3">
+                {HASHTAG_CATEGORIES.map((category) => (
+                  <div key={category.name}>
+                    <h4 className="font-medium text-sm mb-2 text-primary border-b pb-1">{category.name}</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+                      {category.hashtags.map((tag) => (
+                        <FormField
+                          key={tag}
+                          control={form.control}
+                          name="hashtags"
+                          render={({ field }) => {
+                            return (
+                              <FormItem className="flex flex-row items-center space-x-2 space-y-0 bg-muted/30 p-2 rounded-md hover:bg-muted/60 transition-colors">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value?.includes(tag)}
+                                    onCheckedChange={(checked) => {
+                                      const currentTags = field.value || [];
+                                      const newTags = checked
+                                        ? [...currentTags, tag]
+                                        : currentTags.filter(
+                                            (value) => value !== tag
+                                          );
+                                      field.onChange(newTags);
+                                    }}
+                                    className="border-primary/50 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
+                                    disabled={isButtonDisabled}
+                                  />
+                                </FormControl>
+                                <FormLabel className="text-sm font-normal text-foreground/90 cursor-pointer">
+                                  {tag}
+                                </FormLabel>
+                              </FormItem>
+                            );
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                </div>
+              </ScrollArea>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
 
         <FormItem>
           <FormLabel htmlFor="media-upload" className="text-sm font-medium text-muted-foreground mb-1 block">
@@ -228,7 +315,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
               <div className="w-full text-center">
                 {mediaType === 'image' && (
                   <div className="relative w-full max-w-xs mx-auto aspect-video overflow-hidden rounded-md border shadow-md mb-2 bg-muted">
-                    <Image src={previewUrl} alt="Preview" layout="fill" objectFit="cover" />
+                    <Image src={previewUrl} alt="Preview" layout="fill" objectFit="cover" data-ai-hint="user uploaded image"/>
                   </div>
                 )}
                 {mediaType === 'video' && (
@@ -245,7 +332,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
                     variant="ghost"
                     size="icon"
                     onClick={(e) => { e.stopPropagation(); removeMedia(); }}
-                    disabled={submitting} // Only disable if main form is submitting
+                    disabled={submitting}
                     className="text-destructive hover:text-destructive/80 h-6 w-6 ml-auto"
                     aria-label="Remove media"
                   >
@@ -262,8 +349,8 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
           )}
         </FormItem>
 
-        <Button type="submit" disabled={isButtonDisabled} className="w-full text-base py-3 shadow-md hover:shadow-lg transition-shadow bg-accent hover:bg-accent/90 text-accent-foreground rounded-lg">
-          {isButtonDisabled && !(submitting && !isReadingFile && !isOptimizingVideo) ? ( // Show loader if processing/optimizing or submitting
+        <Button type="submit" disabled={isButtonDisabled || !form.formState.isValid} className="w-full text-base py-3 shadow-md hover:shadow-lg transition-shadow bg-accent hover:bg-accent/90 text-accent-foreground rounded-lg">
+          {isButtonDisabled && !(submitting && !isReadingFile && !isOptimizingVideo) ? (
             <Loader2 className="mr-2 h-5 w-5 animate-spin" />
           ) : null}
           {buttonText}
@@ -272,4 +359,3 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
     </Form>
   );
 };
-

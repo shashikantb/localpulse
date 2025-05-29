@@ -6,10 +6,11 @@ export interface Post {
   latitude: number;
   longitude: number;
   createdat: string; // PostgreSQL returns lowercase for TIMESTAMPTZ column names
-  mediaurl?: string | null; 
+  mediaurl?: string | null;
   mediatype?: 'image' | 'video' | null;
   likecount: number;
-  city?: string | null; 
+  city?: string | null;
+  hashtags?: string[] | null; // Hashtags associated with the post
 }
 
 // Define the structure for adding a new post from the client (omit id, createdAt, likeCount, and city)
@@ -20,11 +21,15 @@ export type NewPost = {
   longitude: number;
   mediaUrl?: string | null;
   mediaType?: 'image' | 'video' | null;
+  hashtags: string[]; // Hashtags are now compulsory
 };
 
-// Define the structure for inserting a new post into the DB (includes city)
-export type DbNewPost = NewPost & {
+// Define the structure for inserting a new post into the DB (includes city and hashtags)
+export type DbNewPost = Omit<NewPost, 'mediaUrl' | 'mediaType'> & {
+  mediaurl?: string | null;
+  mediatype?: 'image' | 'video' | null;
   city?: string | null;
+  hashtags: string[];
 };
 
 

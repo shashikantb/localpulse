@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { FC } from 'react';
@@ -5,15 +6,17 @@ import { useState, useEffect, useCallback } from 'react';
 import type { Post, NewPost } from '@/lib/db-types';
 import { getPosts, addPost } from './actions';
 import { PostCard } from '@/components/post-card';
-import { PostForm } from '@/components/post-form';
+import { PostForm, HASHTAG_CATEGORIES } from '@/components/post-form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { MapPin, Terminal, Zap, Loader2, Filter, SlidersHorizontal, Rss } from 'lucide-react';
+import { MapPin, Terminal, Zap, Loader2, Filter, SlidersHorizontal, Rss, Tag } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Sheet,
   SheetContent,
@@ -34,8 +37,10 @@ const Home: FC = () => {
   const [loadingLocation, setLoadingLocation] = useState(true);
   const [loadingPosts, setLoadingPosts] = useState(true);
   const [formSubmitting, setFormSubmitting] = useState(false);
-  const [distanceFilterKm, setDistanceFilterKm] = useState<number>(101); // Default to max (Any Distance)
-  const [showAnyDistance, setShowAnyDistance] = useState<boolean>(true); // Default to "Any Distance"
+  const [distanceFilterKm, setDistanceFilterKm] = useState<number>(101); 
+  const [showAnyDistance, setShowAnyDistance] = useState<boolean>(true);
+  const [filterHashtags, setFilterHashtags] = useState<string[]>([]);
+
 
   const calculateDistance = useCallback((lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371; // Radius of the Earth in km
@@ -50,11 +55,26 @@ const Home: FC = () => {
     return distance;
   }, []);
 
-  const processAndSetPosts = useCallback((postsToProcess: Post[], currentLocation: { latitude: number; longitude: number } | null, currentDistanceFilterKm: number, currentShowAnyDistance: boolean) => {
+  const processAndSetPosts = useCallback((
+    postsToProcess: Post[],
+    currentLocation: { latitude: number; longitude: number } | null,
+    currentDistanceFilterKm: number,
+    currentShowAnyDistance: boolean,
+    currentFilterHashtags: string[]
+  ) => {
     let filtered = postsToProcess;
+
+    // Filter by distance
     if (currentLocation && !currentShowAnyDistance) {
       filtered = postsToProcess.filter(p =>
         calculateDistance(currentLocation.latitude, currentLocation.longitude, p.latitude, p.longitude) <= currentDistanceFilterKm
+      );
+    }
+
+    // Filter by hashtags
+    if (currentFilterHashtags.length > 0) {
+      filtered = filtered.filter(p =>
+        p.hashtags && p.hashtags.length > 0 && currentFilterHashtags.some(fh => p.hashtags!.includes(fh))
       );
     }
 
@@ -63,12 +83,13 @@ const Home: FC = () => {
       sorted.sort((a, b) => {
         const distA = calculateDistance(currentLocation.latitude, currentLocation.longitude, a.latitude, a.longitude);
         const distB = calculateDistance(currentLocation.latitude, currentLocation.longitude, b.latitude, b.longitude);
-        if (Math.abs(distA - distB) < 0.1) {
+        if (Math.abs(distA - distB) < 0.1) { // If distances are very similar, sort by recency
           return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
         }
-        return distA - distB;
+        return distA - distB; // Otherwise, sort by distance
       });
     } else {
+      // Fallback sort by recency if no location
       sorted.sort((a, b) => new Date(b.createdat).getTime() - new Date(a.createdat).getTime());
     }
     setDisplayedPosts(sorted);
@@ -90,7 +111,6 @@ const Home: FC = () => {
         (error) => {
           console.error("Geolocation error:", error);
           let errorMessage = `Error getting location: ${error.message}. Please ensure location services are enabled.`;
-           // Handle insecure origin error specifically
           if (error.code === error.PERMISSION_DENIED && error.message.includes('Only secure origins are allowed')) {
             errorMessage = `Error getting location: Location access is only available on secure (HTTPS) connections. Functionality might be limited. Enable HTTPS for your site.`;
           }
@@ -100,7 +120,7 @@ const Home: FC = () => {
             variant: "destructive",
             title: "Location Error",
             description: errorMessage,
-            duration: 9000, // Longer duration for important errors
+            duration: 9000,
           });
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
@@ -135,19 +155,19 @@ const Home: FC = () => {
       }
     };
 
-    if (!loadingLocation) { // Only fetch posts after location attempt is complete
+    if (!loadingLocation) { 
         fetchInitialPosts();
     }
   }, [loadingLocation, toast]);
 
   useEffect(() => {
-    if (!loadingPosts) { // Only process if posts are loaded
-        processAndSetPosts(allPosts, location, distanceFilterKm, showAnyDistance);
+    if (!loadingPosts) { 
+        processAndSetPosts(allPosts, location, distanceFilterKm, showAnyDistance, filterHashtags);
     }
-  }, [allPosts, location, distanceFilterKm, showAnyDistance, processAndSetPosts, loadingPosts]);
+  }, [allPosts, location, distanceFilterKm, showAnyDistance, filterHashtags, processAndSetPosts, loadingPosts]);
 
 
-  const handleAddPost = async (content: string, mediaUrl?: string, mediaType?: 'image' | 'video') => {
+  const handleAddPost = async (content: string, hashtags: string[], mediaUrl?: string, mediaType?: 'image' | 'video') => {
     if (!location) {
       const errMessage = "Cannot post without location. Please enable location services.";
       setLocationError(errMessage);
@@ -158,6 +178,15 @@ const Home: FC = () => {
       });
       return;
     }
+    if (hashtags.length === 0) {
+      toast({
+        variant: "destructive",
+        title: "Post Error",
+        description: "Please select at least one hashtag for your post.",
+      });
+      return;
+    }
+
     setFormSubmitting(true);
     try {
       const postData: NewPost = {
@@ -166,6 +195,7 @@ const Home: FC = () => {
         longitude: location.longitude,
         mediaUrl: mediaUrl,
         mediaType: mediaType,
+        hashtags: hashtags,
       };
 
       const result = await addPost(postData);
@@ -192,7 +222,7 @@ const Home: FC = () => {
         });
       }
 
-    } catch (error: any) { // Catch any errors not handled by the server action's return type
+    } catch (error: any) {
       console.error("Error adding post (client-side catch):", error);
       toast({
         variant: "destructive",
@@ -213,53 +243,94 @@ const Home: FC = () => {
     }
   };
 
+  const handleHashtagFilterChange = (tag: string, checked: boolean) => {
+    setFilterHashtags(prev =>
+      checked ? [...prev, tag] : prev.filter(ht => ht !== tag)
+    );
+  };
+  
+  const resetAllFilters = () => {
+    setDistanceFilterKm(101);
+    setShowAnyDistance(true);
+    setFilterHashtags([]);
+  };
+
+
   const FilterSheetContent = () => (
     <>
       <SheetHeader>
         <SheetTitle className="flex items-center"><Filter className="w-5 h-5 mr-2 text-accent" /> Filter Pulses</SheetTitle>
         <SheetDescription>
-          Adjust the distance to find pulses near you. Your current location is used as the center.
+          Adjust filters to find relevant pulses. Your current location is used for distance.
         </SheetDescription>
       </SheetHeader>
-      <div className="space-y-6 py-4">
-        <div className="space-y-3">
-          <Label htmlFor="distance-filter-slider" className="text-muted-foreground flex justify-between items-center">
-            <span>Max Distance:</span>
-            <span className="font-semibold text-primary">
-              {showAnyDistance ? "Any Distance" : `${distanceFilterKm} km`}
-            </span>
-          </Label>
-          <Slider
-            id="distance-filter-slider"
-            min={1}
-            max={101} // Keep max at 101 to represent "Any Distance"
-            step={1}
-            value={[distanceFilterKm]} // Use controlled value
-            onValueChange={handleDistanceChange} // Update state on change
-            disabled={!location || loadingPosts}
-            aria-label="Distance filter"
-          />
-          {!location && <p className="text-xs text-destructive mt-1">Enable location services to use distance filter.</p>}
+      <ScrollArea className="h-[calc(100vh-16rem)] pr-3"> {/* Adjust height as needed */}
+        <div className="space-y-6 py-4">
+          <div className="space-y-3">
+            <Label htmlFor="distance-filter-slider" className="text-muted-foreground flex justify-between items-center">
+              <span>Max Distance:</span>
+              <span className="font-semibold text-primary">
+                {showAnyDistance ? "Any Distance" : `${distanceFilterKm} km`}
+              </span>
+            </Label>
+            <Slider
+              id="distance-filter-slider"
+              min={1}
+              max={101} 
+              step={1}
+              value={[distanceFilterKm]} 
+              onValueChange={handleDistanceChange} 
+              disabled={!location || loadingPosts}
+              aria-label="Distance filter"
+            />
+            {!location && <p className="text-xs text-destructive mt-1">Enable location services to use distance filter.</p>}
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-muted-foreground flex items-center">
+              <Tag className="w-4 h-4 mr-1.5 text-primary" />
+              Filter by Hashtags:
+            </Label>
+            <div className="space-y-3 max-h-64">
+              {HASHTAG_CATEGORIES.map((category) => (
+                <div key={category.name}>
+                  <h5 className="font-medium text-sm mb-1.5 text-primary/90">{category.name}</h5>
+                  <div className="grid grid-cols-1 gap-2">
+                    {category.hashtags.map((tag) => (
+                      <div key={tag} className="flex items-center space-x-2 p-1.5 bg-muted/30 rounded-md hover:bg-muted/50 transition-colors">
+                        <Checkbox
+                          id={`filter-tag-${tag.replace('#', '')}`}
+                          checked={filterHashtags.includes(tag)}
+                          onCheckedChange={(checked) => handleHashtagFilterChange(tag, !!checked)}
+                          disabled={loadingPosts}
+                          className="border-primary/50 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
+                        />
+                        <Label htmlFor={`filter-tag-${tag.replace('#', '')}`} className="text-sm font-normal text-foreground/90 cursor-pointer">
+                          {tag}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <Button
+              variant="outline"
+              onClick={resetAllFilters}
+              disabled={loadingPosts && (showAnyDistance && filterHashtags.length === 0)}
+              className="w-full"
+          >
+              Reset All Filters
+          </Button>
         </div>
-        {/* Simplified button to just reset to "Any Distance" */}
-        <Button
-            variant="outline"
-            onClick={() => {
-                setDistanceFilterKm(101);
-                setShowAnyDistance(true);
-            }}
-            disabled={!location || loadingPosts || showAnyDistance} // Disable if already "Any Distance"
-            className="w-full"
-        >
-            Show Pulses from Any Distance
-        </Button>
-      </div>
-      <SheetFooter>
+      </ScrollArea>
+      <SheetFooter className="mt-4 border-t pt-4">
         <SheetClose asChild>
           <Button variant="outline">Close</Button>
         </SheetClose>
       </SheetFooter>
-      <p className="text-xs text-center pt-4 text-muted-foreground/80">Developed by S. P. Borgavakar</p>
     </>
   );
 
@@ -275,7 +346,6 @@ const Home: FC = () => {
               </h1>
             </div>
             <p className="text-xl text-muted-foreground font-medium">Catch the Vibe, Share the Pulse.</p>
-            <p className="text-xs text-muted-foreground/80">Developed by S. P. Borgavakar</p>
         </header>
 
         {loadingLocation && (
@@ -312,21 +382,19 @@ const Home: FC = () => {
                     Pulse Origin: {location.latitude.toFixed(3)}, {location.longitude.toFixed(3)}
                     </p>
                 </CardContent>
-                {/* Removed "Developed by..." text from here */}
                 </Card>
             )}
 
-            <div className="flex justify-end sticky top-[calc(theme(spacing.4)_+_theme(headerHeight,9rem))] z-30 -mt-4 mb-4"> {/* Adjusted top value based on header */}
+            <div className="flex justify-end sticky top-[calc(theme(spacing.4)_+_theme(headerHeight,9rem))] z-30 -mt-4 mb-4">
                 <Sheet>
                 <SheetTrigger asChild>
                     <Button variant="outline" className="shadow-lg hover:shadow-xl transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary">
                     <SlidersHorizontal className="w-5 h-5 mr-2" />
-                    Filters
+                    Filters {(filterHashtags.length > 0 || !showAnyDistance) && <span className="ml-2 bg-accent text-accent-foreground text-xs px-1.5 py-0.5 rounded-full">{ (filterHashtags.length) + (!showAnyDistance ? 1 : 0) }</span>}
                     </Button>
                 </SheetTrigger>
-                <SheetContent className="bg-card/95 backdrop-blur-md border-border">
+                <SheetContent className="bg-card/95 backdrop-blur-md border-border w-full sm:max-w-md flex flex-col">
                     <FilterSheetContent />
-                     {/* Removed "Developed by..." text from here */}
                 </SheetContent>
                 </Sheet>
             </div>
@@ -350,7 +418,6 @@ const Home: FC = () => {
                     <Skeleton className="h-5 w-full bg-muted/50" />
                     <Skeleton className="h-5 w-5/6 bg-muted/50" />
                     <Skeleton className="h-40 w-full bg-muted/50 rounded-md" />
-                     {/* Removed "Developed by..." text from skeleton */}
                     </div>
                 ))
                 ) : displayedPosts.length > 0 ? (
@@ -367,13 +434,12 @@ const Home: FC = () => {
                     <CardContent className="flex flex-col items-center">
                     <Zap className="mx-auto h-20 w-20 text-muted-foreground/30 mb-6" />
                     <p className="text-2xl text-muted-foreground font-semibold">
-                        {allPosts.length > 0 && !showAnyDistance ? "No pulses found in this range." : "The air is quiet here..."}
+                        {allPosts.length > 0 && (!showAnyDistance || filterHashtags.length > 0) ? "No pulses match your current filters." : "The air is quiet here..."}
                     </p>
                     <p className="text-md text-muted-foreground/80 mt-2">
-                        {allPosts.length > 0 && !showAnyDistance ? "Try expanding the distance or " : ""}
+                        {allPosts.length > 0 && (!showAnyDistance || filterHashtags.length > 0) ? "Try adjusting your filters or " : ""}
                         Be the first to make some noise!
                     </p>
-                     {/* Removed "Developed by..." text from here */}
                     </CardContent>
                 </Card>
                 )}
