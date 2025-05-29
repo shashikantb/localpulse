@@ -8,14 +8,20 @@ import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Loader2, Paperclip, XCircle, UploadCloud, Film, Image as ImageIcon, Settings2, Tag } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuCheckboxItem,
+} from '@/components/ui/dropdown-menu';
+import { Loader2, Paperclip, XCircle, UploadCloud, Film, Image as ImageIcon, Settings2, Tag, ChevronDown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
-import { ScrollArea } from '@/components/ui/scroll-area';
-
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const VIDEO_OPTIMIZATION_THRESHOLD = 1 * 1024 * 1024; // 1MB
@@ -213,7 +219,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
         <FormField
           control={form.control}
           name="hashtags"
-          render={() => (
+          render={({ field }) => (
             <FormItem>
               <div className="mb-2">
                 <FormLabel className="text-base font-semibold text-foreground flex items-center">
@@ -222,49 +228,42 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
                 </FormLabel>
                 <p className="text-sm text-muted-foreground">Choose at least one relevant tag for your pulse.</p>
               </div>
-              <ScrollArea className="h-48 p-1 border rounded-md shadow-sm bg-background/50">
-                <div className="space-y-4 p-3">
-                {HASHTAG_CATEGORIES.map((category) => (
-                  <div key={category.name}>
-                    <h4 className="font-medium text-sm mb-2 text-primary border-b pb-1">{category.name}</h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
-                      {category.hashtags.map((tag) => (
-                        <FormField
-                          key={tag}
-                          control={form.control}
-                          name="hashtags"
-                          render={({ field }) => {
-                            return (
-                              <FormItem className="flex flex-row items-center space-x-2 space-y-0 bg-muted/30 p-2 rounded-md hover:bg-muted/60 transition-colors">
-                                <FormControl>
-                                  <Checkbox
-                                    checked={field.value?.includes(tag)}
-                                    onCheckedChange={(checked) => {
-                                      const currentTags = field.value || [];
-                                      const newTags = checked
-                                        ? [...currentTags, tag]
-                                        : currentTags.filter(
-                                            (value) => value !== tag
-                                          );
-                                      field.onChange(newTags);
-                                    }}
-                                    className="border-primary/50 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
-                                    disabled={isButtonDisabled}
-                                  />
-                                </FormControl>
-                                <FormLabel className="text-sm font-normal text-foreground/90 cursor-pointer">
-                                  {tag}
-                                </FormLabel>
-                              </FormItem>
-                            );
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ))}
-                </div>
-              </ScrollArea>
+              <FormControl>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="w-full justify-between" disabled={isButtonDisabled}>
+                      <span>Select Hashtags ({field.value?.length || 0} selected)</span>
+                      <ChevronDown className="ml-2 h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-[calc(var(--radix-dropdown-menu-trigger-width))] max-h-80 overflow-y-auto">
+                    {HASHTAG_CATEGORIES.map((category) => (
+                      <DropdownMenuGroup key={category.name}>
+                        <DropdownMenuLabel>{category.name}</DropdownMenuLabel>
+                        {category.hashtags.map((tag) => (
+                          <DropdownMenuCheckboxItem
+                            key={tag}
+                            checked={field.value?.includes(tag)}
+                            onCheckedChange={(checked) => {
+                              const currentTags = field.value || [];
+                              const newTags = checked
+                                ? [...currentTags, tag]
+                                : currentTags.filter(
+                                    (value) => value !== tag
+                                  );
+                              field.onChange(newTags);
+                            }}
+                            disabled={isButtonDisabled}
+                          >
+                            {tag}
+                          </DropdownMenuCheckboxItem>
+                        ))}
+                        {HASHTAG_CATEGORIES.indexOf(category) < HASHTAG_CATEGORIES.length - 1 && <DropdownMenuSeparator />}
+                      </DropdownMenuGroup>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </FormControl>
               <FormMessage />
             </FormItem>
           )}
@@ -315,7 +314,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
               <div className="w-full text-center">
                 {mediaType === 'image' && (
                   <div className="relative w-full max-w-xs mx-auto aspect-video overflow-hidden rounded-md border shadow-md mb-2 bg-muted">
-                    <Image src={previewUrl} alt="Preview" layout="fill" objectFit="cover" data-ai-hint="user uploaded image"/>
+                    <Image src={previewUrl} alt="Preview" fill objectFit="cover" data-ai-hint="user uploaded image"/>
                   </div>
                 )}
                 {mediaType === 'video' && (
