@@ -9,13 +9,12 @@ import { PostCard } from '@/components/post-card';
 import { PostForm, HASHTAG_CATEGORIES } from '@/components/post-form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { MapPin, Terminal, Zap, Loader2, Filter, SlidersHorizontal, Rss, Tag } from 'lucide-react';
+import { MapPin, Terminal, Zap, Loader2, Filter, SlidersHorizontal, Rss, Tag, ChevronDown } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Sheet,
@@ -27,6 +26,15 @@ import {
   SheetFooter,
   SheetClose,
 } from "@/components/ui/sheet"
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuCheckboxItem,
+} from '@/components/ui/dropdown-menu';
 
 const Home: FC = () => {
   const { toast } = useToast();
@@ -255,7 +263,6 @@ const Home: FC = () => {
     setFilterHashtags([]);
   };
 
-
   const FilterSheetContent = () => (
     <>
       <SheetHeader>
@@ -264,7 +271,7 @@ const Home: FC = () => {
           Adjust filters to find relevant pulses. Your current location is used for distance.
         </SheetDescription>
       </SheetHeader>
-      <ScrollArea className="h-[calc(100vh-16rem)] pr-3"> {/* Adjust height as needed */}
+      <ScrollArea className="h-[calc(100vh-16rem)] pr-3">
         <div className="space-y-6 py-4">
           <div className="space-y-3">
             <Label htmlFor="distance-filter-slider" className="text-muted-foreground flex justify-between items-center">
@@ -287,33 +294,36 @@ const Home: FC = () => {
           </div>
 
           <div className="space-y-3">
-            <Label className="text-muted-foreground flex items-center">
+            <Label className="text-muted-foreground flex items-center mb-1">
               <Tag className="w-4 h-4 mr-1.5 text-primary" />
               Filter by Hashtags:
             </Label>
-            <div className="space-y-3 max-h-64">
-              {HASHTAG_CATEGORIES.map((category) => (
-                <div key={category.name}>
-                  <h5 className="font-medium text-sm mb-1.5 text-primary/90">{category.name}</h5>
-                  <div className="grid grid-cols-1 gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="w-full justify-between" disabled={loadingPosts}>
+                  <span>Select Hashtags ({filterHashtags.length || 0} selected)</span>
+                  <ChevronDown className="ml-2 h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-[calc(var(--radix-dropdown-menu-trigger-width)_-_2px)] max-h-80 overflow-y-auto">
+                {HASHTAG_CATEGORIES.map((category, catIndex) => (
+                  <DropdownMenuGroup key={category.name}>
+                    <DropdownMenuLabel>{category.name}</DropdownMenuLabel>
                     {category.hashtags.map((tag) => (
-                      <div key={tag} className="flex items-center space-x-2 p-1.5 bg-muted/30 rounded-md hover:bg-muted/50 transition-colors">
-                        <Checkbox
-                          id={`filter-tag-${tag.replace('#', '')}`}
-                          checked={filterHashtags.includes(tag)}
-                          onCheckedChange={(checked) => handleHashtagFilterChange(tag, !!checked)}
-                          disabled={loadingPosts}
-                          className="border-primary/50 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
-                        />
-                        <Label htmlFor={`filter-tag-${tag.replace('#', '')}`} className="text-sm font-normal text-foreground/90 cursor-pointer">
-                          {tag}
-                        </Label>
-                      </div>
+                      <DropdownMenuCheckboxItem
+                        key={tag}
+                        checked={filterHashtags.includes(tag)}
+                        onCheckedChange={(checked) => handleHashtagFilterChange(tag, !!checked)}
+                        disabled={loadingPosts}
+                      >
+                        {tag}
+                      </DropdownMenuCheckboxItem>
                     ))}
-                  </div>
-                </div>
-              ))}
-            </div>
+                    {catIndex < HASHTAG_CATEGORIES.length - 1 && <DropdownMenuSeparator />}
+                  </DropdownMenuGroup>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
           <Button
@@ -334,6 +344,7 @@ const Home: FC = () => {
     </>
   );
 
+  const activeFilterCount = (filterHashtags.length > 0 ? 1 : 0) + (!showAnyDistance ? 1 : 0);
 
   return (
     <main className="flex min-h-screen flex-col items-center p-4 sm:p-6 md:p-8 lg:p-16 bg-gradient-to-br from-background to-muted/30">
@@ -385,12 +396,12 @@ const Home: FC = () => {
                 </Card>
             )}
 
-            <div className="flex justify-end sticky top-[calc(theme(spacing.4)_+_theme(headerHeight,9rem))] z-30 -mt-4 mb-4">
+            <div className="flex justify-end sticky top-[calc(theme(spacing.4)_+_10rem)] z-30 -mt-4 mb-4">
                 <Sheet>
                 <SheetTrigger asChild>
                     <Button variant="outline" className="shadow-lg hover:shadow-xl transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary">
                     <SlidersHorizontal className="w-5 h-5 mr-2" />
-                    Filters {(filterHashtags.length > 0 || !showAnyDistance) && <span className="ml-2 bg-accent text-accent-foreground text-xs px-1.5 py-0.5 rounded-full">{ (filterHashtags.length) + (!showAnyDistance ? 1 : 0) }</span>}
+                    Filters {activeFilterCount > 0 && <span className="ml-2 bg-accent text-accent-foreground text-xs px-1.5 py-0.5 rounded-full">{activeFilterCount}</span>}
                     </Button>
                 </SheetTrigger>
                 <SheetContent className="bg-card/95 backdrop-blur-md border-border w-full sm:max-w-md flex flex-col">
@@ -434,10 +445,10 @@ const Home: FC = () => {
                     <CardContent className="flex flex-col items-center">
                     <Zap className="mx-auto h-20 w-20 text-muted-foreground/30 mb-6" />
                     <p className="text-2xl text-muted-foreground font-semibold">
-                        {allPosts.length > 0 && (!showAnyDistance || filterHashtags.length > 0) ? "No pulses match your current filters." : "The air is quiet here..."}
+                        {allPosts.length > 0 && activeFilterCount > 0 ? "No pulses match your current filters." : "The air is quiet here..."}
                     </p>
                     <p className="text-md text-muted-foreground/80 mt-2">
-                        {allPosts.length > 0 && (!showAnyDistance || filterHashtags.length > 0) ? "Try adjusting your filters or " : ""}
+                        {allPosts.length > 0 && activeFilterCount > 0 ? "Try adjusting your filters or " : ""}
                         Be the first to make some noise!
                     </p>
                     </CardContent>
@@ -452,3 +463,5 @@ const Home: FC = () => {
 };
 
 export default Home;
+
+    
