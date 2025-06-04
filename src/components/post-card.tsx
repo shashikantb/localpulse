@@ -56,6 +56,12 @@ const CommentCard: FC<{ comment: CommentType }> = ({ comment }) => {
   );
 };
 
+interface PostCardProps {
+  post: Post;
+  userLocation: { latitude: number; longitude: number } | null;
+  calculateDistance: (lat1: number, lon1: number, lat2: number, lon2: number) => number;
+}
+
 export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDistance }) => {
   const { toast } = useToast();
   const timeAgo = formatDistanceToNowStrict(new Date(post.createdat), { addSuffix: true });
@@ -205,14 +211,14 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
                 src={post.mediaurl as string}
                 alt="Post image"
                 fill
-                style={{ objectFit: "cover" }}
+                style={{ objectFit: "contain" }}
                 sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                 className="transition-transform duration-300 group-hover:scale-105"
                 data-ai-hint="user generated content"
               />
             )}
             {post.mediatype === 'video' && post.mediaurl.startsWith('data:video') && (
-              <video controls src={post.mediaurl as string} className="w-full h-full object-cover" />
+              <video controls src={post.mediaurl as string} className="w-full h-full object-contain" />
             )}
              <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/50 text-white text-xs rounded-md backdrop-blur-sm">
                 {post.mediatype.charAt(0).toUpperCase() + post.mediatype.slice(1)}
@@ -335,3 +341,5 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
     </Card>
   );
 };
+
+    
