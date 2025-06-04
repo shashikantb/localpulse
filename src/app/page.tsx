@@ -186,14 +186,6 @@ const Home: FC = () => {
       });
       return;
     }
-    if (hashtags.length === 0) {
-      toast({
-        variant: "destructive",
-        title: "Post Error",
-        description: "Please select at least one hashtag for your post.",
-      });
-      return;
-    }
 
     setFormSubmitting(true);
     try {
@@ -203,7 +195,7 @@ const Home: FC = () => {
         longitude: location.longitude,
         mediaUrl: mediaUrl,
         mediaType: mediaType,
-        hashtags: hashtags,
+        hashtags: hashtags, // Hashtags are now passed directly (can be empty)
       };
 
       const result = await addPost(postData);
@@ -463,5 +455,3 @@ const Home: FC = () => {
 };
 
 export default Home;
-
-    

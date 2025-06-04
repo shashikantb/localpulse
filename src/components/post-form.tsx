@@ -55,7 +55,7 @@ export const HASHTAG_CATEGORIES = [
 
 const formSchema = z.object({
   content: z.string().min(1, "Post cannot be empty").max(280, "Post cannot exceed 280 characters"),
-  hashtags: z.array(z.string()).min(1, "Please select at least one hashtag"),
+  hashtags: z.array(z.string()), // Hashtags are now optional (empty array is valid)
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -174,7 +174,9 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
         });
         return;
       }
-      await onSubmit(data.content, data.hashtags, previewUrl ?? undefined, mediaType ?? undefined);
+      // Ensure hashtags is an array, even if undefined from optional schema field
+      const hashtagsToSubmit = data.hashtags || [];
+      await onSubmit(data.content, hashtagsToSubmit, previewUrl ?? undefined, mediaType ?? undefined);
 
       form.reset();
       removeMedia();
@@ -224,9 +226,9 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
               <div className="mb-2">
                 <FormLabel className="text-base font-semibold text-foreground flex items-center">
                   <Tag className="w-5 h-5 mr-2 text-primary" />
-                  Select Hashtags
+                  Select Hashtags (Optional)
                 </FormLabel>
-                <p className="text-sm text-muted-foreground">Choose at least one relevant tag for your pulse.</p>
+                <p className="text-sm text-muted-foreground">Optionally, choose relevant tags for your pulse.</p>
               </div>
               <FormControl>
                 <DropdownMenu>
