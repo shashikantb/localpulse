@@ -195,7 +195,7 @@ const Home: FC = () => {
         longitude: location.longitude,
         mediaUrl: mediaUrl,
         mediaType: mediaType,
-        hashtags: hashtags, // Hashtags are now passed directly (can be empty)
+        hashtags: hashtags,
       };
 
       const result = await addPost(postData);
@@ -341,14 +341,14 @@ const Home: FC = () => {
   return (
     <main className="flex min-h-screen flex-col items-center p-4 sm:p-6 md:p-8 lg:p-16 bg-gradient-to-br from-background to-muted/30">
         <div className="container mx-auto max-w-2xl space-y-8 py-8">
-        <header className="text-center space-y-3 py-8 bg-card/90 backdrop-blur-lg rounded-xl shadow-2xl border border-border/50 sticky top-4 z-40 transform hover:scale-[1.01] transition-transform duration-300">
-            <div className="flex items-center justify-center space-x-3 animate-pulse-slow">
-              <Rss className="h-16 w-16 text-accent drop-shadow-[0_0_15px_rgba(var(--accent-hsl),0.5)]" />
-              <h1 className="text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-primary via-accent to-primary tracking-tight drop-shadow-lg">
+        <header className="text-center space-y-2 sm:space-y-3 py-4 sm:py-6 md:py-8 bg-card/90 backdrop-blur-lg rounded-xl shadow-2xl border border-border/50 sticky top-2 sm:top-4 z-40 transform hover:scale-[1.01] transition-transform duration-300">
+            <div className="flex items-center justify-center space-x-2 sm:space-x-3 animate-pulse-slow">
+              <Rss className="h-10 w-10 sm:h-12 md:h-16 sm:w-12 md:w-16 text-accent drop-shadow-[0_0_15px_rgba(var(--accent-hsl),0.5)]" />
+              <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-primary via-accent to-primary tracking-tight drop-shadow-lg">
                 LocalPulse
               </h1>
             </div>
-            <p className="text-xl text-muted-foreground font-medium">Catch the Vibe, Share the Pulse.</p>
+            <p className="text-base sm:text-lg md:text-xl text-muted-foreground font-medium">Catch the Vibe, Share the Pulse.</p>
         </header>
 
         {loadingLocation && (
@@ -388,7 +388,7 @@ const Home: FC = () => {
                 </Card>
             )}
 
-            <div className="flex justify-end sticky top-[calc(theme(spacing.4)_+_10rem)] z-30 -mt-4 mb-4">
+            <div className="flex justify-end sticky top-40 sm:top-64 z-30 mb-4">
                 <Sheet>
                 <SheetTrigger asChild>
                     <Button variant="outline" className="shadow-lg hover:shadow-xl transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary">
@@ -455,3 +455,5 @@ const Home: FC = () => {
 };
 
 export default Home;
+
+    
