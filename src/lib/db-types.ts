@@ -54,3 +54,12 @@ export interface VisitorCounts {
   totalVisits: number;
   dailyVisits: number;
 }
+
+// Device token structure for FCM
+export interface DeviceToken {
+  id: number;
+  token: string;
+  latitude: number | null;
+  longitude: number | null;
+  last_updated: string;
+}

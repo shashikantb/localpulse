@@ -4,6 +4,7 @@
 import * as db from '@/lib/db';
 import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
+import { admin as firebaseAdmin } from '@/lib/firebase-admin'; // Import Firebase Admin
 
 async function geocodeCoordinates(latitude: number, longitude: number): Promise<string | null> {
   console.log(`Geocoding placeholder for: ${latitude}, ${longitude}`);
@@ -37,6 +38,47 @@ export async function getPosts(): Promise<Post[]> {
   }
 }
 
+async function sendNotificationsForNewPost(post: Post) {
+  if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON || firebaseAdmin.apps.length === 0) {
+    console.warn('Firebase Admin SDK not initialized. Skipping push notifications.');
+    return;
+  }
+
+  try {
+    const nearbyTokens = await db.getNearbyDeviceTokensDb(post.latitude, post.longitude, 10); // 10km radius
+
+    if (nearbyTokens.length === 0) {
+      console.log('No nearby devices found to notify for new post.');
+      return;
+    }
+
+    const message = {
+      notification: {
+        title: 'New Pulse Nearby!',
+        body: post.content.substring(0, 100) + (post.content.length > 100 ? '...' : ''),
+      },
+      data: {
+        postId: String(post.id),
+        // You can add more data here, like a link to the post or app screen
+      },
+      tokens: nearbyTokens, // Send to multiple tokens
+    };
+
+    const response = await firebaseAdmin.messaging().sendEachForMulticast(message);
+    console.log(`Successfully sent ${response.successCount} messages for new post.`);
+    if (response.failureCount > 0) {
+      response.responses.forEach(resp => {
+        if (!resp.success) {
+          console.error('Failed to send notification to a token:', resp.error);
+          // TODO: You might want to handle unregistering tokens that are no longer valid (e.g., `messaging/registration-token-not-registered`)
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Error sending push notifications for new post:', error);
+  }
+}
+
 export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post; error?: string }> {
   try {
     const cityName = await geocodeCoordinates(newPostData.latitude, newPostData.longitude);
@@ -47,22 +89,28 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
       longitude: newPostData.longitude,
       mediaurl: newPostData.mediaUrl,
       mediatype: newPostData.mediaType,
-      hashtags: newPostData.hashtags,
+      hashtags: newPostData.hashtags || [], // Ensure hashtags is an array, can be empty
       city: cityName,
     };
 
-    const addedPost = await db.addPostDb(postDataForDb);
-    revalidatePath('/');
-    return {
-        post: {
-          ...addedPost,
-          createdAt: addedPost.createdat,
-          likeCount: addedPost.likecount,
-          mediaUrl: addedPost.mediaurl,
-          mediaType: addedPost.mediatype,
-          hashtags: addedPost.hashtags || [],
-        }
+    const addedPostDb = await db.addPostDb(postDataForDb);
+    const addedPostClient: Post = {
+        ...addedPostDb,
+        createdAt: addedPostDb.createdat,
+        likeCount: addedPostDb.likecount,
+        mediaUrl: addedPostDb.mediaurl,
+        mediaType: addedPostDb.mediatype,
+        hashtags: addedPostDb.hashtags || [],
     };
+    
+    revalidatePath('/');
+    
+    // Send notifications (fire-and-forget, don't let it block the response)
+    sendNotificationsForNewPost(addedPostClient).catch(err => {
+      console.error("Background notification sending failed:", err);
+    });
+
+    return { post: addedPostClient };
   } catch (error: any) {
     console.error("Server action error adding post:", error);
     return { error: error.message || 'Failed to add post due to an unknown server error.' };
@@ -73,7 +121,7 @@ export async function likePost(postId: number): Promise<{ post?: Post; error?: s
   try {
     const updatedPost = await db.incrementPostLikeCountDb(postId);
     if (updatedPost) {
-      revalidatePath('/');
+      revalidatePath('/'); // Revalidate after successful like
       return {
         post: {
           ...updatedPost,
@@ -139,5 +187,24 @@ export async function getCurrentVisitorCounts(): Promise<VisitorCounts> {
   } catch (error) {
     console.error("Server action error getting current visitor counts:", error);
     return { totalVisits: 0, dailyVisits: 0 };
+  }
+}
+
+// Action to register or update a device token
+export async function registerDeviceToken(
+  token: string,
+  latitude?: number,
+  longitude?: number
+): Promise<{ success: boolean; error?: string }> {
+  if (!token) {
+    return { success: false, error: 'Device token is required.' };
+  }
+  try {
+    await db.addOrUpdateDeviceTokenDb(token, latitude, longitude);
+    console.log(`Device token registered/updated: ${token.substring(0,20)}...`);
+    return { success: true };
+  } catch (error: any) {
+    console.error('Server action error registering device token:', error);
+    return { success: false, error: error.message || 'Failed to register device token.' };
   }
 }

@@ -1,6 +1,6 @@
 
 import { Pool, type QueryResult } from 'pg';
-import type { Post, NewPost, DbNewPost, Comment, NewComment, VisitorCounts } from './db-types';
+import type { Post, NewPost, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken } from './db-types';
 
 // Define the structure of a Post, Comment, VisitorCounts, etc. in db-types.ts if not already
 export * from './db-types';
@@ -97,6 +97,22 @@ async function initializeDatabaseSchema(): Promise<void> {
     `);
      console.log('Checked/Created visitor_stats table.');
 
+    const deviceTokensTableExists = await checkTableExists(client, 'device_tokens');
+    if (!deviceTokensTableExists) {
+        console.log('Device_tokens table does not exist. Creating...');
+    }
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS device_tokens (
+        id SERIAL PRIMARY KEY,
+        token TEXT UNIQUE NOT NULL,
+        latitude REAL NULL,
+        longitude REAL NULL,
+        last_updated TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Checked/Created device_tokens table.');
+
+
     const todayStr = new Date().toISOString().split('T')[0];
     await client.query(
       "INSERT INTO visitor_stats (stat_name, stat_value) VALUES ('total_visits', '0') ON CONFLICT (stat_name) DO NOTHING"
@@ -168,7 +184,7 @@ export async function addPostDb(newPost: DbNewPost): Promise<Post> {
         newPost.mediaurl ?? null, // Use mediaurl (lowercase) from DbNewPost
         newPost.mediatype ?? null, // Use mediatype (lowercase) from DbNewPost
         newPost.city ?? null,
-        newPost.hashtags.length > 0 ? newPost.hashtags : null, // Store empty array as NULL or as is if DB supports empty arrays
+        newPost.hashtags && newPost.hashtags.length > 0 ? newPost.hashtags : null,
       ]
     );
     const insertedPost = result.rows[0];
@@ -327,6 +343,62 @@ export async function getVisitorCountsDb(): Promise<VisitorCounts> {
         console.error("The 'visitor_stats' table does not exist.");
     }
     return { totalVisits: 0, dailyVisits: 0 };
+  }
+}
+
+// Device Token Management
+export async function addOrUpdateDeviceTokenDb(
+  token: string,
+  latitude?: number,
+  longitude?: number
+): Promise<void> {
+  try {
+    await pool.query(
+      `INSERT INTO device_tokens (token, latitude, longitude, last_updated)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (token) DO UPDATE SET
+         latitude = COALESCE($2, device_tokens.latitude),
+         longitude = COALESCE($3, device_tokens.longitude),
+         last_updated = NOW()`,
+      [token, latitude, longitude]
+    );
+    console.log(`Device token ${latitude ? 'updated with location' : 'registered/updated'}: ${token.substring(0,20)}...`);
+  } catch (error) {
+    console.error('Error adding/updating device token in DB:', error);
+    throw new Error('Failed to save device token.');
+  }
+}
+
+export async function getNearbyDeviceTokensDb(
+  latitude: number,
+  longitude: number,
+  radiusKm: number = 10 // Default radius 10km
+): Promise<string[]> {
+  try {
+    // Approximate bounding box calculation
+    const latDelta = radiusKm / 111.0; // Degrees per km for latitude
+    const lonDelta = radiusKm / (111.0 * Math.cos(latitude * Math.PI / 180)); // Degrees per km for longitude
+
+    const minLat = latitude - latDelta;
+    const maxLat = latitude + latDelta;
+    const minLon = longitude - lonDelta;
+    const maxLon = longitude + lonDelta;
+
+    const result: QueryResult<{ token: string }> = await pool.query(
+      `SELECT token FROM device_tokens
+       WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+         AND latitude BETWEEN $1 AND $2
+         AND longitude BETWEEN $3 AND $4`,
+      [minLat, maxLat, minLon, maxLon]
+    );
+    
+    // Further filter by actual distance if needed, for now, bounding box is simpler for DB query
+    // This example only uses bounding box. For more accuracy, you'd fetch all in box and then filter by Haversine.
+    console.log(`Found ${result.rows.length} tokens in bounding box for location ${latitude},${longitude} with radius ${radiusKm}km.`);
+    return result.rows.map(row => row.token);
+  } catch (error) {
+    console.error('Error fetching nearby device tokens from DB:', error);
+    return [];
   }
 }
 
