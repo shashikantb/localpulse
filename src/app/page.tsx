@@ -50,15 +50,15 @@ const POSTS_PER_PAGE = 5;
 
 const Home: FC = () => {
   const { toast } = useToast();
-  const [allPosts, setAllPosts] = useState<Post[]>([]); // All posts from server
-  const [filteredAndSortedPosts, setFilteredAndSortedPosts] = useState<Post[]>([]); // Posts after client-side filtering/sorting
-  const [postsToDisplay, setPostsToDisplay] = useState<Post[]>([]); // Posts currently rendered in UI
-  const [currentPage, setCurrentPage] = useState(1); // Current page for displayed posts
+  const [allPosts, setAllPosts] = useState<Post[]>([]);
+  const [filteredAndSortedPosts, setFilteredAndSortedPosts] = useState<Post[]>([]);
+  const [postsToDisplay, setPostsToDisplay] = useState<Post[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [loadingLocation, setLoadingLocation] = useState(true);
-  const [initialLoading, setInitialLoading] = useState(true); // For initial fetch and processing
+  const [initialLoading, setInitialLoading] = useState(true); // Combined initial load state
   
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [distanceFilterKm, setDistanceFilterKm] = useState<number>(101); 
@@ -147,11 +147,11 @@ const Home: FC = () => {
            setNotificationPermissionStatus('denied');
         }
       } else {
-         setNotificationPermissionStatus('unavailable');
+         setNotificationPermissionStatus('unavailable'); // Or 'default' if you prefer not to show unavailable
       }
     };
 
-    if (!loadingLocation) {
+    if (!loadingLocation) { // Only attempt after location attempt is complete
       attemptRegisterFcmToken(location);
     }
   }, [location, loadingLocation, toast]);
@@ -159,13 +159,17 @@ const Home: FC = () => {
 
   // Effect for fetching ALL posts initially
   useEffect(() => {
-    if (loadingLocation) return; // Wait for location to be known
+    if (loadingLocation) return; // Wait for location to be known/attempted
 
-    const fetchInitialPosts = async () => {
-      setInitialLoading(true); // Start loading indicator
+    // This effect should only run if we are in the initialLoading phase.
+    // Once initialLoading is false, posts have either been fetched or failed to fetch.
+    if (!initialLoading) return;
+
+    const fetchPostsAndUpdateState = async () => {
       try {
         const fetchedPosts = await getPosts();
         setAllPosts(fetchedPosts);
+        // Do not set initialLoading to false here; let the processing effect do that.
       } catch (error) {
         console.error("Error fetching posts:", error);
         toast({
@@ -173,76 +177,94 @@ const Home: FC = () => {
           title: "Fetch Error",
           description: "Could not load posts. Please try again later.",
         });
-         setAllPosts([]); // Ensure allPosts is an empty array on error
+        setAllPosts([]);
+        setInitialLoading(false); // Error case: end initial loading here as no posts to process.
       }
-      // setInitialLoading(false) will be handled by the processing useEffect
     };
-    fetchInitialPosts();
-  }, [loadingLocation, toast]);
+    fetchPostsAndUpdateState();
+  }, [loadingLocation, initialLoading, toast]); // Depends on initialLoading to run only once effectively.
 
-
-  // Effect for processing posts (filtering, sorting) and setting up initial display
+  // Effect for processing posts (filtering, sorting) and setting up initial display or updates
   useEffect(() => {
-    if (loadingLocation && allPosts.length === 0) return; // Don't process if location is still loading, unless allPosts is already populated (e.g. from a previous run)
+    // Guard 1: If location is still loading AND we haven't fetched any posts yet,
+    // it's too early to process. `initialLoading` should be true.
+    if (loadingLocation && allPosts.length === 0) {
+      return;
+    }
 
-    setInitialLoading(true); // Show loading while processing
+    // Guard 2: If we are in the `initialLoading` phase, but `allPosts` hasn't been populated yet
+    // (and there's no location error that would prevent fetching), wait for `allPosts`.
+    // This allows `fetchInitialPosts` effect to complete.
+    if (initialLoading && allPosts.length === 0 && !locationError) {
+      return;
+    }
+    
+    // Internal function to perform the processing
+    const processAndDisplayPosts = () => {
+        let filtered = allPosts;
 
-    const processPosts = (
-      postsToProcess: Post[],
-      currentLocation: { latitude: number; longitude: number } | null,
-      currentDistanceFilterKm: number,
-      currentShowAnyDistance: boolean,
-      currentFilterHashtags: string[]
-    ): Post[] => {
-      let filtered = postsToProcess;
+        if (location && !showAnyDistance) {
+            filtered = allPosts.filter(p =>
+            p.latitude && p.longitude &&
+            calculateDistance(location.latitude, location.longitude, p.latitude, p.longitude) <= distanceFilterKm
+            );
+        }
 
-      if (currentLocation && !currentShowAnyDistance) {
-        filtered = postsToProcess.filter(p =>
-          p.latitude && p.longitude &&
-          calculateDistance(currentLocation.latitude, currentLocation.longitude, p.latitude, p.longitude) <= currentDistanceFilterKm
-        );
-      }
+        if (filterHashtags.length > 0) {
+            filtered = filtered.filter(p =>
+            p.hashtags && p.hashtags.length > 0 && filterHashtags.some(fh => p.hashtags!.includes(fh))
+            );
+        }
 
-      if (currentFilterHashtags.length > 0) {
-        filtered = filtered.filter(p =>
-          p.hashtags && p.hashtags.length > 0 && currentFilterHashtags.some(fh => p.hashtags!.includes(fh))
-        );
-      }
-
-      const sorted = [...filtered];
-      if (currentLocation) {
-        sorted.sort((a, b) => {
-          if (!a.latitude || !a.longitude || !b.latitude || !b.longitude) return 0;
-          const distA = calculateDistance(currentLocation.latitude, currentLocation.longitude, a.latitude, a.longitude);
-          const distB = calculateDistance(currentLocation.latitude, currentLocation.longitude, b.latitude, b.longitude);
-          if (Math.abs(distA - distB) < 0.1) {
-            return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
-          }
-          return distA - distB;
-        });
-      } else {
-        sorted.sort((a, b) => new Date(b.createdat).getTime() - new Date(a.createdat).getTime());
-      }
-      return sorted;
+        const sorted = [...filtered];
+        if (location) {
+            sorted.sort((a, b) => {
+            if (!a.latitude || !a.longitude || !b.latitude || !b.longitude) return 0; // Should not happen with filter
+            const distA = calculateDistance(location.latitude, location.longitude, a.latitude, a.longitude);
+            const distB = calculateDistance(location.latitude, location.longitude, b.latitude, b.longitude);
+            if (Math.abs(distA - distB) < 0.1) { // If distances are very similar, sort by newest
+                return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
+            }
+            return distA - distB;
+            });
+        } else {
+            // Fallback sort by date if no location
+            sorted.sort((a, b) => new Date(b.createdat).getTime() - new Date(a.createdat).getTime());
+        }
+        return sorted;
     };
-
-    const processed = processPosts(allPosts, location, distanceFilterKm, showAnyDistance, filterHashtags);
+    
+    const processed = processAndDisplayPosts();
     setFilteredAndSortedPosts(processed);
-    setCurrentPage(1); // Reset to first page
+    setCurrentPage(1); // Reset to first page whenever posts are re-processed
     setPostsToDisplay(processed.slice(0, POSTS_PER_PAGE));
-    setInitialLoading(false); // Done with initial load/process cycle
 
-  }, [allPosts, location, distanceFilterKm, showAnyDistance, filterHashtags, calculateDistance, loadingLocation]);
+    // If this was part of the initial load cycle, mark initial loading as complete.
+    if (initialLoading) {
+      setInitialLoading(false);
+    }
+
+  }, [
+    allPosts,
+    location,
+    distanceFilterKm,
+    showAnyDistance,
+    filterHashtags,
+    calculateDistance, // Stable useCallback
+    loadingLocation,
+    initialLoading,    // Important for controlling the end of the initial load phase
+    locationError      // Important for scenarios where location fails
+  ]);
 
 
   const handleAddPost = async (content: string, hashtags: string[], mediaUrl?: string, mediaType?: 'image' | 'video') => {
-    if (!location) {
-      const errMessage = "Cannot post without location. Please enable location services.";
-      setLocationError(errMessage);
+    if (!location && !locationError) { // Added !locationError to allow posting if location explicitly failed but user still wants to post (city will be unknown)
+      const errMessage = "Cannot determine location. Please enable location services or try again.";
+      // Do not set locationError here as it's for persistent errors. Toast is enough.
       toast({ variant: "destructive", title: "Post Error", description: errMessage });
       return;
     }
-    if (!content.trim()) {
+     if (!content.trim()) {
       toast({ variant: "destructive", title: "Post Error", description: "Post content cannot be empty." });
       return;
     }
@@ -251,11 +273,12 @@ const Home: FC = () => {
     try {
       const postData: NewPost = {
         content,
-        latitude: location.latitude,
-        longitude: location.longitude,
+        // Use location if available, otherwise pass undefined (backend will handle city as unknown)
+        latitude: location ? location.latitude : 0, // Default to 0,0 if no location; backend geocodes
+        longitude: location ? location.longitude : 0,
         mediaUrl: mediaUrl,
         mediaType: mediaType,
-        hashtags: hashtags || [], 
+        hashtags: hashtags || [],
       };
       const result = await addPost(postData);
 
@@ -275,7 +298,7 @@ const Home: FC = () => {
   };
   
   const handleLoadMore = () => {
-    if (initialLoading) return; // Prevent loading more if initial processing is happening
+    if (initialLoading) return; 
     const nextPage = currentPage + 1;
     const newPostsToDisplay = filteredAndSortedPosts.slice(0, nextPage * POSTS_PER_PAGE);
     setPostsToDisplay(newPostsToDisplay);
@@ -386,17 +409,17 @@ const Home: FC = () => {
   return (
     <main className="flex min-h-screen flex-col items-center p-4 sm:p-6 md:p-8 lg:p-16 bg-gradient-to-br from-background to-muted/30">
         <div className="container mx-auto max-w-2xl space-y-8 py-8">
-        <header className="text-center space-y-1 sm:space-y-2 py-2 sm:py-3 md:py-4 bg-card/90 backdrop-blur-lg rounded-xl shadow-2xl border border-border/50 transform hover:scale-[1.01] transition-transform duration-300 md:mb-8">
-            <div className="flex items-center justify-center space-x-1 sm:space-x-2">
-              <Rss className="h-5 w-5 sm:h-6 md:h-7 text-accent drop-shadow-[0_0_15px_rgba(var(--accent-hsl),0.5)]" />
-              <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-primary via-accent to-primary tracking-tight drop-shadow-lg">
+        <header className="text-center space-y-0 sm:space-y-1 py-1 sm:py-2 md:py-3 bg-card/90 backdrop-blur-lg rounded-xl shadow-2xl border border-border/50 transform hover:scale-[1.01] transition-transform duration-300 md:mb-6">
+            <div className="flex items-center justify-center space-x-1 sm:space-x-1.5">
+              <Rss className="h-4 w-4 sm:h-5 md:h-6 text-accent drop-shadow-[0_0_15px_rgba(var(--accent-hsl),0.5)]" />
+              <h1 className="text-lg sm:text-xl md:text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-primary via-accent to-primary tracking-tight drop-shadow-lg">
                 LocalPulse
               </h1>
             </div>
-            <p className="text-xs sm:text-sm text-muted-foreground font-medium">Catch the Vibe, Share the Pulse.</p>
+            <p className="text-xs sm:text-xs text-muted-foreground font-medium">Catch the Vibe, Share the Pulse.</p>
         </header>
 
-        {loadingLocation && ( // Show location loading explicitly first
+        {loadingLocation && (
             <Card className="flex flex-col items-center justify-center space-y-3 p-6 rounded-lg shadow-xl border border-border/40 bg-card/80 backdrop-blur-sm">
             <Loader2 className="h-10 w-10 animate-spin text-primary" />
             <p className="text-lg text-muted-foreground">Locating Your Vibe...</p>
@@ -413,25 +436,31 @@ const Home: FC = () => {
             </Alert>
         )}
 
-        {!loadingLocation && ( // Only render the rest if location is resolved (or failed)
+        {!loadingLocation && (
             <div className="space-y-8">
-            {location && (
-                <Card className="overflow-hidden shadow-2xl border border-primary/30 rounded-xl bg-card/90 backdrop-blur-md transform hover:shadow-primary/20 transition-all duration-300 hover:border-primary/60">
-                <CardHeader className="bg-gradient-to-br from-primary/10 to-accent/5 p-5">
-                    <CardTitle className="text-2xl font-semibold text-primary flex items-center">
-                    <Zap className="w-7 h-7 mr-2 text-accent drop-shadow-sm" />
-                    Share Your Pulse
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="p-5">
-                    <PostForm onSubmit={handleAddPost} submitting={formSubmitting} />
+            <Card className="overflow-hidden shadow-2xl border border-primary/30 rounded-xl bg-card/90 backdrop-blur-md transform hover:shadow-primary/20 transition-all duration-300 hover:border-primary/60">
+            <CardHeader className="bg-gradient-to-br from-primary/10 to-accent/5 p-5">
+                <CardTitle className="text-2xl font-semibold text-primary flex items-center">
+                <Zap className="w-7 h-7 mr-2 text-accent drop-shadow-sm" />
+                Share Your Pulse
+                </CardTitle>
+            </CardHeader>
+            <CardContent className="p-5">
+                <PostForm onSubmit={handleAddPost} submitting={formSubmitting} />
+                {location && (
                     <p className="text-xs text-muted-foreground mt-4 flex items-center gap-1.5">
                     <MapPin className="w-4 h-4 text-primary/80" />
                     Pulse Origin: {location.latitude.toFixed(3)}, {location.longitude.toFixed(3)}
                     </p>
-                </CardContent>
-                </Card>
-            )}
+                )}
+                {locationError && !location && ( // Show if location failed but user might still post
+                    <p className="text-xs text-destructive mt-4 flex items-center gap-1.5">
+                    <MapPin className="w-4 h-4" />
+                    Location unavailable. Posts will have an unknown city.
+                    </p>
+                )}
+            </CardContent>
+            </Card>
 
             <div className="flex justify-between items-center sticky top-6 z-30 mb-4">
                 <div>
@@ -440,6 +469,9 @@ const Home: FC = () => {
                     )}
                     {notificationPermissionStatus === 'denied' && (
                         <span className="text-xs text-red-600 flex items-center"><BellDot className="w-3 h-3 mr-1"/> Notifications off</span>
+                    )}
+                     {notificationPermissionStatus === 'unavailable' && (
+                        <span className="text-xs text-muted-foreground flex items-center"><BellDot className="w-3 h-3 mr-1"/> Notification status unavailable</span>
                     )}
                 </div>
                 <Sheet>
@@ -462,20 +494,20 @@ const Home: FC = () => {
                 Nearby Pulses
                 </h2>
                 {initialLoading && postsToDisplay.length === 0 && !locationError ? (
-                Array.from({ length: Math.min(POSTS_PER_PAGE, 3) }).map((_, index) => ( // Show up to 3 or POSTS_PER_PAGE skeletons
-                    <div key={index} className="space-y-4 p-5 bg-card/70 backdrop-blur-sm rounded-xl shadow-xl animate-pulse border border-border/30">
-                    <div className="flex items-center space-x-3">
-                        <Skeleton className="h-12 w-12 rounded-full bg-muted/50" />
-                        <div className="space-y-2 flex-1">
-                        <Skeleton className="h-4 w-1/3 bg-muted/50" />
-                        <Skeleton className="h-3 w-1/4 bg-muted/50" />
-                        </div>
-                    </div>
-                    <Skeleton className="h-5 w-full bg-muted/50" />
-                    <Skeleton className="h-5 w-5/6 bg-muted/50" />
-                    <Skeleton className="h-40 w-full bg-muted/50 rounded-md data-ai-hint='placeholder content'" />
-                    </div>
-                ))
+                  Array.from({ length: Math.min(POSTS_PER_PAGE, 3) }).map((_, index) => (
+                      <div key={index} className="space-y-4 p-5 bg-card/70 backdrop-blur-sm rounded-xl shadow-xl animate-pulse border border-border/30">
+                      <div className="flex items-center space-x-3">
+                          <Skeleton className="h-12 w-12 rounded-full bg-muted/50" />
+                          <div className="space-y-2 flex-1">
+                          <Skeleton className="h-4 w-1/3 bg-muted/50" />
+                          <Skeleton className="h-3 w-1/4 bg-muted/50" />
+                          </div>
+                      </div>
+                      <Skeleton className="h-5 w-full bg-muted/50" />
+                      <Skeleton className="h-5 w-5/6 bg-muted/50" />
+                      <Skeleton className="h-40 w-full bg-muted/50 rounded-md data-ai-hint='placeholder content'" />
+                      </div>
+                  ))
                 ) : postsToDisplay.length > 0 ? (
                     <>
                     {postsToDisplay.map((post) => (
@@ -491,7 +523,7 @@ const Home: FC = () => {
                             onClick={handleLoadMore} 
                             variant="outline" 
                             className="w-full mt-6 py-3 text-lg shadow-md hover:shadow-lg transition-shadow bg-card hover:bg-muted"
-                            disabled={initialLoading} // Disable if still in initial loading/processing
+                            disabled={initialLoading}
                         >
                            {initialLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <ListPlus className="mr-2 h-5 w-5" /> }
                             Load More Pulses
@@ -503,15 +535,15 @@ const Home: FC = () => {
                     <CardContent className="flex flex-col items-center">
                     <Zap className="mx-auto h-20 w-20 text-muted-foreground/30 mb-6" />
                     <p className="text-2xl text-muted-foreground font-semibold">
-                        {(!initialLoading && allPosts.length > 0 && activeFilterCount > 0) || (!initialLoading && allPosts.length > 0 && location === null && !showAnyDistance) 
+                        {(!initialLoading && allPosts.length > 0 && activeFilterCount > 0) || (!initialLoading && allPosts.length > 0 && location === null && !showAnyDistance && !locationError) 
                             ? "No pulses match your current filters or location." 
-                            : "The air is quiet here..."
+                            : (locationError && allPosts.length === 0 ? "Could not determine location or fetch pulses." : "The air is quiet here...")
                         }
                     </p>
                     <p className="text-md text-muted-foreground/80 mt-2">
-                        {(!initialLoading && allPosts.length > 0 && activeFilterCount > 0) || (!initialLoading && allPosts.length > 0 && location === null && !showAnyDistance) 
+                        {(!initialLoading && allPosts.length > 0 && activeFilterCount > 0) || (!initialLoading && allPosts.length > 0 && location === null && !showAnyDistance && !locationError) 
                             ? "Try adjusting your filters or enabling location. " 
-                            : ""}
+                            : (locationError && allPosts.length === 0 ? "Please check your connection and location settings." : "")}
                         Be the first to make some noise!
                     </p>
                     </CardContent>
@@ -526,4 +558,3 @@ const Home: FC = () => {
 };
 
 export default Home;
-
