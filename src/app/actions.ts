@@ -70,7 +70,6 @@ async function sendNotificationsForNewPost(post: Post) {
       response.responses.forEach(resp => {
         if (!resp.success) {
           console.error('Failed to send notification to a token:', resp.error);
-          // TODO: You might want to handle unregistering tokens that are no longer valid (e.g., `messaging/registration-token-not-registered`)
         }
       });
     }
@@ -89,7 +88,7 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
       longitude: newPostData.longitude,
       mediaurl: newPostData.mediaUrl,
       mediatype: newPostData.mediaType,
-      hashtags: newPostData.hashtags || [], // Ensure hashtags is an array, can be empty
+      hashtags: newPostData.hashtags || [], 
       city: cityName,
     };
 
@@ -103,9 +102,8 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
         hashtags: addedPostDb.hashtags || [],
     };
     
-    revalidatePath('/');
+    revalidatePath('/'); // This might not be strictly necessary if client updates optimistically and via polling
     
-    // Send notifications (fire-and-forget, don't let it block the response)
     sendNotificationsForNewPost(addedPostClient).catch(err => {
       console.error("Background notification sending failed:", err);
     });
@@ -121,7 +119,7 @@ export async function likePost(postId: number): Promise<{ post?: Post; error?: s
   try {
     const updatedPost = await db.incrementPostLikeCountDb(postId);
     if (updatedPost) {
-      revalidatePath('/'); // Revalidate after successful like
+      revalidatePath('/'); 
       return {
         post: {
           ...updatedPost,
@@ -135,8 +133,8 @@ export async function likePost(postId: number): Promise<{ post?: Post; error?: s
     }
     return { error: 'Post not found or failed to update.' };
   } catch (error: any) {
-    console.error(`Server action error liking post ${postId}:`, error);
-    return { error: error.message || `Failed to like post ${postId} due to a server error.` };
+    console.error(`Server action error toggling like for post ${postId}:`, error);
+    return { error: error.message || `Failed to update like count for post ${postId} due to a server error.` };
   }
 }
 
@@ -190,7 +188,6 @@ export async function getCurrentVisitorCounts(): Promise<VisitorCounts> {
   }
 }
 
-// Action to register or update a device token
 export async function registerDeviceToken(
   token: string,
   latitude?: number,
@@ -208,3 +205,18 @@ export async function registerDeviceToken(
     return { success: false, error: error.message || 'Failed to register device token.' };
   }
 }
+
+export async function checkForNewerPosts(latestPostIdClientKnows: number): Promise<{ hasNewerPosts: boolean; count: number }> {
+  try {
+    if (latestPostIdClientKnows === 0) { // If client knows no posts, assume any post is new
+        const anyPosts = await db.getPostsDb(); // Check if any posts exist
+        return { hasNewerPosts: anyPosts.length > 0, count: anyPosts.length };
+    }
+    const count = await db.getNewerPostsCountDb(latestPostIdClientKnows);
+    return { hasNewerPosts: count > 0, count };
+  } catch (error) {
+    console.error("Server action error checking for newer posts:", error);
+    return { hasNewerPosts: false, count: 0 };
+  }
+}
+

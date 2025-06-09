@@ -4,12 +4,12 @@
 import type { FC } from 'react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Post, NewPost } from '@/lib/db-types';
-import { getPosts, addPost, registerDeviceToken } from './actions';
+import { getPosts, addPost, registerDeviceToken, checkForNewerPosts } from './actions';
 import { PostCard } from '@/components/post-card';
 import { PostForm, HASHTAG_CATEGORIES } from '@/components/post-form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { MapPin, Terminal, Zap, Loader2, Filter, SlidersHorizontal, Rss, Tag, ChevronDown, BellDot, ListPlus } from 'lucide-react';
+import { MapPin, Terminal, Zap, Loader2, Filter, SlidersHorizontal, Rss, Tag, ChevronDown, BellDot, ListPlus, RefreshCw } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
@@ -47,6 +47,7 @@ declare global {
 }
 
 const POSTS_PER_PAGE = 5;
+const NEW_POST_POLL_INTERVAL = 30000; // 30 seconds
 
 const Home: FC = () => {
   const { toast } = useToast();
@@ -54,11 +55,15 @@ const Home: FC = () => {
   const [filteredAndSortedPosts, setFilteredAndSortedPosts] = useState<Post[]>([]);
   const [postsToDisplay, setPostsToDisplay] = useState<Post[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
+  const [latestPostIdClientKnows, setLatestPostIdClientKnows] = useState<number>(0);
+  const [newPulsesAvailable, setNewPulsesAvailable] = useState(false);
+  const [newPulsesCount, setNewPulsesCount] = useState(0);
+
 
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [loadingLocation, setLoadingLocation] = useState(true);
-  const [initialLoading, setInitialLoading] = useState(true); // Combined initial load state
+  const [initialLoading, setInitialLoading] = useState(true); 
   
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [distanceFilterKm, setDistanceFilterKm] = useState<number>(101); 
@@ -80,7 +85,6 @@ const Home: FC = () => {
     return distance;
   }, []);
 
-  // Effect for Geolocation
   useEffect(() => {
     setLoadingLocation(true);
     if (navigator.geolocation) {
@@ -121,7 +125,6 @@ const Home: FC = () => {
     }
   }, [toast]);
 
-  // Effect for FCM Token Registration
   useEffect(() => {
     const attemptRegisterFcmToken = async (currentLocation: { latitude: number; longitude: number } | null) => {
       if (typeof window !== 'undefined' && window.Android && typeof window.Android.getFCMToken === 'function') {
@@ -147,59 +150,50 @@ const Home: FC = () => {
            setNotificationPermissionStatus('denied');
         }
       } else {
-         setNotificationPermissionStatus('unavailable'); // Or 'default' if you prefer not to show unavailable
+         setNotificationPermissionStatus('unavailable'); 
       }
     };
 
-    if (!loadingLocation) { // Only attempt after location attempt is complete
+    if (!loadingLocation) { 
       attemptRegisterFcmToken(location);
     }
   }, [location, loadingLocation, toast]);
 
+  const fetchAndSetInitialPosts = useCallback(async () => {
+    try {
+      const fetchedPosts = await getPosts();
+      setAllPosts(fetchedPosts);
+      if (fetchedPosts.length > 0) {
+        setLatestPostIdClientKnows(fetchedPosts.reduce((max, p) => p.id > max ? p.id : max, 0));
+      }
+    } catch (error) {
+      console.error("Error fetching posts:", error);
+      toast({
+        variant: "destructive",
+        title: "Fetch Error",
+        description: "Could not load posts. Please try again later.",
+      });
+      setAllPosts([]);
+    }
+  }, [toast]);
 
-  // Effect for fetching ALL posts initially
+
   useEffect(() => {
-    if (loadingLocation) return; // Wait for location to be known/attempted
-
-    // This effect should only run if we are in the initialLoading phase.
-    // Once initialLoading is false, posts have either been fetched or failed to fetch.
+    if (loadingLocation) return; 
     if (!initialLoading) return;
 
-    const fetchPostsAndUpdateState = async () => {
-      try {
-        const fetchedPosts = await getPosts();
-        setAllPosts(fetchedPosts);
-        // Do not set initialLoading to false here; let the processing effect do that.
-      } catch (error) {
-        console.error("Error fetching posts:", error);
-        toast({
-          variant: "destructive",
-          title: "Fetch Error",
-          description: "Could not load posts. Please try again later.",
-        });
-        setAllPosts([]);
-        setInitialLoading(false); // Error case: end initial loading here as no posts to process.
-      }
-    };
-    fetchPostsAndUpdateState();
-  }, [loadingLocation, initialLoading, toast]); // Depends on initialLoading to run only once effectively.
+    fetchAndSetInitialPosts();
+  }, [loadingLocation, initialLoading, fetchAndSetInitialPosts]);
 
-  // Effect for processing posts (filtering, sorting) and setting up initial display or updates
+
   useEffect(() => {
-    // Guard 1: If location is still loading AND we haven't fetched any posts yet,
-    // it's too early to process. `initialLoading` should be true.
     if (loadingLocation && allPosts.length === 0) {
       return;
     }
-
-    // Guard 2: If we are in the `initialLoading` phase, but `allPosts` hasn't been populated yet
-    // (and there's no location error that would prevent fetching), wait for `allPosts`.
-    // This allows `fetchInitialPosts` effect to complete.
     if (initialLoading && allPosts.length === 0 && !locationError) {
       return;
     }
     
-    // Internal function to perform the processing
     const processAndDisplayPosts = () => {
         let filtered = allPosts;
 
@@ -219,16 +213,15 @@ const Home: FC = () => {
         const sorted = [...filtered];
         if (location) {
             sorted.sort((a, b) => {
-            if (!a.latitude || !a.longitude || !b.latitude || !b.longitude) return 0; // Should not happen with filter
+            if (!a.latitude || !a.longitude || !b.latitude || !b.longitude) return 0; 
             const distA = calculateDistance(location.latitude, location.longitude, a.latitude, a.longitude);
             const distB = calculateDistance(location.latitude, location.longitude, b.latitude, b.longitude);
-            if (Math.abs(distA - distB) < 0.1) { // If distances are very similar, sort by newest
+            if (Math.abs(distA - distB) < 0.1) { 
                 return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
             }
             return distA - distB;
             });
         } else {
-            // Fallback sort by date if no location
             sorted.sort((a, b) => new Date(b.createdat).getTime() - new Date(a.createdat).getTime());
         }
         return sorted;
@@ -236,10 +229,14 @@ const Home: FC = () => {
     
     const processed = processAndDisplayPosts();
     setFilteredAndSortedPosts(processed);
-    setCurrentPage(1); // Reset to first page whenever posts are re-processed
+    setCurrentPage(1); 
     setPostsToDisplay(processed.slice(0, POSTS_PER_PAGE));
+    
+    if (processed.length > 0) {
+        setLatestPostIdClientKnows(processed.reduce((max, p) => p.id > max ? p.id : max, 0));
+    }
 
-    // If this was part of the initial load cycle, mark initial loading as complete.
+
     if (initialLoading) {
       setInitialLoading(false);
     }
@@ -250,17 +247,42 @@ const Home: FC = () => {
     distanceFilterKm,
     showAnyDistance,
     filterHashtags,
-    calculateDistance, // Stable useCallback
+    calculateDistance, 
     loadingLocation,
-    initialLoading,    // Important for controlling the end of the initial load phase
-    locationError      // Important for scenarios where location fails
+    initialLoading,    
+    locationError      
   ]);
+
+  // Polling for new posts
+  useEffect(() => {
+    if (initialLoading) return; // Don't poll during initial load
+
+    const intervalId = setInterval(async () => {
+      if (document.hidden) return; // Don't poll if tab is not visible
+      
+      const result = await checkForNewerPosts(latestPostIdClientKnows);
+      if (result.hasNewerPosts) {
+        setNewPulsesAvailable(true);
+        setNewPulsesCount(result.count); // Store the count of new pulses
+      }
+    }, NEW_POST_POLL_INTERVAL);
+
+    return () => clearInterval(intervalId);
+  }, [initialLoading, latestPostIdClientKnows]);
+
+  const handleLoadNewPulses = async () => {
+    setNewPulsesAvailable(false);
+    setNewPulsesCount(0);
+    // Optionally show a loading indicator here
+    toast({ title: "Refreshing Pulses...", description: "Fetching the latest vibes for you." });
+    await fetchAndSetInitialPosts(); // This will re-fetch all posts
+    // The useEffect that depends on allPosts will then re-process and update display
+  };
 
 
   const handleAddPost = async (content: string, hashtags: string[], mediaUrl?: string, mediaType?: 'image' | 'video') => {
-    if (!location && !locationError) { // Added !locationError to allow posting if location explicitly failed but user still wants to post (city will be unknown)
+    if (!location && !locationError) { 
       const errMessage = "Cannot determine location. Please enable location services or try again.";
-      // Do not set locationError here as it's for persistent errors. Toast is enough.
       toast({ variant: "destructive", title: "Post Error", description: errMessage });
       return;
     }
@@ -273,8 +295,7 @@ const Home: FC = () => {
     try {
       const postData: NewPost = {
         content,
-        // Use location if available, otherwise pass undefined (backend will handle city as unknown)
-        latitude: location ? location.latitude : 0, // Default to 0,0 if no location; backend geocodes
+        latitude: location ? location.latitude : 0, 
         longitude: location ? location.longitude : 0,
         mediaUrl: mediaUrl,
         mediaType: mediaType,
@@ -285,8 +306,11 @@ const Home: FC = () => {
       if (result.error) {
         toast({ variant: "destructive", title: "Post Error", description: result.error || "Failed to add post." });
       } else if (result.post) {
-        setAllPosts(prevPosts => [result.post!, ...prevPosts]); // This will trigger re-processing
+        setAllPosts(prevPosts => [result.post!, ...prevPosts]); 
+        setLatestPostIdClientKnows(prevLatestId => Math.max(prevLatestId, result.post!.id));
         toast({ title: "Post Added!", description: "Your pulse is now live!", variant: "default", className: "bg-primary text-primary-foreground"});
+        setNewPulsesAvailable(false); // Hide indicator if it was shown due to this new post
+        setNewPulsesCount(0);
       } else {
          toast({ variant: "destructive", title: "Post Error", description: "An unexpected issue occurred." });
       }
@@ -453,7 +477,7 @@ const Home: FC = () => {
                     Pulse Origin: {location.latitude.toFixed(3)}, {location.longitude.toFixed(3)}
                     </p>
                 )}
-                {locationError && !location && ( // Show if location failed but user might still post
+                {locationError && !location && ( 
                     <p className="text-xs text-destructive mt-4 flex items-center gap-1.5">
                     <MapPin className="w-4 h-4" />
                     Location unavailable. Posts will have an unknown city.
@@ -462,7 +486,7 @@ const Home: FC = () => {
             </CardContent>
             </Card>
 
-            <div className="flex justify-between items-center sticky top-6 z-30 mb-4">
+            <div className="flex justify-between items-center sticky top-6 z-30 mb-4 px-1">
                 <div>
                     {notificationPermissionStatus === 'granted' && (
                         <span className="text-xs text-green-600 flex items-center"><BellDot className="w-3 h-3 mr-1"/> Notifications on</span>
@@ -489,10 +513,24 @@ const Home: FC = () => {
 
 
             <div className="space-y-6">
-                <h2 className="text-4xl font-bold text-primary pl-1 flex items-center border-b-2 border-primary/30 pb-3 mb-6">
-                <Rss className="w-9 h-9 mr-3 text-accent opacity-90" />
-                Nearby Pulses
-                </h2>
+                <div className="flex justify-between items-center border-b-2 border-primary/30 pb-3 mb-6">
+                    <h2 className="text-4xl font-bold text-primary pl-1 flex items-center">
+                    <Rss className="w-9 h-9 mr-3 text-accent opacity-90" />
+                    Nearby Pulses
+                    </h2>
+                    {newPulsesAvailable && (
+                        <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleLoadNewPulses}
+                        className="animate-pulse bg-accent/10 hover:bg-accent/20 border-accent/50 text-accent hover:text-accent/90 shadow-md"
+                        >
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        Load {newPulsesCount} New {newPulsesCount === 1 ? "Pulse" : "Pulses"}
+                        </Button>
+                    )}
+                </div>
+
                 {initialLoading && postsToDisplay.length === 0 && !locationError ? (
                   Array.from({ length: Math.min(POSTS_PER_PAGE, 3) }).map((_, index) => (
                       <div key={index} className="space-y-4 p-5 bg-card/70 backdrop-blur-sm rounded-xl shadow-xl animate-pulse border border-border/30">
@@ -505,7 +543,7 @@ const Home: FC = () => {
                       </div>
                       <Skeleton className="h-5 w-full bg-muted/50" />
                       <Skeleton className="h-5 w-5/6 bg-muted/50" />
-                      <Skeleton className="h-40 w-full bg-muted/50 rounded-md data-ai-hint='placeholder content'" />
+                      <Skeleton className="h-40 w-full bg-muted/50 rounded-md" data-ai-hint="placeholder content" />
                       </div>
                   ))
                 ) : postsToDisplay.length > 0 ? (
@@ -558,3 +596,4 @@ const Home: FC = () => {
 };
 
 export default Home;
+

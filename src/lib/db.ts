@@ -181,8 +181,8 @@ export async function addPostDb(newPost: DbNewPost): Promise<Post> {
         newPost.latitude,
         newPost.longitude,
         createdAt,
-        newPost.mediaurl ?? null, // Use mediaurl (lowercase) from DbNewPost
-        newPost.mediatype ?? null, // Use mediatype (lowercase) from DbNewPost
+        newPost.mediaurl ?? null, 
+        newPost.mediatype ?? null, 
         newPost.city ?? null,
         newPost.hashtags && newPost.hashtags.length > 0 ? newPost.hashtags : null,
       ]
@@ -219,9 +219,10 @@ export async function incrementPostLikeCountDb(postId: number): Promise<Post | n
         console.warn(`Post with id ${postId} not found for like increment.`);
         return null;
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error(`Error incrementing like count for post ${postId} in DB:`, error);
-    throw new Error('Failed to increment like count in DB.');
+    const detailedMessage = error.message || 'Failed to increment like count in DB.';
+    throw new Error(detailedMessage);
   }
 }
 
@@ -392,13 +393,24 @@ export async function getNearbyDeviceTokensDb(
       [minLat, maxLat, minLon, maxLon]
     );
     
-    // Further filter by actual distance if needed, for now, bounding box is simpler for DB query
-    // This example only uses bounding box. For more accuracy, you'd fetch all in box and then filter by Haversine.
     console.log(`Found ${result.rows.length} tokens in bounding box for location ${latitude},${longitude} with radius ${radiusKm}km.`);
     return result.rows.map(row => row.token);
   } catch (error) {
     console.error('Error fetching nearby device tokens from DB:', error);
     return [];
+  }
+}
+
+export async function getNewerPostsCountDb(latestIdKnown: number): Promise<number> {
+  try {
+    const result: QueryResult<{ count: string }> = await pool.query(
+      'SELECT COUNT(*) FROM posts WHERE id > $1',
+      [latestIdKnown]
+    );
+    return parseInt(result.rows[0]?.count || '0', 10);
+  } catch (error) {
+    console.error('Error counting newer posts from DB:', error);
+    return 0;
   }
 }
 
@@ -423,3 +435,4 @@ process.on('SIGTERM', cleanup);
 process.on('exit', () => {
   console.log('Application exiting. Ensuring DB pool is closed if not already.');
 });
+
