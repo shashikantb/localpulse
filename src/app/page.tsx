@@ -2,14 +2,14 @@
 'use client';
 
 import type { FC } from 'react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Post, NewPost } from '@/lib/db-types';
 import { getPosts, addPost, registerDeviceToken } from './actions';
 import { PostCard } from '@/components/post-card';
 import { PostForm, HASHTAG_CATEGORIES } from '@/components/post-form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { MapPin, Terminal, Zap, Loader2, Filter, SlidersHorizontal, Rss, Tag, ChevronDown, BellDot } from 'lucide-react';
+import { MapPin, Terminal, Zap, Loader2, Filter, SlidersHorizontal, Rss, Tag, ChevronDown, BellDot, ListPlus } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
@@ -36,28 +36,30 @@ import {
   DropdownMenuCheckboxItem,
 } from '@/components/ui/dropdown-menu';
 
-// Define a type for the Android interface for better type safety
 interface AndroidInterface {
-  getFCMToken?: () => string | null; // Make it optional as it might not exist
-  // Add other methods if your Android app exposes them
+  getFCMToken?: () => string | null;
 }
 
-// Extend the Window interface
 declare global {
   interface Window {
     Android?: AndroidInterface;
   }
 }
 
+const POSTS_PER_PAGE = 5;
 
 const Home: FC = () => {
   const { toast } = useToast();
-  const [allPosts, setAllPosts] = useState<Post[]>([]);
-  const [displayedPosts, setDisplayedPosts] = useState<Post[]>([]);
+  const [allPosts, setAllPosts] = useState<Post[]>([]); // All posts from server
+  const [filteredAndSortedPosts, setFilteredAndSortedPosts] = useState<Post[]>([]); // Posts after client-side filtering/sorting
+  const [postsToDisplay, setPostsToDisplay] = useState<Post[]>([]); // Posts currently rendered in UI
+  const [currentPage, setCurrentPage] = useState(1); // Current page for displayed posts
+
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [loadingLocation, setLoadingLocation] = useState(true);
-  const [loadingPosts, setLoadingPosts] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true); // For initial fetch and processing
+  
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [distanceFilterKm, setDistanceFilterKm] = useState<number>(101); 
   const [showAnyDistance, setShowAnyDistance] = useState<boolean>(true);
@@ -78,49 +80,7 @@ const Home: FC = () => {
     return distance;
   }, []);
 
-  const processAndSetPosts = useCallback((
-    postsToProcess: Post[],
-    currentLocation: { latitude: number; longitude: number } | null,
-    currentDistanceFilterKm: number,
-    currentShowAnyDistance: boolean,
-    currentFilterHashtags: string[]
-  ) => {
-    let filtered = postsToProcess;
-
-    // Filter by distance
-    if (currentLocation && !currentShowAnyDistance) {
-      filtered = postsToProcess.filter(p =>
-        p.latitude && p.longitude && // Ensure post has location
-        calculateDistance(currentLocation.latitude, currentLocation.longitude, p.latitude, p.longitude) <= currentDistanceFilterKm
-      );
-    }
-
-    // Filter by hashtags
-    if (currentFilterHashtags.length > 0) {
-      filtered = filtered.filter(p =>
-        p.hashtags && p.hashtags.length > 0 && currentFilterHashtags.some(fh => p.hashtags!.includes(fh))
-      );
-    }
-
-    const sorted = [...filtered];
-    if (currentLocation) {
-      sorted.sort((a, b) => {
-        if (!a.latitude || !a.longitude || !b.latitude || !b.longitude) return 0; // Handle posts without location
-        const distA = calculateDistance(currentLocation.latitude, currentLocation.longitude, a.latitude, a.longitude);
-        const distB = calculateDistance(currentLocation.latitude, currentLocation.longitude, b.latitude, b.longitude);
-        if (Math.abs(distA - distB) < 0.1) { // If distances are very similar, sort by recency
-          return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
-        }
-        return distA - distB; // Otherwise, sort by distance
-      });
-    } else {
-      // Fallback sort by recency if no location
-      sorted.sort((a, b) => new Date(b.createdat).getTime() - new Date(a.createdat).getTime());
-    }
-    setDisplayedPosts(sorted);
-  }, [calculateDistance]);
-
-
+  // Effect for Geolocation
   useEffect(() => {
     setLoadingLocation(true);
     if (navigator.geolocation) {
@@ -166,24 +126,20 @@ const Home: FC = () => {
     const attemptRegisterFcmToken = async (currentLocation: { latitude: number; longitude: number } | null) => {
       if (typeof window !== 'undefined' && window.Android && typeof window.Android.getFCMToken === 'function') {
         try {
-          console.log("Attempting to get FCM token from Android interface...");
           const fcmToken = window.Android.getFCMToken();
           if (fcmToken) {
-            console.log('FCM Token received from Android:', fcmToken.substring(0,20) + "...");
             const lat = currentLocation?.latitude;
             const lon = currentLocation?.longitude;
             const result = await registerDeviceToken(fcmToken, lat, lon);
             if (result.success) {
               toast({ title: 'Notifications Ready', description: 'You will be notified of nearby pulses.', variant: 'default' });
-              setNotificationPermissionStatus('granted'); // Assume granted if token is sent
+              setNotificationPermissionStatus('granted');
             } else {
               toast({ title: 'Notification Setup Failed', description: result.error, variant: 'destructive' });
                setNotificationPermissionStatus('denied');
             }
           } else {
-            console.log('FCM Token not available from Android interface or Android.getFCMToken is not defined.');
-            // Silently fail or inform user based on UX preference
-             setNotificationPermissionStatus('default'); // Or 'unavailable'
+             setNotificationPermissionStatus('default');
           }
         } catch (error) {
           console.error('Error interacting with Android FCM interface:', error);
@@ -191,20 +147,22 @@ const Home: FC = () => {
            setNotificationPermissionStatus('denied');
         }
       } else {
-        console.log('Not running in an Android WebView with FCM interface, or interface not ready.');
-         setNotificationPermissionStatus('unavailable'); // Custom status
+         setNotificationPermissionStatus('unavailable');
       }
     };
 
-    if (!loadingLocation) { // Only attempt after location is resolved (or failed)
+    if (!loadingLocation) {
       attemptRegisterFcmToken(location);
     }
   }, [location, loadingLocation, toast]);
 
 
+  // Effect for fetching ALL posts initially
   useEffect(() => {
+    if (loadingLocation) return; // Wait for location to be known
+
     const fetchInitialPosts = async () => {
-      setLoadingPosts(true);
+      setInitialLoading(true); // Start loading indicator
       try {
         const fetchedPosts = await getPosts();
         setAllPosts(fetchedPosts);
@@ -215,42 +173,77 @@ const Home: FC = () => {
           title: "Fetch Error",
           description: "Could not load posts. Please try again later.",
         });
-      } finally {
-        setLoadingPosts(false);
+         setAllPosts([]); // Ensure allPosts is an empty array on error
       }
+      // setInitialLoading(false) will be handled by the processing useEffect
     };
-
-    if (!loadingLocation) { 
-        fetchInitialPosts();
-    }
+    fetchInitialPosts();
   }, [loadingLocation, toast]);
 
+
+  // Effect for processing posts (filtering, sorting) and setting up initial display
   useEffect(() => {
-    if (!loadingPosts) { 
-        processAndSetPosts(allPosts, location, distanceFilterKm, showAnyDistance, filterHashtags);
-    }
-  }, [allPosts, location, distanceFilterKm, showAnyDistance, filterHashtags, processAndSetPosts, loadingPosts]);
+    if (loadingLocation && allPosts.length === 0) return; // Don't process if location is still loading, unless allPosts is already populated (e.g. from a previous run)
+
+    setInitialLoading(true); // Show loading while processing
+
+    const processPosts = (
+      postsToProcess: Post[],
+      currentLocation: { latitude: number; longitude: number } | null,
+      currentDistanceFilterKm: number,
+      currentShowAnyDistance: boolean,
+      currentFilterHashtags: string[]
+    ): Post[] => {
+      let filtered = postsToProcess;
+
+      if (currentLocation && !currentShowAnyDistance) {
+        filtered = postsToProcess.filter(p =>
+          p.latitude && p.longitude &&
+          calculateDistance(currentLocation.latitude, currentLocation.longitude, p.latitude, p.longitude) <= currentDistanceFilterKm
+        );
+      }
+
+      if (currentFilterHashtags.length > 0) {
+        filtered = filtered.filter(p =>
+          p.hashtags && p.hashtags.length > 0 && currentFilterHashtags.some(fh => p.hashtags!.includes(fh))
+        );
+      }
+
+      const sorted = [...filtered];
+      if (currentLocation) {
+        sorted.sort((a, b) => {
+          if (!a.latitude || !a.longitude || !b.latitude || !b.longitude) return 0;
+          const distA = calculateDistance(currentLocation.latitude, currentLocation.longitude, a.latitude, a.longitude);
+          const distB = calculateDistance(currentLocation.latitude, currentLocation.longitude, b.latitude, b.longitude);
+          if (Math.abs(distA - distB) < 0.1) {
+            return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
+          }
+          return distA - distB;
+        });
+      } else {
+        sorted.sort((a, b) => new Date(b.createdat).getTime() - new Date(a.createdat).getTime());
+      }
+      return sorted;
+    };
+
+    const processed = processPosts(allPosts, location, distanceFilterKm, showAnyDistance, filterHashtags);
+    setFilteredAndSortedPosts(processed);
+    setCurrentPage(1); // Reset to first page
+    setPostsToDisplay(processed.slice(0, POSTS_PER_PAGE));
+    setInitialLoading(false); // Done with initial load/process cycle
+
+  }, [allPosts, location, distanceFilterKm, showAnyDistance, filterHashtags, calculateDistance, loadingLocation]);
 
 
   const handleAddPost = async (content: string, hashtags: string[], mediaUrl?: string, mediaType?: 'image' | 'video') => {
     if (!location) {
       const errMessage = "Cannot post without location. Please enable location services.";
       setLocationError(errMessage);
-      toast({
-        variant: "destructive",
-        title: "Post Error",
-        description: errMessage,
-      });
+      toast({ variant: "destructive", title: "Post Error", description: errMessage });
       return;
     }
-    
     if (!content.trim()) {
-      // This should ideally be caught by form validation, but as a safeguard:
-      toast({
-        variant: "destructive",
-        title: "Post Error",
-        description: "Post content cannot be empty.",
-      });
+      toast({ variant: "destructive", title: "Post Error", description: "Post content cannot be empty." });
       return;
     }
 
@@ -264,50 +257,34 @@ const Home: FC = () => {
         mediaType: mediaType,
         hashtags: hashtags || [], 
       };
-
       const result = await addPost(postData);
 
       if (result.error) {
-        toast({
-          variant: "destructive",
-          title: "Post Error",
-          description: result.error || "Failed to add your post. Please try again.",
-        });
+        toast({ variant: "destructive", title: "Post Error", description: result.error || "Failed to add post." });
       } else if (result.post) {
-        setAllPosts(prevPosts => [result.post!, ...prevPosts]); // Ensure result.post is not undefined
-        toast({
-          title: "Post Added!",
-          description: "Your pulse is now live!",
-          variant: "default",
-          className: "bg-primary text-primary-foreground",
-        });
+        setAllPosts(prevPosts => [result.post!, ...prevPosts]); // This will trigger re-processing
+        toast({ title: "Post Added!", description: "Your pulse is now live!", variant: "default", className: "bg-primary text-primary-foreground"});
       } else {
-         toast({
-          variant: "destructive",
-          title: "Post Error",
-          description: "An unexpected issue occurred. Failed to add your post.",
-        });
+         toast({ variant: "destructive", title: "Post Error", description: "An unexpected issue occurred." });
       }
-
     } catch (error: any) {
-      console.error("Error adding post (client-side catch):", error);
-      toast({
-        variant: "destructive",
-        title: "Post Error",
-        description: error.message || "An unexpected client-side error occurred. Please try again.",
-      });
+      toast({ variant: "destructive", title: "Post Error", description: error.message || "An unexpected error." });
     } finally {
       setFormSubmitting(false);
     }
   };
+  
+  const handleLoadMore = () => {
+    if (initialLoading) return; // Prevent loading more if initial processing is happening
+    const nextPage = currentPage + 1;
+    const newPostsToDisplay = filteredAndSortedPosts.slice(0, nextPage * POSTS_PER_PAGE);
+    setPostsToDisplay(newPostsToDisplay);
+    setCurrentPage(nextPage);
+  };
 
   const handleDistanceChange = (value: number[]) => {
     setDistanceFilterKm(value[0]);
-    if (value[0] > 100) {
-        setShowAnyDistance(true);
-    } else {
-        setShowAnyDistance(false);
-    }
+    setShowAnyDistance(value[0] > 100);
   };
 
   const handleHashtagFilterChange = (tag: string, checked: boolean) => {
@@ -346,7 +323,7 @@ const Home: FC = () => {
               step={1}
               value={[distanceFilterKm]} 
               onValueChange={handleDistanceChange} 
-              disabled={!location || loadingPosts}
+              disabled={!location || initialLoading}
               aria-label="Distance filter"
             />
             {!location && <p className="text-xs text-destructive mt-1">Enable location services to use distance filter.</p>}
@@ -359,7 +336,7 @@ const Home: FC = () => {
             </Label>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="w-full justify-between" disabled={loadingPosts}>
+                <Button variant="outline" className="w-full justify-between" disabled={initialLoading}>
                   <span>Select Hashtags ({filterHashtags.length || 0} selected)</span>
                   <ChevronDown className="ml-2 h-4 w-4" />
                 </Button>
@@ -373,7 +350,7 @@ const Home: FC = () => {
                         key={tag}
                         checked={filterHashtags.includes(tag)}
                         onCheckedChange={(checked) => handleHashtagFilterChange(tag, !!checked)}
-                        disabled={loadingPosts}
+                        disabled={initialLoading}
                       >
                         {tag}
                       </DropdownMenuCheckboxItem>
@@ -388,7 +365,7 @@ const Home: FC = () => {
           <Button
               variant="outline"
               onClick={resetAllFilters}
-              disabled={loadingPosts && (showAnyDistance && filterHashtags.length === 0)}
+              disabled={initialLoading && (showAnyDistance && filterHashtags.length === 0)}
               className="w-full"
           >
               Reset All Filters
@@ -404,21 +381,22 @@ const Home: FC = () => {
   );
 
   const activeFilterCount = (filterHashtags.length > 0 ? 1 : 0) + (!showAnyDistance ? 1 : 0);
+  const hasMorePostsToDisplay = postsToDisplay.length < filteredAndSortedPosts.length;
 
   return (
     <main className="flex min-h-screen flex-col items-center p-4 sm:p-6 md:p-8 lg:p-16 bg-gradient-to-br from-background to-muted/30">
         <div className="container mx-auto max-w-2xl space-y-8 py-8">
         <header className="text-center space-y-1 sm:space-y-2 py-2 sm:py-3 md:py-4 bg-card/90 backdrop-blur-lg rounded-xl shadow-2xl border border-border/50 transform hover:scale-[1.01] transition-transform duration-300 md:mb-8">
             <div className="flex items-center justify-center space-x-1 sm:space-x-2">
-              <Rss className="h-6 w-6 sm:h-8 md:h-10 text-accent drop-shadow-[0_0_15px_rgba(var(--accent-hsl),0.5)]" />
-              <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-primary via-accent to-primary tracking-tight drop-shadow-lg">
+              <Rss className="h-5 w-5 sm:h-6 md:h-7 text-accent drop-shadow-[0_0_15px_rgba(var(--accent-hsl),0.5)]" />
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-primary via-accent to-primary tracking-tight drop-shadow-lg">
                 LocalPulse
               </h1>
             </div>
-            <p className="text-xs sm:text-sm md:text-base text-muted-foreground font-medium">Catch the Vibe, Share the Pulse.</p>
+            <p className="text-xs sm:text-sm text-muted-foreground font-medium">Catch the Vibe, Share the Pulse.</p>
         </header>
 
-        {loadingLocation && (
+        {loadingLocation && ( // Show location loading explicitly first
             <Card className="flex flex-col items-center justify-center space-y-3 p-6 rounded-lg shadow-xl border border-border/40 bg-card/80 backdrop-blur-sm">
             <Loader2 className="h-10 w-10 animate-spin text-primary" />
             <p className="text-lg text-muted-foreground">Locating Your Vibe...</p>
@@ -435,7 +413,7 @@ const Home: FC = () => {
             </Alert>
         )}
 
-        {!loadingLocation && (
+        {!loadingLocation && ( // Only render the rest if location is resolved (or failed)
             <div className="space-y-8">
             {location && (
                 <Card className="overflow-hidden shadow-2xl border border-primary/30 rounded-xl bg-card/90 backdrop-blur-md transform hover:shadow-primary/20 transition-all duration-300 hover:border-primary/60">
@@ -463,7 +441,6 @@ const Home: FC = () => {
                     {notificationPermissionStatus === 'denied' && (
                         <span className="text-xs text-red-600 flex items-center"><BellDot className="w-3 h-3 mr-1"/> Notifications off</span>
                     )}
-                     {/* You can add more statuses like 'default' or 'unavailable' if needed */}
                 </div>
                 <Sheet>
                 <SheetTrigger asChild>
@@ -484,8 +461,8 @@ const Home: FC = () => {
                 <Rss className="w-9 h-9 mr-3 text-accent opacity-90" />
                 Nearby Pulses
                 </h2>
-                {loadingPosts && !allPosts.length ? (
-                Array.from({ length: 3 }).map((_, index) => (
+                {initialLoading && postsToDisplay.length === 0 && !locationError ? (
+                Array.from({ length: Math.min(POSTS_PER_PAGE, 3) }).map((_, index) => ( // Show up to 3 or POSTS_PER_PAGE skeletons
                     <div key={index} className="space-y-4 p-5 bg-card/70 backdrop-blur-sm rounded-xl shadow-xl animate-pulse border border-border/30">
                     <div className="flex items-center space-x-3">
                         <Skeleton className="h-12 w-12 rounded-full bg-muted/50" />
@@ -496,30 +473,43 @@ const Home: FC = () => {
                     </div>
                     <Skeleton className="h-5 w-full bg-muted/50" />
                     <Skeleton className="h-5 w-5/6 bg-muted/50" />
-                    <Skeleton className="h-40 w-full bg-muted/50 rounded-md data-ai-hint='placeholder content' " />
+                    <Skeleton className="h-40 w-full bg-muted/50 rounded-md data-ai-hint='placeholder content'" />
                     </div>
                 ))
-                ) : displayedPosts.length > 0 ? (
-                displayedPosts.map((post) => (
-                    <PostCard
-                    key={post.id}
-                    post={post}
-                    userLocation={location}
-                    calculateDistance={calculateDistance}
-                    />
-                ))
+                ) : postsToDisplay.length > 0 ? (
+                    <>
+                    {postsToDisplay.map((post) => (
+                        <PostCard
+                        key={post.id}
+                        post={post}
+                        userLocation={location}
+                        calculateDistance={calculateDistance}
+                        />
+                    ))}
+                    {hasMorePostsToDisplay && (
+                        <Button 
+                            onClick={handleLoadMore} 
+                            variant="outline" 
+                            className="w-full mt-6 py-3 text-lg shadow-md hover:shadow-lg transition-shadow bg-card hover:bg-muted"
+                            disabled={initialLoading} // Disable if still in initial loading/processing
+                        >
+                           {initialLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <ListPlus className="mr-2 h-5 w-5" /> }
+                            Load More Pulses
+                        </Button>
+                    )}
+                    </>
                 ) : (
                 <Card className="text-center py-16 rounded-xl shadow-xl border border-border/40 bg-card/80 backdrop-blur-sm">
                     <CardContent className="flex flex-col items-center">
                     <Zap className="mx-auto h-20 w-20 text-muted-foreground/30 mb-6" />
                     <p className="text-2xl text-muted-foreground font-semibold">
-                        {(allPosts.length > 0 && activeFilterCount > 0) || (allPosts.length > 0 && location === null && !showAnyDistance) 
+                        {(!initialLoading && allPosts.length > 0 && activeFilterCount > 0) || (!initialLoading && allPosts.length > 0 && location === null && !showAnyDistance) 
                             ? "No pulses match your current filters or location." 
                             : "The air is quiet here..."
                         }
                     </p>
                     <p className="text-md text-muted-foreground/80 mt-2">
-                        {(allPosts.length > 0 && activeFilterCount > 0) || (allPosts.length > 0 && location === null && !showAnyDistance) 
+                        {(!initialLoading && allPosts.length > 0 && activeFilterCount > 0) || (!initialLoading && allPosts.length > 0 && location === null && !showAnyDistance) 
                             ? "Try adjusting your filters or enabling location. " 
                             : ""}
                         Be the first to make some noise!
@@ -536,3 +526,4 @@ const Home: FC = () => {
 };
 
 export default Home;
+
