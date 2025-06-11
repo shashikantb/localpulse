@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, Home, Loader2, Film } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { useSwipeable } from 'react-swipeable';
 
 const ReelsPage: FC = () => {
   const { toast } = useToast();
@@ -26,7 +27,8 @@ const ReelsPage: FC = () => {
       setAllPosts(fetchedPosts);
       const mediaPosts = fetchedPosts.filter(post => 
         post.mediaurl && (post.mediatype === 'image' || post.mediatype === 'video')
-      );
+      ).sort((a, b) => new Date(b.createdat).getTime() - new Date(a.createdat).getTime()); // Sort by newest first for consistency
+      
       setReelPosts(mediaPosts);
       if (mediaPosts.length === 0) {
         toast({
@@ -53,13 +55,40 @@ const ReelsPage: FC = () => {
     fetchReelPosts();
   }, [fetchReelPosts]);
 
-  const goToPreviousReel = () => {
+  const goToPreviousReel = useCallback(() => {
     setCurrentIndex(prevIndex => (prevIndex === 0 ? reelPosts.length - 1 : prevIndex - 1));
-  };
+  }, [reelPosts.length]);
 
-  const goToNextReel = () => {
+  const goToNextReel = useCallback(() => {
     setCurrentIndex(prevIndex => (prevIndex === reelPosts.length - 1 ? 0 : prevIndex + 1));
-  };
+  }, [reelPosts.length]);
+
+  const swipeHandlers = useSwipeable({
+    onSwipedUp: () => {
+      if (reelPosts.length > 1) goToNextReel();
+    },
+    onSwipedDown: () => {
+       if (reelPosts.length > 1) goToPreviousReel();
+    },
+    preventScrollOnSwipe: true,
+    trackMouse: true // Allows mouse swiping for testing on desktop
+  });
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
+        goToNextReel();
+      } else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
+        goToPreviousReel();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [goToNextReel, goToPreviousReel]);
+
 
   if (isLoading) {
     return (
@@ -91,8 +120,8 @@ const ReelsPage: FC = () => {
   const currentPost = reelPosts[currentIndex];
 
   return (
-    <div className="h-screen w-screen overflow-hidden flex flex-col bg-black">
-      {/* Header with Back Button - Optional, can be part of ReelItem or global layout */}
+    <div {...swipeHandlers} className="h-screen w-screen overflow-hidden flex flex-col bg-black touch-none">
+      {/* Header with Back Button */}
       <div className="absolute top-0 left-0 z-20 p-4">
         <Button asChild variant="ghost" size="icon" className="text-white hover:bg-white/20 backdrop-blur-sm rounded-full">
           <Link href="/">
@@ -104,10 +133,10 @@ const ReelsPage: FC = () => {
       
       {/* Reel Item Display */}
       <div className="flex-grow relative">
-        {currentPost && <ReelItem post={currentPost} isActive={true} />}
+        {currentPost && <ReelItem key={currentPost.id} post={currentPost} isActive={true} />}
       </div>
 
-      {/* Bottom Navigation Controls */}
+      {/* Bottom Navigation Controls - kept for non-touch or as alternative */}
       {reelPosts.length > 1 && (
         <div className="absolute bottom-0 left-0 right-0 z-10 flex justify-between items-center p-3 bg-gradient-to-t from-black/50 to-transparent">
           <Button 
@@ -138,5 +167,3 @@ const ReelsPage: FC = () => {
 };
 
 export default ReelsPage;
-
-    

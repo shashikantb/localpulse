@@ -1,13 +1,12 @@
 
 'use client';
-import type { FC, FormEvent } from 'react';
-import { useState, useEffect, useCallback } from 'react';
+import React, { type FC, FormEvent } from 'react'; // Import React
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Image from 'next/image';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import type { Post, Comment as CommentType } from '@/lib/db-types';
 import { formatDistanceToNowStrict } from 'date-fns';
-import { MapPin, UserCircle, Heart, MessageCircle, Send, Share2, Rss, ThumbsUp, Tag, CornerDownRight, PlayCircle, Image as ImageIcon Lucide, Instagram } from 'lucide-react';
+import { MapPin, UserCircle, MessageCircle, Send, Share2, Rss, ThumbsUp, Tag, CornerDownRight, PlayCircle, Instagram, Image as ImageIconLucide } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { likePost, addComment, getComments } from '@/app/actions';
@@ -25,20 +24,20 @@ const WhatsAppIcon: FC<React.SVGProps<SVGSVGElement>> = (props) => (
 
 const CommentCard: FC<{ comment: CommentType }> = ({ comment }) => {
   return (
-    <div className="flex space-x-3 py-3 pl-2 border-l-2 border-primary/20 ml-1 hover:border-primary/50 transition-colors duration-200 bg-transparent hover:bg-primary/5 rounded-r-md">
-      <Avatar className="h-9 w-9 border-2 border-primary/40 flex-shrink-0 mt-1 shadow-sm">
-        <AvatarFallback className="bg-muted text-sm font-semibold text-primary/80">
+    <div className="flex space-x-2 py-2 pl-1 border-l-2 border-primary/20 hover:border-primary/50 transition-colors duration-200 bg-transparent hover:bg-white/5 rounded-r-md">
+      <Avatar className="h-7 w-7 border border-white/30 flex-shrink-0 mt-0.5 shadow-sm">
+        <AvatarFallback className="bg-gray-700 text-xs font-semibold text-white/80">
           {comment.author.substring(0, 1).toUpperCase()}
         </AvatarFallback>
       </Avatar>
-      <div className="flex-1 space-y-1">
-        <div className="flex items-center justify-between">
-          <h4 className="text-sm font-semibold text-foreground/90">{comment.author}</h4>
-          <p className="text-xs text-muted-foreground">
+      <div className="flex-1 space-y-0.5">
+        <div className="flex items-baseline justify-between">
+          <h4 className="text-xs font-semibold text-white/90">{comment.author}</h4>
+          <p className="text-[10px] text-gray-400">
             {formatDistanceToNowStrict(new Date(comment.createdat), { addSuffix: true })}
           </p>
         </div>
-        <p className="text-sm text-foreground/80 whitespace-pre-wrap break-words">{comment.content}</p>
+        <p className="text-xs text-white/80 whitespace-pre-wrap break-words">{comment.content}</p>
       </div>
     </div>
   );
@@ -47,10 +46,10 @@ const CommentCard: FC<{ comment: CommentType }> = ({ comment }) => {
 
 interface ReelItemProps {
   post: Post;
-  isActive: boolean; // To control video play/pause based on visibility
+  isActive: boolean; 
 }
 
-export const ReelItem: FC<ReelItemProps> = ({ post, isActive }) => {
+const ReelItemComponent: FC<ReelItemProps> = ({ post, isActive }) => {
   const { toast } = useToast();
   const timeAgo = formatDistanceToNowStrict(new Date(post.createdat), { addSuffix: true });
   
@@ -62,7 +61,7 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive }) => {
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [currentOrigin, setCurrentOrigin] = useState('');
-  const videoRef = React.useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -71,18 +70,39 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive }) => {
   }, []);
 
   useEffect(() => {
-    if (videoRef.current) {
-      if (isActive && post.mediatype === 'video') {
-        videoRef.current.play().catch(error => console.warn("Video autoplay prevented:", error));
-      } else {
-        videoRef.current.pause();
+    // Reset like count and comments when the post itself changes
+    setDisplayLikeCount(post.likecount);
+    setComments([]); // Clear comments, they will be fetched if opened
+    setShowComments(false); // Close comments section for new post
+  }, [post.id, post.likecount]);
+
+
+  useEffect(() => {
+    const videoElement = videoRef.current;
+    if (videoElement && post.mediatype === 'video') {
+      videoElement.pause();
+      videoElement.currentTime = 0; 
+      // `src` is updated by React when `post.mediaurl` changes,
+      // but explicitly calling load can help ensure it picks up the new source.
+      videoElement.load(); 
+      
+      if (isActive) {
+        const playPromise = videoElement.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(error => {
+            console.warn("Video autoplay prevented:", error);
+            // Optionally: Show a play button or message to the user
+          });
+        }
       }
+    } else if (videoElement) {
+        videoElement.pause(); 
     }
-  }, [isActive, post.mediatype]);
+  }, [isActive, post.mediaurl, post.mediatype]);
 
 
   const fetchPostComments = useCallback(async () => {
-    if (!showComments) return;
+    if (!showComments || comments.length > 0) return; // Don't fetch if not showing or already fetched
     setIsLoadingComments(true);
     try {
       const fetchedComments = await getComments(post.id);
@@ -92,28 +112,30 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive }) => {
     } finally {
       setIsLoadingComments(false);
     }
-  }, [post.id, showComments, toast]);
+  }, [post.id, showComments, toast, comments.length]);
 
   useEffect(() => {
-    fetchPostComments();
-  }, [fetchPostComments]);
+    if(showComments) { // Only fetch if comments are intended to be shown
+        fetchPostComments();
+    }
+  }, [fetchPostComments, showComments]);
 
   const handleLikeClick = async () => {
     if (isLiking) return;
     setIsLiking(true);
     const previousLikeCount = displayLikeCount;
-    setDisplayLikeCount(prevCount => prevCount + 1);
+    // Optimistic update
+    setDisplayLikeCount(prevCount => prevCount + 1); 
     try {
       const result = await likePost(post.id);
       if (result.error || !result.post) {
-        setDisplayLikeCount(previousLikeCount);
+        setDisplayLikeCount(previousLikeCount); // Revert on error
         toast({ variant: 'destructive', title: 'Like Error', description: result.error || 'Could not like the post.' });
       } else {
-        setDisplayLikeCount(result.post.likecount);
-        toast({ title: 'Liked!', description: 'Pulse liked successfully.', variant: 'default', duration: 2000 });
+        setDisplayLikeCount(result.post.likecount); // Sync with server
       }
     } catch (error: any) {
-      setDisplayLikeCount(previousLikeCount);
+      setDisplayLikeCount(previousLikeCount); // Revert on error
       toast({ variant: 'destructive', title: 'Like Error', description: error.message || 'An unexpected error occurred.' });
     } finally {
       setIsLiking(false);
@@ -131,7 +153,6 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive }) => {
       const added = await addComment({ postId: post.id, content: newComment.trim(), author: 'ReelViewer' });
       setComments(prev => [added, ...prev]);
       setNewComment('');
-      toast({ title: 'Comment Pulsed!', description: 'Your thoughts are now part of the vibe.', className:"bg-accent text-accent-foreground" });
     } catch (error) {
       toast({ variant: 'destructive', title: 'Error', description: 'Could not post comment.' });
     } finally {
@@ -146,7 +167,6 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive }) => {
   };
 
   const handleShareInstagram = async () => {
-    // Similar to PostCard, adapted for reels
     try {
       await navigator.clipboard.writeText(post.content);
       let toastMessage = "Post content copied! Open Instagram and paste it.";
@@ -171,7 +191,7 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive }) => {
             fill
             style={{ objectFit: "contain" }}
             sizes="100vw"
-            priority
+            priority={isActive} // Prioritize loading if active
             data-ai-hint="user generated content"
           />
         )}
@@ -180,22 +200,33 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive }) => {
             ref={videoRef}
             src={post.mediaurl}
             loop
-            muted // Autoplay best practice
-            playsInline // Important for mobile
+            muted // Autoplay best practice: start muted
+            playsInline // Important for mobile (iOS specifically)
+            preload="auto" // Let browser decide, often good for user experience
             className="w-full h-full object-contain"
-            onClick={() => videoRef.current?.paused ? videoRef.current?.play() : videoRef.current?.pause()}
+            onClick={() => {
+                if (videoRef.current) {
+                    if (videoRef.current.paused) videoRef.current.play().catch(console.warn);
+                    else videoRef.current.pause();
+                }
+            }}
           />
+        )}
+        {post.mediatype === 'video' && videoRef.current?.paused && isActive && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <PlayCircle className="w-16 h-16 text-white/70" />
+            </div>
         )}
       </div>
 
       {/* Overlay for Info and Actions */}
-      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/70 via-black/40 to-transparent">
-        {/* User Info & Caption */}
-        <div className="mb-3">
-          <div className="flex items-center space-x-2 mb-1">
-            <Avatar className="h-8 w-8 border-2 border-white/50">
-              <AvatarFallback className="bg-gray-700 text-xs">
-                <UserCircle className="h-5 w-5" />
+      <div className="absolute bottom-16 left-0 right-0 p-4 pb-2 bg-gradient-to-t from-black/60 via-black/30 to-transparent flex justify-between items-end">
+        {/* Left side: User Info, Caption, Hashtags */}
+        <div className="flex-1 space-y-1.5 max-w-[calc(100%-5rem)]">
+          <div className="flex items-center space-x-2">
+            <Avatar className="h-9 w-9 border-2 border-white/60">
+              <AvatarFallback className="bg-gray-700 text-sm">
+                <UserCircle className="h-6 w-6" />
               </AvatarFallback>
             </Avatar>
             <div>
@@ -203,11 +234,11 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive }) => {
               <p className="text-xs text-gray-300">{timeAgo} {post.city && post.city !== "Unknown City" ? `· ${post.city}`: ''}</p>
             </div>
           </div>
-          <p className="text-sm leading-tight line-clamp-3 whitespace-pre-wrap break-words">{post.content}</p>
+          <p className="text-sm leading-tight line-clamp-2 whitespace-pre-wrap break-words">{post.content}</p>
           {post.hashtags && post.hashtags.length > 0 && (
-            <div className="mt-1 flex flex-wrap gap-1.5">
+            <div className="mt-1 flex flex-wrap gap-1 max-h-10 overflow-y-hidden">
               {post.hashtags.slice(0,3).map(tag => (
-                <Badge key={tag} variant="secondary" className="text-xs bg-white/20 text-white hover:bg-white/30 border-none backdrop-blur-sm">
+                <Badge key={tag} variant="secondary" className="text-[10px] px-1.5 py-0.5 bg-white/10 text-white/80 hover:bg-white/20 border-none backdrop-blur-sm">
                    {tag.replace('#','')}
                 </Badge>
               ))}
@@ -215,73 +246,65 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive }) => {
           )}
         </div>
 
-        {/* Action Buttons & Comment Toggle */}
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center space-x-2">
-            <Button variant="ghost" size="sm" onClick={handleLikeClick} disabled={isLiking} className="flex items-center space-x-1.5 text-white hover:text-pink-400 p-1">
-              <ThumbsUp className={cn("w-5 h-5", isLiking ? "text-pink-500 animate-pulse" : "")} />
-              <span className="font-medium text-xs">{displayLikeCount}</span>
+        {/* Right side: Action Buttons (Like, Comment, Share) */}
+        <div className="flex flex-col space-y-3 items-center z-10">
+            <Button variant="ghost" size="sm" onClick={handleLikeClick} disabled={isLiking} className="flex flex-col items-center text-white hover:text-pink-400 p-1 h-auto">
+              <ThumbsUp className={cn("w-6 h-6", isLiking ? "text-pink-500 fill-pink-500" : "")} />
+              <span className="font-medium text-xs mt-0.5">{displayLikeCount}</span>
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => { setShowComments(!showComments); if(!showComments) fetchPostComments(); }} className="flex items-center space-x-1.5 text-white hover:text-cyan-400 p-1">
-              <MessageCircle className="w-5 h-5" />
-              <span className="font-medium text-xs">{comments.length > 0 ? `${comments.length}` : ''}</span>
+            <Button variant="ghost" size="sm" onClick={() => { setShowComments(prev => !prev); if(!showComments && comments.length === 0) fetchPostComments(); }} className="flex flex-col items-center text-white hover:text-cyan-400 p-1 h-auto">
+              <MessageCircle className="w-6 h-6" />
+              <span className="font-medium text-xs mt-0.5">{comments.length > 0 ? `${comments.length}` : '0'}</span>
             </Button>
-          </div>
-          <div className="flex items-center space-x-1">
-            <Button variant="ghost" size="icon" onClick={handleShareWhatsApp} className="text-white hover:text-green-400 p-1 h-7 w-7">
-              <WhatsAppIcon className="w-4 h-4" />
-            </Button>
-            <Button variant="ghost" size="icon" onClick={handleShareInstagram} className="text-white hover:text-purple-400 p-1 h-7 w-7">
-              <Instagram className="w-4 h-4" />
-            </Button>
-             <Button variant="ghost" size="icon" onClick={async () => {
+             <Button variant="ghost" size="sm" onClick={async () => {
                  if (navigator.share) {
                     try {
                         await navigator.share({ title: 'Check out this LocalPulse Reel!', text: post.content, url: currentOrigin });
                     } catch (error) { console.error('Error sharing:', error); }
                 } else {
-                    try { await navigator.clipboard.writeText(`${post.content}\n\nSee more at ${currentOrigin}`); toast({title: "Copied!"}); } catch (err) { toast({variant: "destructive", title: "Copy failed"}); }
+                    try { await navigator.clipboard.writeText(`${post.content}\n\nSee more at ${currentOrigin}`); toast({title: "Copied to clipboard!"}); } catch (err) { toast({variant: "destructive", title: "Copy failed"}); }
                 }
-            }} className="text-white hover:text-blue-400 p-1 h-7 w-7">
-              <Share2 className="w-4 h-4" />
+            }} className="flex flex-col items-center text-white hover:text-blue-400 p-1 h-auto">
+              <Share2 className="w-6 h-6" />
+               <span className="font-medium text-xs mt-0.5">Share</span>
             </Button>
-          </div>
+             {/* Optional: Add WhatsApp and Instagram direct share if desired, styling might need adjustment */}
         </div>
-        
-        {/* Comments Section (Collapsible) */}
-        {showComments && (
-          <div className="mt-2 p-3 bg-black/50 rounded-lg max-h-48 overflow-y-auto backdrop-blur-sm">
-            <h4 className="text-sm font-semibold mb-2 text-gray-200 flex items-center">
-              <CornerDownRight className="w-3 h-3 mr-1.5 text-gray-400"/>
-              Thoughts
-            </h4>
-            <form onSubmit={handleCommentSubmit} className="space-y-2 mb-3">
-              <div className="flex items-start space-x-2">
-                <Textarea
-                  placeholder="Add a comment..."
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  rows={1}
-                  className="text-xs flex-grow min-h-[30px] bg-gray-800/70 border-gray-700 text-white placeholder-gray-400 rounded-md focus:ring-1 focus:ring-primary"
-                  disabled={isSubmittingComment}
-                />
-                <Button type="submit" size="icon" variant="ghost" disabled={isSubmittingComment || !newComment.trim()} className="h-8 w-8 self-end text-primary hover:bg-primary/20">
-                  <Send className="w-4 h-4" />
-                </Button>
-              </div>
-            </form>
-            {isLoadingComments && <p className="text-xs text-center text-gray-400 py-2">Loading comments...</p>}
-            {!isLoadingComments && comments.length === 0 && <p className="text-xs text-center text-gray-400 py-2 italic">No comments yet.</p>}
-            {!isLoadingComments && comments.length > 0 && (
-              <div className="space-y-1.5">
-                {comments.map(comment => <CommentCard key={comment.id} comment={comment} />)}
-              </div>
-            )}
-          </div>
-        )}
       </div>
+        
+      {/* Comments Section (Collapsible/Sliding Panel) */}
+      {showComments && (
+        <div className="absolute bottom-16 left-0 right-0 p-3 bg-black/80 backdrop-blur-md rounded-t-lg max-h-[40%] overflow-y-auto z-20"> {/* Adjusted bottom to not overlap nav controls */}
+          <div className="flex justify-between items-center mb-2">
+            <h4 className="text-sm font-semibold text-gray-200">Comments ({comments.length})</h4>
+            <Button variant="ghost" size="sm" onClick={() => setShowComments(false)} className="text-gray-400 hover:text-white p-1">&times;</Button>
+          </div>
+          <form onSubmit={handleCommentSubmit} className="space-y-2 mb-3">
+            <div className="flex items-center space-x-2">
+              <Textarea
+                placeholder="Add a comment..."
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                rows={1}
+                className="text-xs flex-grow min-h-[30px] bg-gray-800/70 border-gray-700 text-white placeholder-gray-400 rounded-md focus:ring-1 focus:ring-primary"
+                disabled={isSubmittingComment}
+              />
+              <Button type="submit" size="icon" variant="ghost" disabled={isSubmittingComment || !newComment.trim()} className="h-8 w-8 self-center text-primary hover:bg-primary/20">
+                <Send className="w-4 h-4" />
+              </Button>
+            </div>
+          </form>
+          {isLoadingComments && <p className="text-xs text-center text-gray-400 py-2">Loading comments...</p>}
+          {!isLoadingComments && comments.length === 0 && <p className="text-xs text-center text-gray-400 py-2 italic">No comments yet. Be the first!</p>}
+          {!isLoadingComments && comments.length > 0 && (
+            <div className="space-y-1.5">
+              {comments.map(comment => <CommentCard key={comment.id} comment={comment} />)}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
 
-    
+export const ReelItem = React.memo(ReelItemComponent);
