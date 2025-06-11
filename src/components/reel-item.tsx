@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import type { Post, Comment as CommentType } from '@/lib/db-types';
 import { formatDistanceToNowStrict } from 'date-fns';
-import { MapPin, UserCircle, MessageCircle, Send, Share2, Rss, ThumbsUp, Tag, CornerDownRight, PlayCircle, Instagram, Image as ImageIconLucide } from 'lucide-react';
+import { MapPin, UserCircle, MessageCircle, Send, Share2, Rss, ThumbsUp, Tag, CornerDownRight, PlayCircle, Instagram, Image as ImageIconLucide, VolumeX, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { likePost, addComment, getComments } from '@/app/actions';
@@ -46,13 +46,13 @@ const CommentCard: FC<{ comment: CommentType }> = ({ comment }) => {
 
 interface ReelItemProps {
   post: Post;
-  isActive: boolean; 
+  isActive: boolean;
 }
 
 const ReelItemComponent: FC<ReelItemProps> = ({ post, isActive }) => {
   const { toast } = useToast();
   const timeAgo = formatDistanceToNowStrict(new Date(post.createdat), { addSuffix: true });
-  
+
   const [displayLikeCount, setDisplayLikeCount] = useState<number>(post.likecount);
   const [isLiking, setIsLiking] = useState<boolean>(false);
   const [comments, setComments] = useState<CommentType[]>([]);
@@ -62,6 +62,8 @@ const ReelItemComponent: FC<ReelItemProps> = ({ post, isActive }) => {
   const [showComments, setShowComments] = useState(false);
   const [currentOrigin, setCurrentOrigin] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [isInternallyMuted, setIsInternallyMuted] = useState(true);
+
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -70,10 +72,11 @@ const ReelItemComponent: FC<ReelItemProps> = ({ post, isActive }) => {
   }, []);
 
   useEffect(() => {
-    // Reset like count and comments when the post itself changes
     setDisplayLikeCount(post.likecount);
-    setComments([]); // Clear comments, they will be fetched if opened
-    setShowComments(false); // Close comments section for new post
+    setComments([]);
+    setShowComments(false);
+    // Reset mute state for new posts, video effect will handle initial mute for autoplay
+    setIsInternallyMuted(true);
   }, [post.id, post.likecount]);
 
 
@@ -81,28 +84,26 @@ const ReelItemComponent: FC<ReelItemProps> = ({ post, isActive }) => {
     const videoElement = videoRef.current;
     if (videoElement && post.mediatype === 'video') {
       videoElement.pause();
-      videoElement.currentTime = 0; 
-      // `src` is updated by React when `post.mediaurl` changes,
-      // but explicitly calling load can help ensure it picks up the new source.
-      videoElement.load(); 
-      
+      videoElement.currentTime = 0;
+      videoElement.load();
+
       if (isActive) {
+        videoElement.muted = isInternallyMuted; // Use state for initial mute
         const playPromise = videoElement.play();
         if (playPromise !== undefined) {
           playPromise.catch(error => {
             console.warn("Video autoplay prevented:", error);
-            // Optionally: Show a play button or message to the user
           });
         }
       }
-    } else if (videoElement) {
-        videoElement.pause(); 
+    } else if (videoElement && post.mediatype !== 'video') {
+        videoElement.pause();
     }
-  }, [isActive, post.mediaurl, post.mediatype]);
+  }, [isActive, post.id, post.mediaurl, post.mediatype, isInternallyMuted]);
 
 
   const fetchPostComments = useCallback(async () => {
-    if (!showComments || comments.length > 0) return; // Don't fetch if not showing or already fetched
+    if (!showComments || comments.length > 0) return;
     setIsLoadingComments(true);
     try {
       const fetchedComments = await getComments(post.id);
@@ -115,7 +116,7 @@ const ReelItemComponent: FC<ReelItemProps> = ({ post, isActive }) => {
   }, [post.id, showComments, toast, comments.length]);
 
   useEffect(() => {
-    if(showComments) { // Only fetch if comments are intended to be shown
+    if(showComments) {
         fetchPostComments();
     }
   }, [fetchPostComments, showComments]);
@@ -124,18 +125,17 @@ const ReelItemComponent: FC<ReelItemProps> = ({ post, isActive }) => {
     if (isLiking) return;
     setIsLiking(true);
     const previousLikeCount = displayLikeCount;
-    // Optimistic update
-    setDisplayLikeCount(prevCount => prevCount + 1); 
+    setDisplayLikeCount(prevCount => prevCount + 1);
     try {
       const result = await likePost(post.id);
       if (result.error || !result.post) {
-        setDisplayLikeCount(previousLikeCount); // Revert on error
+        setDisplayLikeCount(previousLikeCount);
         toast({ variant: 'destructive', title: 'Like Error', description: result.error || 'Could not like the post.' });
       } else {
-        setDisplayLikeCount(result.post.likecount); // Sync with server
+        setDisplayLikeCount(result.post.likecount);
       }
     } catch (error: any) {
-      setDisplayLikeCount(previousLikeCount); // Revert on error
+      setDisplayLikeCount(previousLikeCount);
       toast({ variant: 'destructive', title: 'Like Error', description: error.message || 'An unexpected error occurred.' });
     } finally {
       setIsLiking(false);
@@ -179,10 +179,23 @@ const ReelItemComponent: FC<ReelItemProps> = ({ post, isActive }) => {
     }
   };
 
+  const handleVideoTap = () => {
+    if (videoRef.current) {
+      const newMutedState = !videoRef.current.muted;
+      videoRef.current.muted = newMutedState;
+      setIsInternallyMuted(newMutedState); // Sync with component state
+
+      if (videoRef.current.paused) {
+        videoRef.current.play().catch(error => {
+          console.warn("Play on tap failed. Autoplay might be strictly blocked.", error);
+        });
+      }
+    }
+  };
+
 
   return (
     <div className="h-full w-full flex flex-col items-center justify-center bg-black relative text-white">
-      {/* Media Display Area */}
       <div className="w-full flex-grow flex items-center justify-center overflow-hidden relative">
         {post.mediatype === 'image' && post.mediaurl && (
           <Image
@@ -191,37 +204,38 @@ const ReelItemComponent: FC<ReelItemProps> = ({ post, isActive }) => {
             fill
             style={{ objectFit: "contain" }}
             sizes="100vw"
-            priority={isActive} // Prioritize loading if active
+            priority={isActive}
             data-ai-hint="user generated content"
           />
         )}
         {post.mediatype === 'video' && post.mediaurl && (
-          <video
-            ref={videoRef}
-            src={post.mediaurl}
-            loop
-            muted // Autoplay best practice: start muted
-            playsInline // Important for mobile (iOS specifically)
-            preload="auto" // Let browser decide, often good for user experience
-            className="w-full h-full object-contain"
-            onClick={() => {
-                if (videoRef.current) {
-                    if (videoRef.current.paused) videoRef.current.play().catch(console.warn);
-                    else videoRef.current.pause();
-                }
-            }}
-          />
+          <>
+            <video
+              ref={videoRef}
+              src={post.mediaurl}
+              loop
+              muted // Start muted, click will toggle
+              playsInline
+              preload="auto"
+              className="w-full h-full object-contain"
+              onClick={handleVideoTap} // Use the new handler
+            />
+            <div 
+              className="absolute top-4 right-4 p-2 bg-black/50 rounded-full cursor-pointer"
+              onClick={handleVideoTap}
+            >
+              {isInternallyMuted ? <VolumeX className="w-5 h-5 text-white" /> : <Volume2 className="w-5 h-5 text-white" />}
+            </div>
+          </>
         )}
-        {post.mediatype === 'video' && videoRef.current?.paused && isActive && (
+         {post.mediatype === 'video' && videoRef.current?.paused && isActive && !isInternallyMuted && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <PlayCircle className="w-16 h-16 text-white/70" />
             </div>
         )}
       </div>
 
-      {/* Overlay for Info and Actions */}
       <div className="absolute bottom-16 left-0 right-0 p-4 pb-2 bg-gradient-to-t from-black/60 via-black/30 to-transparent flex justify-between items-end">
-        {/* Left side: User Info, Caption, Hashtags */}
         <div className="flex-1 space-y-1.5 max-w-[calc(100%-5rem)]">
           <div className="flex items-center space-x-2">
             <Avatar className="h-9 w-9 border-2 border-white/60">
@@ -246,7 +260,6 @@ const ReelItemComponent: FC<ReelItemProps> = ({ post, isActive }) => {
           )}
         </div>
 
-        {/* Right side: Action Buttons (Like, Comment, Share) */}
         <div className="flex flex-col space-y-3 items-center z-10">
             <Button variant="ghost" size="sm" onClick={handleLikeClick} disabled={isLiking} className="flex flex-col items-center text-white hover:text-pink-400 p-1 h-auto">
               <ThumbsUp className={cn("w-6 h-6", isLiking ? "text-pink-500 fill-pink-500" : "")} />
@@ -268,13 +281,11 @@ const ReelItemComponent: FC<ReelItemProps> = ({ post, isActive }) => {
               <Share2 className="w-6 h-6" />
                <span className="font-medium text-xs mt-0.5">Share</span>
             </Button>
-             {/* Optional: Add WhatsApp and Instagram direct share if desired, styling might need adjustment */}
         </div>
       </div>
-        
-      {/* Comments Section (Collapsible/Sliding Panel) */}
+
       {showComments && (
-        <div className="absolute bottom-16 left-0 right-0 p-3 bg-black/80 backdrop-blur-md rounded-t-lg max-h-[40%] overflow-y-auto z-20"> {/* Adjusted bottom to not overlap nav controls */}
+        <div className="absolute bottom-16 left-0 right-0 p-3 bg-black/80 backdrop-blur-md rounded-t-lg max-h-[40%] overflow-y-auto z-20">
           <div className="flex justify-between items-center mb-2">
             <h4 className="text-sm font-semibold text-gray-200">Comments ({comments.length})</h4>
             <Button variant="ghost" size="sm" onClick={() => setShowComments(false)} className="text-gray-400 hover:text-white p-1">&times;</Button>
