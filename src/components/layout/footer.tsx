@@ -4,7 +4,7 @@
 import type { FC } from 'react';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Users, CalendarDays, Code } from 'lucide-react'; // Removed Film icon
+import { Users, CalendarDays, Code, Shield } from 'lucide-react';
 import { recordVisitAndGetCounts, getCurrentVisitorCounts } from '@/app/actions';
 import type { VisitorCounts } from '@/lib/db-types';
 
@@ -59,12 +59,18 @@ const Footer: FC = () => {
           ) : (
             <span className="text-destructive">Could not load visitor stats.</span>
           )}
-           {/* Removed Reels link from here */}
         </div>
-        <p className="text-xs text-muted-foreground/80 flex items-center justify-center">
-          <Code className="w-4 h-4 mr-1.5 text-primary/70" />
-          Developed by S. P. Borgavakar
-        </p>
+        <div className="flex items-center justify-center space-x-4 text-xs text-muted-foreground/80">
+          <span className="flex items-center">
+            <Code className="w-4 h-4 mr-1.5 text-primary/70" />
+            Developed by S. P. Borgavakar
+          </span>
+          <span className="text-muted-foreground/50">|</span>
+          <Link href="/privacy-policy" className="flex items-center hover:text-primary transition-colors">
+            <Shield className="w-4 h-4 mr-1.5 text-primary/70" />
+            Privacy Policy
+          </Link>
+        </div>
       </div>
     </footer>
   );
