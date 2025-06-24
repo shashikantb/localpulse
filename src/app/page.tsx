@@ -5,15 +5,15 @@ import PostFeedClient from '@/components/post-feed-client';
 import { Rss } from 'lucide-react';
 import type { Post } from '@/lib/db-types';
 
+const POSTS_PER_PAGE = 5;
+
 // This is now a Server Component
 const HomePage: FC = async () => {
   let initialPosts: Post[] = [];
   try {
     // Fetch only the first page of posts for the initial server render
-    // For simplicity, getPosts() fetches all; ideally, it would support pagination.
-    // We will let the client component handle the "first page" slicing for now.
-    const allFetchedPosts = await getPosts(); 
-    initialPosts = allFetchedPosts; // Pass all, client will paginate
+    // This makes the initial page load much faster. The client will fetch the rest.
+    initialPosts = await getPosts({ page: 1, limit: POSTS_PER_PAGE });
   } catch (error) {
     console.error("Error fetching initial posts for server component:", error);
     // Handle error appropriately, maybe pass an error prop or empty array

@@ -6,7 +6,7 @@ import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken }
 export * from './db-types';
 
 // Declare variables that will hold the function implementations
-let getPostsDb: () => Promise<Post[]>;
+let getPostsDb: (options?: { limit: number; offset: number; }) => Promise<Post[]>;
 let addPostDb: (newPost: DbNewPost) => Promise<Post>;
 let incrementPostLikeCountDb: (postId: number) => Promise<Post | null>;
 let addCommentDb: (commentData: NewComment) => Promise<Comment>;
@@ -38,7 +38,7 @@ if (!process.env.POSTGRES_URL) {
   const dbNotConfiguredError = () => Promise.reject(new Error("Database is not configured. Please set the POSTGRES_URL environment variable."));
 
   // --- MOCK IMPLEMENTATIONS ---
-  getPostsDb = async (): Promise<Post[]> => { console.warn("MOCK DB: getPostsDb called"); return []; };
+  getPostsDb = async (options?: { limit: number; offset: number; }): Promise<Post[]> => { console.warn("MOCK DB: getPostsDb called"); return []; };
   addPostDb = async (newPost: DbNewPost): Promise<Post> => { await dbNotConfiguredError(); return null as any; };
   incrementPostLikeCountDb = async (postId: number): Promise<Post | null> => { await dbNotConfiguredError(); return null; };
   addCommentDb = async (commentData: NewComment): Promise<Comment> => { await dbNotConfiguredError(); return null as any; };
@@ -202,11 +202,22 @@ if (!process.env.POSTGRES_URL) {
   });
   
   
-  getPostsDb = async (): Promise<Post[]> => {
+  getPostsDb = async (options?: { limit: number; offset: number }): Promise<Post[]> => {
     try {
-      const result: QueryResult<Post> = await pool.query(
-        'SELECT id, content, latitude, longitude, createdAt, mediaUrl, mediaType, likeCount, city, hashtags FROM posts ORDER BY createdAt DESC'
-      );
+      let queryText = 'SELECT id, content, latitude, longitude, createdAt, mediaUrl, mediaType, likeCount, city, hashtags FROM posts ORDER BY createdAt DESC';
+      const queryParams: number[] = [];
+
+      if (options?.limit) {
+          queryParams.push(options.limit);
+          queryText += ` LIMIT $${queryParams.length}`;
+      }
+
+      if (options?.offset) {
+          queryParams.push(options.offset);
+          queryText += ` OFFSET $${queryParams.length}`;
+      }
+      
+      const result: QueryResult<Post> = await pool.query(queryText, queryParams);
       return result.rows;
     } catch (error) {
       console.error("Error fetching posts from DB:", error);

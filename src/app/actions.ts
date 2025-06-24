@@ -21,9 +21,14 @@ async function geocodeCoordinates(latitude: number, longitude: number): Promise<
 }
 
 
-export async function getPosts(): Promise<Post[]> {
+export async function getPosts(options?: { page: number; limit: number }): Promise<Post[]> {
   try {
-    const posts = await db.getPostsDb();
+    const dbOptions = options ? {
+        limit: options.limit,
+        offset: (options.page - 1) * options.limit
+    } : undefined;
+
+    const posts = await db.getPostsDb(dbOptions);
     return posts.map(post => ({
       ...post,
       createdAt: post.createdat,

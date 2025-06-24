@@ -66,7 +66,8 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [loadingLocation, setLoadingLocation] = useState(true);
-  const [clientSideLoading, setClientSideLoading] = useState(true); 
+  const [clientSideLoading, setClientSideLoading] = useState(true);
+  const [isFullListLoaded, setIsFullListLoaded] = useState<boolean>(initialPosts.length === 0);
   
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [distanceFilterKm, setDistanceFilterKm] = useState<number>(101); 
@@ -128,6 +129,30 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
     }
   }, [toast]);
 
+  // This effect loads the full list of posts in the background after the initial page (with 5 posts) has rendered.
+  // This makes the site feel fast, while still enabling full client-side filtering.
+  useEffect(() => {
+    const fetchAllPostsInBackground = async () => {
+      try {
+        const allServerPosts = await getPosts(); // Fetches all posts
+        setAllPosts(allServerPosts); // Replace the initial small list with the full list
+      } catch (error) {
+        console.error("Failed to load full post list in background", error);
+        toast({
+            variant: "destructive",
+            title: "Could not load all posts",
+            description: "Filtering may be incomplete.",
+        });
+      } finally {
+        setIsFullListLoaded(true);
+      }
+    };
+
+    if (!isFullListLoaded) {
+      fetchAllPostsInBackground();
+    }
+  }, [isFullListLoaded, toast]);
+
   const handleNotificationRegistration = async () => {
     if (notificationPermissionStatus === 'granted') {
       toast({ title: 'Notifications are already on!', description: 'You will continue to receive updates for nearby pulses.' });
@@ -171,7 +196,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
 
 
   const fetchAndSetAllPosts = useCallback(async () => {
-    // This function now fetches ALL posts for client-side filtering after initial load, or on user action
+    // This function is for manual refresh, so it should get everything and show loading state
     setClientSideLoading(true);
     try {
       const fetchedPosts = await getPosts(); // Fetches all posts
@@ -179,6 +204,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
       if (fetchedPosts.length > 0) {
         setLatestPostIdClientKnows(fetchedPosts.reduce((max, p) => p.id > max ? p.id : max, 0));
       }
+      setIsFullListLoaded(true); // After a refresh, the list is full
     } catch (error) {
       console.error("Error fetching posts:", error);
       toast({
@@ -194,12 +220,12 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
 
   // Initialize latestPostIdClientKnows from initialPosts
   useEffect(() => {
-    if (initialPosts.length > 0) {
-      setLatestPostIdClientKnows(initialPosts.reduce((max, p) => p.id > max ? p.id : max, 0));
+    if (allPosts.length > 0) {
+        setLatestPostIdClientKnows(allPosts.reduce((max, p) => p.id > max ? p.id : max, 0));
     }
-    // Since initialPosts are now from server, clientSideLoading can be set to false after first effect run
+    // Set clientSideLoading to false after first effect run
     setClientSideLoading(false); 
-  }, [initialPosts]);
+  }, [allPosts]);
 
 
   // This useEffect handles filtering, sorting, and pagination based on `allPosts`, `location`, and filters
@@ -247,23 +273,18 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
     
     const processed = processAndDisplayPosts();
     setFilteredAndSortedPosts(processed);
-    // Reset current page when filters change, but not on initial load with initialPosts
-    if (allPosts !== initialPosts) { 
-        setCurrentPage(1); 
-        setPostsToDisplay(processed.slice(0, POSTS_PER_PAGE));
-    } else {
-        // For initial load, just set the display posts
-        setPostsToDisplay(processed.slice(0, currentPage * POSTS_PER_PAGE));
-    }
     
-    if (processed.length > 0 && allPosts === initialPosts) { // Only update from initialPosts once
-        setLatestPostIdClientKnows(prevId => Math.max(prevId, processed.reduce((max, p) => p.id > max ? p.id : max, 0)));
+    // Reset current page when filters change
+    if (allPosts !== initialPosts) {
+      setCurrentPage(1); 
+      setPostsToDisplay(processed.slice(0, POSTS_PER_PAGE));
+    } else {
+      setPostsToDisplay(processed.slice(0, currentPage * POSTS_PER_PAGE));
     }
-
 
   }, [
     allPosts,
-    initialPosts, // Added to ensure effect runs when initialPosts change (though they shouldn't after mount)
+    initialPosts,
     location,
     distanceFilterKm,
     showAnyDistance,
@@ -271,7 +292,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
     calculateDistance, 
     loadingLocation,  
     locationError,
-    currentPage // Add currentPage to re-evaluate display when it changes
+    currentPage
   ]);
 
   // Polling for new posts
@@ -608,5 +629,3 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
 };
 
 export default PostFeedClient;
-
-    
