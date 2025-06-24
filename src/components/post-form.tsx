@@ -23,7 +23,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 
-const MAX_FILE_SIZE = 1 * 1024 * 1024; // 1MB - Temporarily reduced to match server default until server config is fixed.
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const VIDEO_OPTIMIZATION_THRESHOLD = 500 * 1024; // 0.5MB
 
 export const HASHTAG_CATEGORIES = [
