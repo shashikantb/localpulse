@@ -64,9 +64,22 @@ async function sendNotificationsForNewPost(post: Post) {
       },
       data: {
         postId: String(post.id),
-        // You can add more data here, like a link to the post or app screen
       },
-      tokens: nearbyTokens, // Send to multiple tokens
+      android: {
+        priority: 'high' as const, // Use 'high' priority for more reliable delivery on all devices
+        notification: {
+          channelId: 'new_pulses', // A channel for Android 8.0+
+          sound: 'default',
+        }
+      },
+      apns: {
+         payload: {
+            aps: {
+              sound: 'default',
+            }
+         }
+      },
+      tokens: nearbyTokens,
     };
 
     const response = await firebaseAdmin.messaging().sendEachForMulticast(message);
@@ -78,9 +91,9 @@ async function sendNotificationsForNewPost(post: Post) {
         if (!resp.success) {
           const error = resp.error;
           console.error(`Failed to send notification to token ${nearbyTokens[idx].substring(0,10)}...:`, error?.message);
-          // Check for error codes indicating an invalid or unregistered token
+          
           const errorCode = error?.code;
-          if (errorCode === 'messaging/registration-token-not-registered' || errorCode === 'messaging/invalid-registration-token') {
+          if (errorCode === 'messaging/registration-token-not-registered' || errorCode === 'messaging/invalid-registration-token' || errorCode === 'messaging/mismatched-credential') {
             const badToken = nearbyTokens[idx];
             tokensToDelete.push(badToken);
             console.log(`Marking token for deletion: ${badToken.substring(0,10)}...`);
@@ -90,10 +103,7 @@ async function sendNotificationsForNewPost(post: Post) {
 
       if (tokensToDelete.length > 0) {
         console.log(`Deleting ${tokensToDelete.length} invalid tokens from the database.`);
-        // Asynchronously delete all bad tokens
-        Promise.all(tokensToDelete.map(token => db.deleteDeviceTokenDb(token))).catch(err => {
-            console.error("Error during bulk deletion of invalid tokens:", err);
-        });
+        await Promise.all(tokensToDelete.map(token => db.deleteDeviceTokenDb(token)));
       }
     }
   } catch (error) {
@@ -125,7 +135,7 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
         hashtags: addedPostDb.hashtags || [],
     };
     
-    revalidatePath('/'); // This might not be strictly necessary if client updates optimistically and via polling
+    revalidatePath('/');
     
     sendNotificationsForNewPost(addedPostClient).catch(err => {
       console.error("Background notification sending failed:", err);
@@ -231,8 +241,8 @@ export async function registerDeviceToken(
 
 export async function checkForNewerPosts(latestPostIdClientKnows: number): Promise<{ hasNewerPosts: boolean; count: number }> {
   try {
-    if (latestPostIdClientKnows === 0) { // If client knows no posts, assume any post is new
-        const anyPosts = await db.getPostsDb(); // Check if any posts exist
+    if (latestPostIdClientKnows === 0) { 
+        const anyPosts = await db.getPostsDb(); 
         return { hasNewerPosts: anyPosts.length > 0, count: anyPosts.length };
     }
     const count = await db.getNewerPostsCountDb(latestPostIdClientKnows);
