@@ -66,8 +66,8 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [loadingLocation, setLoadingLocation] = useState(true);
-  const [clientSideLoading, setClientSideLoading] = useState(true);
   const [isFullListLoaded, setIsFullListLoaded] = useState<boolean>(initialPosts.length === 0);
+  const [clientSideLoading, setClientSideLoading] = useState(true);
   
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [distanceFilterKm, setDistanceFilterKm] = useState<number>(101); 
@@ -129,13 +129,12 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
     }
   }, [toast]);
 
-  // This effect loads the full list of posts in the background after the initial page (with 5 posts) has rendered.
-  // This makes the site feel fast, while still enabling full client-side filtering.
+  // This effect loads the full list of posts in the background after the initial page has rendered.
   useEffect(() => {
     const fetchAllPostsInBackground = async () => {
       try {
         const allServerPosts = await getPosts(); // Fetches all posts
-        setAllPosts(allServerPosts); // Replace the initial small list with the full list
+        setAllPosts(allServerPosts);
       } catch (error) {
         console.error("Failed to load full post list in background", error);
         toast({
@@ -145,13 +144,16 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
         });
       } finally {
         setIsFullListLoaded(true);
+        setClientSideLoading(false); // Finished loading everything we need initially
       }
     };
 
-    if (!isFullListLoaded) {
+    if (initialPosts.length > 0 && !isFullListLoaded) {
       fetchAllPostsInBackground();
+    } else {
+      setClientSideLoading(false); // No posts to load, so we're done
     }
-  }, [isFullListLoaded, toast]);
+  }, [initialPosts, isFullListLoaded, toast]);
 
   const handleNotificationRegistration = async () => {
     if (notificationPermissionStatus === 'granted') {
@@ -223,81 +225,66 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
     if (allPosts.length > 0) {
         setLatestPostIdClientKnows(allPosts.reduce((max, p) => p.id > max ? p.id : max, 0));
     }
-    // Set clientSideLoading to false after first effect run
-    setClientSideLoading(false); 
   }, [allPosts]);
 
-
-  // This useEffect handles filtering, sorting, and pagination based on `allPosts`, `location`, and filters
+  // Effect for filtering and sorting when the source data or filters change
   useEffect(() => {
-    // Don't run if location is still loading and we rely on it for sorting/filtering
-    if (loadingLocation && (!showAnyDistance || !location)) { 
-      // If "Any Distance" is true or location is available, we can proceed even if loadingLocation is true
-      // but if we need distance and location is not available, we wait.
-      // Or, if using location and it's null, wait.
-      if (!showAnyDistance && !location && !locationError) return;
+    if (loadingLocation && (!showAnyDistance || !location) && !locationError) {
+      return;
     }
-    
-    const processAndDisplayPosts = () => {
-        let filtered = allPosts;
 
-        if (location && !showAnyDistance) {
-            filtered = allPosts.filter(p =>
-            p.latitude && p.longitude &&
-            calculateDistance(location.latitude, location.longitude, p.latitude, p.longitude) <= distanceFilterKm
-            );
-        }
+    let filtered = allPosts;
 
-        if (filterHashtags.length > 0) {
-            filtered = filtered.filter(p =>
-            p.hashtags && p.hashtags.length > 0 && filterHashtags.some(fh => p.hashtags!.includes(fh))
-            );
-        }
+    if (location && !showAnyDistance) {
+      filtered = allPosts.filter(p =>
+        p.latitude && p.longitude &&
+        calculateDistance(location.latitude, location.longitude, p.latitude, p.longitude) <= distanceFilterKm
+      );
+    }
 
-        const sorted = [...filtered];
-        if (location) {
-            sorted.sort((a, b) => {
-            if (!a.latitude || !a.longitude || !b.latitude || !b.longitude) return 0; 
-            const distA = calculateDistance(location.latitude, location.longitude, a.latitude, a.longitude);
-            const distB = calculateDistance(location.latitude, location.longitude, b.latitude, b.longitude);
-            if (Math.abs(distA - distB) < 0.1) { 
-                return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
-            }
-            return distA - distB;
-            });
-        } else {
-            sorted.sort((a, b) => new Date(b.createdat).getTime() - new Date(a.createdat).getTime());
+    if (filterHashtags.length > 0) {
+      filtered = filtered.filter(p =>
+        p.hashtags && p.hashtags.length > 0 && filterHashtags.some(fh => p.hashtags!.includes(fh))
+      );
+    }
+
+    const sorted = [...filtered];
+    if (location) {
+      sorted.sort((a, b) => {
+        if (!a.latitude || !a.longitude || !b.latitude || !b.longitude) return 0;
+        const distA = calculateDistance(location.latitude, location.longitude, a.latitude, a.longitude);
+        const distB = calculateDistance(location.latitude, location.longitude, b.latitude, b.longitude);
+        if (Math.abs(distA - distB) < 0.1) {
+          return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
         }
-        return sorted;
-    };
-    
-    const processed = processAndDisplayPosts();
-    setFilteredAndSortedPosts(processed);
-    
-    // Reset current page when filters change
-    if (allPosts !== initialPosts) {
-      setCurrentPage(1); 
-      setPostsToDisplay(processed.slice(0, POSTS_PER_PAGE));
+        return distA - distB;
+      });
     } else {
-      setPostsToDisplay(processed.slice(0, currentPage * POSTS_PER_PAGE));
+      sorted.sort((a, b) => new Date(b.createdat).getTime() - new Date(a.createdat).getTime());
     }
-
+    
+    setFilteredAndSortedPosts(sorted);
+    setCurrentPage(1); // Reset to page 1 whenever filters change
   }, [
     allPosts,
-    initialPosts,
     location,
     distanceFilterKm,
     showAnyDistance,
     filterHashtags,
-    calculateDistance, 
-    loadingLocation,  
-    locationError,
-    currentPage
+    calculateDistance,
+    loadingLocation,
+    locationError
   ]);
+
+  // Effect for pagination when the filtered list or current page changes
+  useEffect(() => {
+    const newPostsToDisplay = filteredAndSortedPosts.slice(0, currentPage * POSTS_PER_PAGE);
+    setPostsToDisplay(newPostsToDisplay);
+  }, [filteredAndSortedPosts, currentPage]);
+
 
   // Polling for new posts
   useEffect(() => {
-    // Don't poll if client is still performing its initial setup or loading posts
     if (clientSideLoading || loadingLocation) return; 
 
     const intervalId = setInterval(async () => {
@@ -347,7 +334,6 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
       if (result.error) {
         toast({ variant: "destructive", title: "Post Error", description: result.error || "Failed to add post." });
       } else if (result.post) {
-        // Add to allPosts, which will trigger re-filtering and display update
         setAllPosts(prevPosts => [result.post!, ...prevPosts]); 
         setLatestPostIdClientKnows(prevLatestId => Math.max(prevLatestId, result.post!.id));
         toast({ title: "Post Added!", description: "Your pulse is now live!", variant: "default", className: "bg-primary text-primary-foreground"});
@@ -365,10 +351,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
   
   const handleLoadMore = () => {
     if (clientSideLoading) return; 
-    const nextPage = currentPage + 1;
-    const newPostsToDisplay = filteredAndSortedPosts.slice(0, nextPage * POSTS_PER_PAGE);
-    setPostsToDisplay(newPostsToDisplay);
-    setCurrentPage(nextPage);
+    setCurrentPage(prevPage => prevPage + 1);
   };
 
   const handleDistanceChange = (value: number[]) => {
@@ -565,7 +548,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
                     )}
                 </div>
 
-                {clientSideLoading && postsToDisplay.length === 0 && !locationError ? (
+                {clientSideLoading && postsToDisplay.length === 0 ? (
                   Array.from({ length: Math.min(POSTS_PER_PAGE, 3) }).map((_, index) => (
                       <div key={index} className="space-y-4 p-5 bg-card/70 backdrop-blur-sm rounded-xl shadow-xl animate-pulse border border-border/30">
                       <div className="flex items-center space-x-3">
@@ -629,3 +612,5 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
 };
 
 export default PostFeedClient;
+
+    
