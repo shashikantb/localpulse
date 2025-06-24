@@ -66,12 +66,30 @@ async function sendNotificationsForNewPost(post: Post) {
 
     const response = await firebaseAdmin.messaging().sendEachForMulticast(message);
     console.log(`Successfully sent ${response.successCount} messages for new post.`);
+    
     if (response.failureCount > 0) {
-      response.responses.forEach(resp => {
+      const tokensToDelete: string[] = [];
+      response.responses.forEach((resp, idx) => {
         if (!resp.success) {
-          console.error('Failed to send notification to a token:', resp.error);
+          const error = resp.error;
+          console.error(`Failed to send notification to token ${nearbyTokens[idx].substring(0,10)}...:`, error?.message);
+          // Check for error codes indicating an invalid or unregistered token
+          const errorCode = error?.code;
+          if (errorCode === 'messaging/registration-token-not-registered' || errorCode === 'messaging/invalid-registration-token') {
+            const badToken = nearbyTokens[idx];
+            tokensToDelete.push(badToken);
+            console.log(`Marking token for deletion: ${badToken.substring(0,10)}...`);
+          }
         }
       });
+
+      if (tokensToDelete.length > 0) {
+        console.log(`Deleting ${tokensToDelete.length} invalid tokens from the database.`);
+        // Asynchronously delete all bad tokens
+        Promise.all(tokensToDelete.map(token => db.deleteDeviceTokenDb(token))).catch(err => {
+            console.error("Error during bulk deletion of invalid tokens:", err);
+        });
+      }
     }
   } catch (error) {
     console.error('Error sending push notifications for new post:', error);
@@ -219,4 +237,3 @@ export async function checkForNewerPosts(latestPostIdClientKnows: number): Promi
     return { hasNewerPosts: false, count: 0 };
   }
 }
-

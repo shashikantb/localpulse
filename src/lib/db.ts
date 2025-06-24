@@ -15,6 +15,7 @@ let incrementAndGetVisitorCountsDb: () => Promise<VisitorCounts>;
 let getVisitorCountsDb: () => Promise<VisitorCounts>;
 let addOrUpdateDeviceTokenDb: (token: string, latitude?: number, longitude?: number) => Promise<void>;
 let getNearbyDeviceTokensDb: (latitude: number, longitude: number, radiusKm?: number) => Promise<string[]>;
+let deleteDeviceTokenDb: (token: string) => Promise<void>;
 let getNewerPostsCountDb: (latestIdKnown: number) => Promise<number>;
 let closeDb: () => Promise<void>;
 
@@ -46,6 +47,7 @@ if (!process.env.POSTGRES_URL) {
   getVisitorCountsDb = async (): Promise<VisitorCounts> => { console.warn("MOCK DB: getVisitorCountsDb called"); return { totalVisits: 0, dailyVisits: 0 }; };
   addOrUpdateDeviceTokenDb = async (token: string, latitude?: number, longitude?: number): Promise<void> => { console.warn("MOCK DB: addOrUpdateDeviceTokenDb called"); return; };
   getNearbyDeviceTokensDb = async (latitude: number, longitude: number, radiusKm: number = 10): Promise<string[]> => { console.warn("MOCK DB: getNearbyDeviceTokensDb called"); return []; };
+  deleteDeviceTokenDb = async (token: string): Promise<void> => { console.warn("MOCK DB: deleteDeviceTokenDb called"); return; };
   getNewerPostsCountDb = async (latestIdKnown: number): Promise<number> => { console.warn("MOCK DB: getNewerPostsCountDb called"); return 0; };
   closeDb = async (): Promise<void> => { console.warn("MOCK DB: closeDb called"); return; };
 
@@ -415,6 +417,20 @@ if (!process.env.POSTGRES_URL) {
       throw new Error('Failed to save device token.');
     }
   }
+
+  deleteDeviceTokenDb = async (token: string): Promise<void> => {
+    try {
+      const result = await pool.query('DELETE FROM device_tokens WHERE token = $1', [token]);
+      if (result.rowCount > 0) {
+        console.log(`Deleted invalid device token: ${token.substring(0, 10)}...`);
+      } else {
+        console.warn(`Attempted to delete a token that was not found: ${token.substring(0, 10)}...`);
+      }
+    } catch (error) {
+        console.error(`Error deleting device token ${token.substring(0,10)}... from DB:`, error);
+        // Do not re-throw, as this is a cleanup operation and shouldn't crash the main flow
+    }
+  }
   
   getNearbyDeviceTokensDb = async (
     latitude: number,
@@ -493,6 +509,7 @@ export {
   incrementAndGetVisitorCountsDb,
   getVisitorCountsDb,
   addOrUpdateDeviceTokenDb,
+  deleteDeviceTokenDb,
   getNearbyDeviceTokensDb,
   getNewerPostsCountDb,
   closeDb
