@@ -4,6 +4,7 @@
 import type { FC } from 'react';
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import type { Post } from '@/lib/db-types';
 import { getPosts } from '@/app/actions';
 import { ReelItem } from '@/components/reel-item';
@@ -15,6 +16,7 @@ import { useSwipeable } from 'react-swipeable';
 
 const ReelsPage: FC = () => {
   const { toast } = useToast();
+  const router = useRouter();
   const [allPosts, setAllPosts] = useState<Post[]>([]);
   const [reelPosts, setReelPosts] = useState<Post[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -123,11 +125,14 @@ const ReelsPage: FC = () => {
     <div {...swipeHandlers} className="h-screen w-screen overflow-hidden flex flex-col bg-black touch-none">
       {/* Header with Back Button */}
       <div className="absolute top-0 left-0 z-20 p-4">
-        <Button asChild variant="ghost" size="icon" className="text-white hover:bg-white/20 backdrop-blur-sm rounded-full">
-          <Link href="/">
-            <Home className="h-6 w-6" />
-            <span className="sr-only">Back to Feed</span>
-          </Link>
+        <Button
+          onClick={() => router.push('/')}
+          variant="ghost"
+          size="icon"
+          className="text-white hover:bg-white/20 backdrop-blur-sm rounded-full"
+          aria-label="Back to Feed"
+        >
+          <Home className="h-6 w-6" />
         </Button>
       </div>
       
