@@ -64,18 +64,24 @@ async function sendNotificationsForNewPost(post: Post) {
       },
       data: {
         postId: String(post.id),
+        priority: 'high', // For some client implementations
       },
       android: {
-        priority: 'high' as const, // Use 'high' priority for more reliable delivery on all devices
+        priority: 'high' as const,
+        ttl: 3600, // Time to live of 1 hour in seconds
         notification: {
           channelId: 'new_pulses', // A channel for Android 8.0+
           sound: 'default',
         }
       },
       apns: {
+         headers: {
+            'apns-priority': '10', // High priority for iOS
+         },
          payload: {
             aps: {
               sound: 'default',
+              'content-available': 1 // For background updates on iOS
             }
          }
       },
