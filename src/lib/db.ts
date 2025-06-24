@@ -429,7 +429,7 @@ if (!process.env.POSTGRES_URL) {
       const minLat = latitude - latDelta;
       const maxLat = latitude + latDelta;
       const minLon = longitude - lonDelta;
-      const maxLon = longitude - lonDelta;
+      const maxLon = longitude + lonDelta;
   
       const result: QueryResult<{ token: string }> = await pool.query(
         `SELECT token FROM device_tokens
