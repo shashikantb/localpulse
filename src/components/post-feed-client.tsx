@@ -9,7 +9,7 @@ import { PostCard } from '@/components/post-card';
 import { PostForm, HASHTAG_CATEGORIES } from '@/components/post-form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { MapPin, Terminal, Zap, Loader2, Filter, SlidersHorizontal, Rss, Tag, ChevronDown, BellDot, ListPlus, RefreshCw } from 'lucide-react';
+import { MapPin, Terminal, Zap, Loader2, Filter, SlidersHorizontal, Rss, Tag, ChevronDown, Bell, BellOff, BellRing, ListPlus, RefreshCw } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
@@ -128,39 +128,46 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
     }
   }, [toast]);
 
-  useEffect(() => {
-    const attemptRegisterFcmToken = async (currentLocation: { latitude: number; longitude: number } | null) => {
-      if (typeof window !== 'undefined' && window.Android && typeof window.Android.getFCMToken === 'function') {
-        try {
-          const fcmToken = window.Android.getFCMToken();
-          if (fcmToken) {
-            const lat = currentLocation?.latitude;
-            const lon = currentLocation?.longitude;
-            const result = await registerDeviceToken(fcmToken, lat, lon);
-            if (result.success) {
-              toast({ title: 'Notifications Ready', description: 'You will be notified of nearby pulses.', variant: 'default' });
-              setNotificationPermissionStatus('granted');
-            } else {
-              toast({ title: 'Notification Setup Failed', description: result.error, variant: 'destructive' });
-               setNotificationPermissionStatus('denied');
-            }
-          } else {
-             setNotificationPermissionStatus('default');
-          }
-        } catch (error) {
-          console.error('Error interacting with Android FCM interface:', error);
-          toast({ title: 'Notification Error', description: 'Could not set up notifications with the app.', variant: 'destructive' });
-           setNotificationPermissionStatus('denied');
-        }
-      } else {
-         setNotificationPermissionStatus('unavailable'); 
-      }
-    };
-
-    if (!loadingLocation) { 
-      attemptRegisterFcmToken(location);
+  const handleNotificationRegistration = async () => {
+    if (notificationPermissionStatus === 'granted') {
+      toast({ title: 'Notifications are already on!', description: 'You will continue to receive updates for nearby pulses.' });
+      return;
     }
-  }, [location, loadingLocation, toast]);
+    if (notificationPermissionStatus === 'denied' || notificationPermissionStatus === 'unavailable') {
+      toast({ title: 'Notifications are unavailable', description: 'Permission was denied or your browser is not supported yet.', variant: 'destructive' });
+      return;
+    }
+
+    if (typeof window !== 'undefined' && window.Android && typeof window.Android.getFCMToken === 'function') {
+      try {
+        const fcmToken = window.Android.getFCMToken();
+        if (fcmToken) {
+          const result = await registerDeviceToken(fcmToken, location?.latitude, location?.longitude);
+          if (result.success) {
+            toast({ title: 'Notifications Enabled!', description: 'You will now be notified of nearby pulses.' });
+            setNotificationPermissionStatus('granted');
+          } else {
+            toast({ title: 'Notification Setup Failed', description: result.error, variant: 'destructive' });
+            setNotificationPermissionStatus('denied');
+          }
+        } else {
+          setNotificationPermissionStatus('denied');
+          toast({ title: 'Notification Error', description: 'Could not get a valid notification token from the app.', variant: 'destructive' });
+        }
+      } catch (error) {
+        console.error('Error interacting with Android FCM interface:', error);
+        toast({ title: 'Notification Error', description: 'Could not communicate with the app to set up notifications.', variant: 'destructive' });
+        setNotificationPermissionStatus('denied');
+      }
+    } else {
+      setNotificationPermissionStatus('unavailable');
+      toast({
+        title: 'Web Notifications Coming Soon!',
+        description: 'This feature is currently designed for our native Android app. Support for web browsers is under development.',
+        duration: 7000,
+      });
+    }
+  };
 
 
   const fetchAndSetAllPosts = useCallback(async () => {
@@ -489,18 +496,21 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
             </CardContent>
             </Card>
 
-            <div className="flex justify-between items-center sticky top-6 z-30 mb-4 px-1">
-                <div>
-                    {notificationPermissionStatus === 'granted' && (
-                        <span className="text-xs text-green-600 flex items-center"><BellDot className="w-3 h-3 mr-1"/> Notifications on</span>
+            <div className="flex justify-end items-center sticky top-6 z-30 mb-4 px-1 gap-2">
+                <Button
+                    variant="outline"
+                    className="shadow-lg hover:shadow-xl transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary"
+                    onClick={handleNotificationRegistration}
+                >
+                    {notificationPermissionStatus === 'granted' ? (
+                        <BellRing className="w-5 h-5 mr-2 text-green-500" />
+                    ) : notificationPermissionStatus === 'denied' || notificationPermissionStatus === 'unavailable' ? (
+                        <BellOff className="w-5 h-5 mr-2 text-red-500" />
+                    ) : (
+                        <Bell className="w-5 h-5 mr-2" />
                     )}
-                    {notificationPermissionStatus === 'denied' && (
-                        <span className="text-xs text-red-600 flex items-center"><BellDot className="w-3 h-3 mr-1"/> Notifications off</span>
-                    )}
-                     {notificationPermissionStatus === 'unavailable' && (
-                        <span className="text-xs text-muted-foreground flex items-center"><BellDot className="w-3 h-3 mr-1"/> Notification status unavailable</span>
-                    )}
-                </div>
+                    <span className="hidden sm:inline">Notifications</span>
+                </Button>
                 <Sheet>
                 <SheetTrigger asChild>
                     <Button variant="outline" className="shadow-lg hover:shadow-xl transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary">
@@ -598,3 +608,5 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
 };
 
 export default PostFeedClient;
+
+    
