@@ -244,17 +244,23 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
 
 
       <CardFooter className="text-xs text-muted-foreground flex flex-wrap items-center justify-between pt-2 pb-3 px-5 border-t border-border/40 mt-1 gap-y-2 bg-card/50">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <Map className="w-4 h-4 text-primary/70 flex-shrink-0" />
-           <span className="font-medium text-muted-foreground">
+        <a
+          href={`https://www.google.com/maps/dir/?api=1&destination=${post.latitude},${post.longitude}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 flex-wrap cursor-pointer hover:text-primary transition-colors group"
+          title="Click to get directions"
+        >
+          <Map className="w-4 h-4 text-primary/70 flex-shrink-0 transition-colors group-hover:text-primary" />
+           <span className="font-medium text-muted-foreground transition-colors group-hover:text-primary group-hover:underline">
             Location: {post.latitude.toFixed(3)}, {post.longitude.toFixed(3)}
           </span>
           {distance !== null && (
-            <span className="ml-1 text-accent font-semibold">
+            <span className="ml-1 text-accent font-semibold transition-colors group-hover:underline">
               (approx. {distance < 0.1 ? '<100m' : `${distance.toFixed(1)} km`} away)
             </span>
           )}
-        </div>
+        </a>
       </CardFooter>
 
       <div className="px-5 pb-4 pt-2 flex items-center space-x-2 border-t border-border/30 bg-card/20 flex-wrap gap-y-2">
@@ -341,5 +347,3 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
     </Card>
   );
 };
-
-    
