@@ -244,12 +244,12 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
 
       <CardFooter className="text-xs text-muted-foreground flex flex-wrap items-center justify-between pt-2 pb-3 px-5 border-t border-border/40 mt-1 gap-y-2 bg-card/50">
         <a
-          href={`https://www.google.com/maps/dir/?api=1&destination=${post.latitude},${post.longitude}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1.5 flex-wrap cursor-pointer hover:text-primary transition-colors group"
-          title="Click to get directions"
-        >
+  href={`https://www.google.com/maps/dir/?api=1&destination=${post.latitude},${post.longitude}`}
+  target="_blank"
+  rel="noopener noreferrer"
+  className="flex items-center gap-1.5 flex-wrap cursor-pointer hover:text-primary transition-colors group"
+  title="Click to get directions"
+>
           <Map className="w-4 h-4 text-primary/70 flex-shrink-0 transition-colors group-hover:text-primary" />
            <span className="font-medium text-muted-foreground transition-colors group-hover:text-primary group-hover:underline">
             Location: {post.latitude.toFixed(3)}, {post.longitude.toFixed(3)}
