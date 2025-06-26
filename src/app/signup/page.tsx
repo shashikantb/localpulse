@@ -17,6 +17,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { signUp } from '@/app/auth/actions';
 import { Loader2, UserPlus, ShieldAlert, Building, ShieldCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 
 const signupSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters.'),
@@ -34,8 +35,13 @@ const SignupPage: FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
-  const { register, handleSubmit, formState: { errors } } = useForm<SignupFormInputs>({
+  const form = useForm<SignupFormInputs>({
     resolver: zodResolver(signupSchema),
+    defaultValues: {
+      name: '',
+      email: '',
+      password: '',
+    },
   });
 
   const onSubmit: SubmitHandler<SignupFormInputs> = async (data) => {
@@ -93,59 +99,102 @@ const SignupPage: FC = () => {
           <CardDescription>Join LocalPulse to share and discover.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            {error && (
-              <Alert variant="destructive">
-                <ShieldAlert className="h-4 w-4" />
-                <AlertTitle>Signup Failed</AlertTitle>
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            
-            <div className="space-y-2">
-              <Label htmlFor="name">Full Name</Label>
-              <Input id="name" {...register('name')} disabled={isSubmitting} />
-              {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
-            </div>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              {error && (
+                <Alert variant="destructive">
+                  <ShieldAlert className="h-4 w-4" />
+                  <AlertTitle>Signup Failed</AlertTitle>
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+              
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <Label htmlFor="name">Full Name</Label>
+                    <FormControl>
+                      <Input id="name" {...field} disabled={isSubmitting} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" {...register('email')} disabled={isSubmitting} autoComplete="email"/>
-              {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
-            </div>
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <Label htmlFor="email">Email</Label>
+                    <FormControl>
+                      <Input id="email" type="email" {...field} disabled={isSubmitting} autoComplete="email"/>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" {...register('password')} disabled={isSubmitting} autoComplete="new-password"/>
-              {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
-            </div>
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <Label htmlFor="password">Password</Label>
+                    <FormControl>
+                      <Input id="password" type="password" {...field} disabled={isSubmitting} autoComplete="new-password"/>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            <div className="space-y-3">
-              <Label>I am a...</Label>
-              <RadioGroup {...register('role')} onValueChange={(value) => form.setValue('role', value)} className="grid grid-cols-2 gap-4">
-                <div>
-                  <RadioGroupItem value="Business" id="role-business" className="peer sr-only" />
-                  <Label htmlFor="role-business" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary">
-                    <Building className="mb-3 h-6 w-6" />
-                    Business
-                  </Label>
-                </div>
-                <div>
-                  <RadioGroupItem value="Gorakshak" id="role-gorakshak" className="peer sr-only" />
-                  <Label htmlFor="role-gorakshak" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary">
-                    <ShieldCheck className="mb-3 h-6 w-6" />
-                    Gorakshak
-                  </Label>
-                </div>
-              </RadioGroup>
-              {errors.role && <p className="text-sm text-destructive">{errors.role.message}</p>}
-            </div>
+              <FormField
+                control={form.control}
+                name="role"
+                render={({ field }) => (
+                  <FormItem className="space-y-3">
+                    <Label>I am a...</Label>
+                    <FormControl>
+                      <RadioGroup
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                        className="grid grid-cols-2 gap-4"
+                        disabled={isSubmitting}
+                      >
+                        <FormItem>
+                           <FormControl>
+                            <RadioGroupItem value="Business" id="role-business" className="peer sr-only" />
+                           </FormControl>
+                           <Label htmlFor="role-business" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer">
+                            <Building className="mb-3 h-6 w-6" />
+                            Business
+                          </Label>
+                        </FormItem>
+                        <FormItem>
+                          <FormControl>
+                            <RadioGroupItem value="Gorakshak" id="role-gorakshak" className="peer sr-only" />
+                          </FormControl>
+                          <Label htmlFor="role-gorakshak" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer">
+                            <ShieldCheck className="mb-3 h-6 w-6" />
+                            Gorakshak
+                          </Label>
+                        </FormItem>
+                      </RadioGroup>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {isSubmitting ? 'Submitting...' : 'Create Account'}
-            </Button>
-          </form>
+              <Button type="submit" className="w-full" disabled={isSubmitting || !form.formState.isValid}>
+                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                {isSubmitting ? 'Submitting...' : 'Create Account'}
+              </Button>
+            </form>
+          </Form>
         </CardContent>
         <CardFooter className="flex justify-center text-sm">
            <p className="text-muted-foreground">
