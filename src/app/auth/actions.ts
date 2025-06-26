@@ -8,6 +8,7 @@ import bcrypt from 'bcryptjs';
 import { createUserDb, getUserByEmailDb, getUserByIdDb } from '@/lib/db';
 import type { NewUser, User } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
+import { cache } from 'react';
 
 const USER_COOKIE_NAME = 'user-auth-token';
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback-secret-for-jwt-that-is-at-least-32-bytes-long');
@@ -99,7 +100,7 @@ export async function logout(): Promise<void> {
   revalidatePath('/', 'layout');
 }
 
-export async function getSession(): Promise<{ user: User | null }> {
+export const getSession = cache(async (): Promise<{ user: User | null }> => {
   const token = cookies().get(USER_COOKIE_NAME)?.value;
   if (!token) {
     return { user: null };
@@ -112,4 +113,4 @@ export async function getSession(): Promise<{ user: User | null }> {
 
   const user = await getUserByIdDb(payload.userId);
   return { user };
-}
+});
