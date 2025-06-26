@@ -68,7 +68,7 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts }) => {
   }, [currentIndex, reelPosts.length, hasMore, isLoading, currentPage, fetchReelPosts]);
 
   const goToPreviousReel = useCallback(() => {
-    setCurrentIndex(prevIndex => (prevIndex === 0 ? 0 : prevIndex - 1));
+    setCurrentIndex(prevIndex => (prevIndex > 0 ? prevIndex - 1 : 0));
   }, []);
 
   const goToNextReel = useCallback(() => {
@@ -98,7 +98,6 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts }) => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [goToNextReel, goToPreviousReel]);
   
-  // This initial check for no posts is important for when the server finds nothing
   useEffect(() => {
       if (initialPosts.length === 0) {
         toast({
@@ -128,11 +127,9 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts }) => {
     );
   }
 
-  const currentPost = reelPosts[currentIndex];
-
   return (
     <div {...swipeHandlers} className="h-screen w-screen overflow-hidden flex flex-col bg-black touch-none">
-      <div className="absolute top-0 left-0 z-20 p-4">
+      <div className="absolute top-0 left-0 z-30 p-4">
         <Button
           onClick={() => router.push('/')}
           variant="ghost"
@@ -144,17 +141,50 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts }) => {
         </Button>
       </div>
       
-      <div className="flex-grow relative">
-        {currentPost && <ReelItem key={currentPost.id} post={currentPost} isActive={true} />}
+      <div className="flex-grow relative w-full h-full overflow-hidden">
+        {reelPosts.map((post, index) => {
+            // Only render the current, previous, and next items to optimize performance
+            if (Math.abs(index - currentIndex) > 1) {
+                return null;
+            }
+
+            const getTransform = () => {
+                if (index < currentIndex) return 'translateY(-100%)';
+                if (index > currentIndex) return 'translateY(100%)';
+                return 'translateY(0)';
+            };
+
+            return (
+                <div
+                    key={post.id}
+                    className="absolute inset-0 w-full h-full transition-transform duration-300 ease-in-out"
+                    style={{ 
+                        transform: getTransform(),
+                        zIndex: index === currentIndex ? 20 : 10,
+                     }}
+                >
+                    <ReelItem
+                        post={post}
+                        isActive={index === currentIndex}
+                    />
+                </div>
+            );
+        })}
+
+        {isLoading && currentIndex >= reelPosts.length - 1 && hasMore && (
+             <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-20">
+                <Loader2 className="w-10 h-10 animate-spin text-white"/>
+            </div>
+        )}
       </div>
 
       {reelPosts.length > 1 && (
-        <div className="absolute bottom-0 left-0 right-0 z-10 flex justify-between items-center p-3 bg-gradient-to-t from-black/50 to-transparent">
+        <div className="absolute bottom-0 left-0 right-0 z-30 flex justify-between items-center p-3 bg-gradient-to-t from-black/50 to-transparent pointer-events-none">
           <Button 
             onClick={goToPreviousReel} 
             variant="ghost" 
             size="lg" 
-            className="text-white hover:bg-white/20 backdrop-blur-sm rounded-full p-3 disabled:opacity-50"
+            className="text-white hover:bg-white/20 backdrop-blur-sm rounded-full p-3 disabled:opacity-50 pointer-events-auto"
             aria-label="Previous Reel"
             disabled={currentIndex === 0}
           >
@@ -173,9 +203,9 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts }) => {
             onClick={goToNextReel} 
             variant="ghost" 
             size="lg" 
-            className="text-white hover:bg-white/20 backdrop-blur-sm rounded-full p-3 disabled:opacity-50"
+            className="text-white hover:bg-white/20 backdrop-blur-sm rounded-full p-3 disabled:opacity-50 pointer-events-auto"
             aria-label="Next Reel"
-            disabled={currentIndex === reelPosts.length - 1}
+            disabled={currentIndex === reelPosts.length - 1 && !hasMore}
           >
             <ChevronRight className="h-7 w-7" />
           </Button>
