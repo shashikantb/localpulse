@@ -49,7 +49,7 @@ interface ReelItemProps {
   isActive: boolean;
 }
 
-const ReelItemComponent: FC<ReelItemProps> = ({ post, isActive }) => {
+export const ReelItem: FC<ReelItemProps> = ({ post, isActive }) => {
   const { toast } = useToast();
   const timeAgo = formatDistanceToNowStrict(new Date(post.createdat), { addSuffix: true });
 
@@ -62,7 +62,7 @@ const ReelItemComponent: FC<ReelItemProps> = ({ post, isActive }) => {
   const [showComments, setShowComments] = useState(false);
   const [currentOrigin, setCurrentOrigin] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [isInternallyMuted, setIsInternallyMuted] = useState(false); // Default to unmuted
+  const [isInternallyMuted, setIsInternallyMuted] = useState(true); // Default to muted for better autoplay
 
 
   useEffect(() => {
@@ -75,37 +75,42 @@ const ReelItemComponent: FC<ReelItemProps> = ({ post, isActive }) => {
     setDisplayLikeCount(post.likecount);
     setComments([]);
     setShowComments(false);
-    setIsInternallyMuted(false); // Reset to unmuted for new posts
+    setIsInternallyMuted(true);
   }, [post.id, post.likecount]);
 
 
   useEffect(() => {
     const videoElement = videoRef.current;
-    if (videoElement && post.mediatype === 'video') {
+    if (!videoElement || post.mediatype !== 'video') {
+      return; // Not a video, do nothing.
+    }
+
+    if (isActive) {
+      // This reel is active, so we try to play it.
+      videoElement.muted = isInternallyMuted;
+      const playPromise = videoElement.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(error => {
+          // Autoplay was likely prevented by the browser.
+          // This is a common policy, especially for unmuted videos.
+          // We'll ensure it's muted and try playing again.
+          console.warn("Unmuted autoplay failed. Muting and retrying.", error);
+          if (videoElement) { // Check if element still exists
+            setIsInternallyMuted(true);
+            videoElement.muted = true;
+            videoElement.play().catch(finalError => {
+               console.error("Muted autoplay also failed.", finalError);
+            })
+          }
+        });
+      }
+    } else {
+      // This reel is not active, so we pause it and reset to the beginning.
+      // This is important for when the user swipes away.
       videoElement.pause();
       videoElement.currentTime = 0;
-      // videoElement.load(); // Explicitly calling load() might not always be necessary with src change
-
-      if (isActive) {
-        videoElement.muted = isInternallyMuted; 
-        const playPromise = videoElement.play();
-        if (playPromise !== undefined) {
-          playPromise.catch(error => {
-            console.warn("Video autoplay (unmuted by default) likely prevented by browser:", error);
-            // If unmuted autoplay fails, browser might require user interaction.
-            // Or, we could fallback to muted autoplay here if desired.
-            // For now, we let it fail and user can tap to play/unmute.
-            setIsInternallyMuted(true); // If autoplay fails, reflect that it's now muted.
-            videoElement.muted = true; 
-          });
-        }
-      }
-    } else if (videoElement && post.mediatype !== 'video' && isActive) { // if it's not a video but was active
-        // This part might not be necessary if only videos use videoRef
-    } else if (videoElement && !isActive) { // If it's not active, ensure it's paused
-        videoElement.pause();
     }
-  }, [isActive, post.id, post.mediaurl, post.mediatype, isInternallyMuted]);
+  }, [isActive, post.id, post.mediatype, isInternallyMuted]);
 
 
   const fetchPostComments = useCallback(async () => {
@@ -188,16 +193,14 @@ const ReelItemComponent: FC<ReelItemProps> = ({ post, isActive }) => {
   const handleVideoTap = () => {
     if (videoRef.current) {
       const currentVideo = videoRef.current;
-      const newMutedState = !currentVideo.muted;
-      currentVideo.muted = newMutedState;
-      setIsInternallyMuted(newMutedState);
-
       if (currentVideo.paused) {
         currentVideo.play().catch(error => {
           console.warn("Play on tap failed. Autoplay might be strictly blocked.", error);
-          // If play fails, it might be because interaction is needed for unmuted play.
-          // It's already trying to play, so no further action needed here for play.
         });
+      } else {
+        const newMutedState = !currentVideo.muted;
+        currentVideo.muted = newMutedState;
+        setIsInternallyMuted(newMutedState);
       }
     }
   };
@@ -205,7 +208,7 @@ const ReelItemComponent: FC<ReelItemProps> = ({ post, isActive }) => {
 
   return (
     <div className="h-full w-full flex flex-col items-center justify-center bg-black relative text-white">
-      <div className="w-full flex-grow flex items-center justify-center overflow-hidden relative">
+      <div className="w-full flex-grow flex items-center justify-center overflow-hidden relative" onClick={handleVideoTap}>
         {post.mediatype === 'image' && post.mediaurl && (
           <Image
             src={post.mediaurl}
@@ -226,15 +229,13 @@ const ReelItemComponent: FC<ReelItemProps> = ({ post, isActive }) => {
               playsInline // Important for iOS
               preload="auto"
               className="w-full h-full object-contain"
-              onClick={handleVideoTap}
             />
             <div 
               className="absolute top-4 right-4 p-2 bg-black/50 rounded-full cursor-pointer z-10"
-              onClick={handleVideoTap}
+              onClick={(e) => { e.stopPropagation(); handleVideoTap(); }}
             >
               {isInternallyMuted ? <VolumeX className="w-5 h-5 text-white" /> : <Volume2 className="w-5 h-5 text-white" />}
             </div>
-             {/* Show play icon if video is paused AND active AND not muted (suggesting user wants to play it unmuted) */}
              {post.mediatype === 'video' && videoRef.current?.paused && isActive && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
                     <PlayCircle className="w-16 h-16 text-white/50 backdrop-blur-sm rounded-full" />
@@ -253,7 +254,7 @@ const ReelItemComponent: FC<ReelItemProps> = ({ post, isActive }) => {
               </AvatarFallback>
             </Avatar>
             <div>
-              <p className="text-sm font-semibold">Anonymous Pulsar</p>
+              <p className="text-sm font-semibold">{post.authorname || 'Anonymous Pulsar'}</p>
               <p className="text-xs text-gray-300">{timeAgo} {post.city && post.city !== "Unknown City" ? `· ${post.city}`: ''}</p>
             </div>
           </div>
@@ -326,6 +327,3 @@ const ReelItemComponent: FC<ReelItemProps> = ({ post, isActive }) => {
     </div>
   );
 };
-
-export const ReelItem = React.memo(ReelItemComponent);
-
