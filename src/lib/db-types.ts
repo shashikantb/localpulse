@@ -1,35 +1,64 @@
 
-// Define the structure of a Post
+export type UserRole = 'Business' | 'Gorakshak' | 'Admin';
+
+// Define the structure of a User for client-side use (omitting password)
+export interface User {
+  id: number;
+  email: string;
+  name: string;
+  role: UserRole;
+  status: 'pending' | 'approved' | 'rejected';
+  createdat: string;
+}
+
+// Full user structure from DB, including password hash
+export interface UserWithPassword extends User {
+  passwordhash: string;
+}
+
+// For creating a new user
+export type NewUser = {
+  name: string;
+  email: string;
+  role: 'Business' | 'Gorakshak';
+  passwordplaintext: string;
+};
+
+// Define the structure of a Post, now with author details
 export interface Post {
   id: number;
   content: string;
   latitude: number;
   longitude: number;
-  createdat: string; // PostgreSQL returns lowercase for TIMESTAMPTZ column names
+  createdat: string;
   mediaurl?: string | null;
   mediatype?: 'image' | 'video' | null;
   likecount: number;
   city?: string | null;
-  hashtags?: string[] | null; // Hashtags associated with the post
+  hashtags?: string[] | null;
+  authorid: number | null; // This will come from the posts table
+  authorname: string | null; // This will be joined from the users table
+  authorrole: UserRole | null; // This will be joined from the users table
 }
 
-// Define the structure for adding a new post from the client (omit id, createdAt, likeCount, and city)
-// Note: Frontend might send mixed case, but DB interactions will use lowercase from 'pg'
+// For creating a new post from the client, now requires authorId
 export type NewPost = {
   content: string;
   latitude: number;
   longitude: number;
   mediaUrl?: string | null;
   mediaType?: 'image' | 'video' | null;
-  hashtags: string[]; // Hashtags are now compulsory
+  hashtags: string[];
+  authorId: number;
 };
 
-// Define the structure for inserting a new post into the DB (includes city and hashtags)
-export type DbNewPost = Omit<NewPost, 'mediaUrl' | 'mediaType'> & {
+// For inserting a new post into the DB
+export type DbNewPost = Omit<NewPost, 'mediaUrl' | 'mediaType' | 'authorId'> & {
   mediaurl?: string | null;
   mediatype?: 'image' | 'video' | null;
   city?: string | null;
   hashtags: string[];
+  authorid: number; // Stored in DB
 };
 
 
@@ -37,14 +66,14 @@ export type DbNewPost = Omit<NewPost, 'mediaUrl' | 'mediaType'> & {
 export interface Comment {
   id: number;
   postid: number;
-  author: string;
+  author: string; // For now, can be user name or default
   content: string;
-  createdat: string; // PostgreSQL returns lowercase
+  createdat: string;
 }
 
 // Define the structure for adding a new comment
 export type NewComment = {
-  postId: number; // Keep camelCase for frontend consistency
+  postId: number;
   author: string;
   content: string;
 };

@@ -1,38 +1,25 @@
+
 'use client';
 import type { FC, FormEvent } from 'react';
 import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import type { Post, Comment as CommentType } from '@/lib/db-types';
+import type { Post, Comment as CommentType, User } from '@/lib/db-types';
 import { formatDistanceToNowStrict } from 'date-fns';
-import { MapPin, UserCircle, Heart, MessageCircle, Send, Map, CornerDownRight, Instagram, Share2, Rss, ThumbsUp, Tag } from 'lucide-react';
+import { MapPin, UserCircle, MessageCircle, Send, Map, CornerDownRight, Instagram, Share2, Rss, ThumbsUp, Tag, ShieldCheck, Building } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { likePost, addComment, getComments } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 
-
-// Inline SVG for WhatsApp icon
 const WhatsAppIcon: FC<React.SVGProps<SVGSVGElement>> = (props) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    {...props}
-  >
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
     <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
     <path d="m10.4 8.3-2.2 4.7a.8.8 0 0 0 .2 1l2.4 1.5a.8.8 0 0 0 1-.2l1-1.7a.8.8 0 0 0-.3-1l-2.3-2.1a.8.8 0 0 0-1 .2Z"></path>
   </svg>
 );
-
 
 const CommentCard: FC<{ comment: CommentType }> = ({ comment }) => {
   return (
@@ -59,12 +46,17 @@ interface PostCardProps {
   post: Post;
   userLocation: { latitude: number; longitude: number } | null;
   calculateDistance: (lat1: number, lon1: number, lat2: number, lon2: number) => number;
+  sessionUser: User | null;
 }
 
-export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDistance }) => {
+export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDistance, sessionUser }) => {
   const { toast } = useToast();
   const timeAgo = formatDistanceToNowStrict(new Date(post.createdat), { addSuffix: true });
   const distance = userLocation ? calculateDistance(userLocation.latitude, userLocation.longitude, post.latitude, post.longitude) : null;
+  
+  const authorName = post.authorname || 'Anonymous Pulsar';
+  const authorRole = post.authorrole;
+  const authorInitial = authorName.charAt(0).toUpperCase();
 
   const [displayLikeCount, setDisplayLikeCount] = useState<number>(post.likecount);
   const [isLiking, setIsLiking] = useState<boolean>(false);
@@ -101,11 +93,9 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
 
   const handleLikeClick = async () => {
     if (isLiking) return; 
-
     setIsLiking(true);
     const previousLikeCount = displayLikeCount;
     setDisplayLikeCount(prevCount => prevCount + 1);
-
     try {
       const result = await likePost(post.id);
       if (result.error || !result.post) {
@@ -113,12 +103,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
         toast({ variant: 'destructive', title: 'Like Error', description: result.error || 'Could not like the post.' });
       } else {
         setDisplayLikeCount(result.post.likecount);
-         toast({
-          title: 'Liked!',
-          description: 'Pulse liked successfully.',
-          variant: 'default',
-          duration: 2000,
-        });
+        toast({ title: 'Liked!', description: 'Pulse liked successfully.', duration: 2000 });
       }
     } catch (error: any) {
       setDisplayLikeCount(previousLikeCount);
@@ -136,7 +121,9 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
     }
     setIsSubmittingComment(true);
     try {
-      const added = await addComment({ postId: post.id, content: newComment.trim(), author: 'PulseFan' });
+      // Use session user's name if available, otherwise a default
+      const author = sessionUser?.name || 'PulseFan';
+      const added = await addComment({ postId: post.id, content: newComment.trim(), author });
       setComments(prev => [added, ...prev]);
       setNewComment('');
       toast({ title: 'Comment Pulsed!', description: 'Your thoughts are now part of the vibe.', className:"bg-accent text-accent-foreground" });
@@ -148,7 +135,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
   };
 
   const handleShareWhatsApp = () => {
-    const shareText = `Check out this pulse: ${post.content}\n\nSee more at ${currentOrigin}`;
+    const shareText = `Check out this pulse from ${authorName}: ${post.content}\n\nSee more at ${currentOrigin}`;
     const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
     window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
   };
@@ -156,21 +143,9 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
   const handleShareInstagram = async () => {
     try {
       await navigator.clipboard.writeText(post.content);
-      let toastMessage = "Post content copied to clipboard! Open Instagram and paste it in your story or post.";
-      if (post.mediaurl) {
-        toastMessage = "Post content copied! Remember to save the image/video first, then paste the content on Instagram.";
-      }
-      toast({
-        title: 'Ready for Instagram!',
-        description: toastMessage,
-      });
+      toast({ title: 'Ready for Instagram!', description: 'Post content copied!' });
     } catch (err) {
-      console.error('Failed to copy text: ', err);
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Could not copy content. Please try again.',
-      });
+      toast({ variant: 'destructive', title: 'Error', description: 'Could not copy content.' });
     }
   };
 
@@ -180,14 +155,15 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
       <CardHeader className="pb-3 pt-5 px-5 flex flex-row items-start space-x-4 bg-gradient-to-br from-card to-muted/10">
         <Avatar className="h-12 w-12 border-2 border-primary/60 shadow-md">
           <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20">
-            <UserCircle className="h-7 w-7 text-primary/80" />
+            {authorRole === 'Business' && <Building className="h-6 w-6 text-primary/80" />}
+            {authorRole === 'Gorakshak' && <ShieldCheck className="h-6 w-6 text-primary/80" />}
+            {!authorRole && <UserCircle className="h-7 w-7 text-primary/80" />}
           </AvatarFallback>
         </Avatar>
         <div className="flex-1">
           <div className="flex items-center justify-between">
             <p className="text-sm text-primary font-semibold flex items-center">
-              <Rss className="w-4 h-4 mr-1.5 text-accent flex-shrink-0 opacity-80" />
-              Anonymous Pulsar
+              {authorName}
             </p>
             <CardDescription className="text-xs text-muted-foreground font-medium">
               {timeAgo}
@@ -202,22 +178,15 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
         </div>
       </CardHeader>
 
+      {/* Media content remains the same */}
       {post.mediaurl && post.mediatype && (
         <div className="px-5 pb-0 pt-2">
           <div className="relative w-full aspect-[16/10] overflow-hidden rounded-lg border-2 border-border/50 shadow-inner bg-muted/50 group">
-            {post.mediatype === 'image' && post.mediaurl.startsWith('data:image') && (
-              <Image
-                src={post.mediaurl as string}
-                alt="Post image"
-                fill
-                style={{ objectFit: "contain" }}
-                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                className="transition-transform duration-300 group-hover:scale-105"
-                data-ai-hint="user generated content"
-              />
+            {post.mediatype === 'image' && (
+              <Image src={post.mediaurl} alt="Post image" fill style={{ objectFit: "contain" }} sizes="(max-width: 768px) 100vw, 50vw" className="transition-transform duration-300 group-hover:scale-105" data-ai-hint="user generated content" />
             )}
-            {post.mediatype === 'video' && post.mediaurl.startsWith('data:video') && (
-              <video controls src={post.mediaurl as string} className="w-full h-full object-contain" />
+            {post.mediatype === 'video' && (
+              <video controls src={post.mediaurl} className="w-full h-full object-contain" />
             )}
              <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/50 text-white text-xs rounded-md backdrop-blur-sm">
                 {post.mediatype.charAt(0).toUpperCase() + post.mediatype.slice(1)}
@@ -230,7 +199,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
         <p className="text-foreground/90 leading-relaxed text-base whitespace-pre-wrap break-words">{post.content}</p>
       </CardContent>
 
-      {post.hashtags && post.hashtags.length > 0 && (
+      {post.hashtags && post.hashtags.length > 0 && ( /* Hashtags display remains the same */
         <div className="px-5 pt-1 pb-2 flex flex-wrap gap-2 items-center">
           {post.hashtags.map(tag => (
             <Badge key={tag} variant="secondary" className="text-xs bg-primary/10 text-primary hover:bg-primary/20 cursor-default">
@@ -241,15 +210,8 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
         </div>
       )}
 
-
       <CardFooter className="text-xs text-muted-foreground flex flex-wrap items-center justify-between pt-2 pb-3 px-5 border-t border-border/40 mt-1 gap-y-2 bg-card/50">
-        <a
-  href={`https://www.google.com/maps/dir/?api=1&destination=${post.latitude},${post.longitude}`}
-  target="_blank"
-  rel="noopener noreferrer"
-  className="flex items-center gap-1.5 flex-wrap cursor-pointer hover:text-primary transition-colors group"
-  title="Click to get directions"
->
+        <a href={`https://www.google.com/maps/dir/?api=1&destination=${post.latitude},${post.longitude}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 flex-wrap cursor-pointer hover:text-primary transition-colors group" title="Click to get directions">
           <Map className="w-4 h-4 text-primary/70 flex-shrink-0 transition-colors group-hover:text-primary" />
            <span className="font-medium text-muted-foreground transition-colors group-hover:text-primary group-hover:underline">
             Location: {post.latitude.toFixed(3)}, {post.longitude.toFixed(3)}
@@ -282,23 +244,10 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
         <Button variant="ghost" size="sm" onClick={async () => {
              if (navigator.share) {
                 try {
-                    await navigator.share({
-                        title: 'Check out this LocalPulse!',
-                        text: post.content,
-                        url: currentOrigin,
-                    });
-                    toast({ title: 'Shared!', description: 'Pulse shared successfully.' });
-                } catch (error) {
-                    toast({ variant: 'destructive', title: 'Share Error', description: 'Could not share this pulse.' });
-                    console.error('Error sharing:', error);
-                }
+                    await navigator.share({ title: 'Check out this LocalPulse!', text: post.content, url: currentOrigin, });
+                } catch (error) { console.error('Error sharing:', error); }
             } else {
-                try {
-                    await navigator.clipboard.writeText(`${post.content}\n\nSee more at ${currentOrigin}`);
-                    toast({ title: 'Link Copied!', description: 'Pulse content and link copied to clipboard.' });
-                } catch (err) {
-                    toast({ variant: 'destructive', title: 'Error', description: 'Could not copy content.' });
-                }
+                try { await navigator.clipboard.writeText(`${post.content}\n\nSee more at ${currentOrigin}`); toast({ title: 'Link Copied!' }); } catch (err) { toast({ variant: 'destructive', title: 'Error', description: 'Could not copy content.' }); }
             }
         }} className="flex items-center space-x-1.5 text-muted-foreground hover:text-blue-500 transition-colors duration-150 group">
           <Share2 className="w-5 h-5 group-hover:scale-110 transition-transform" />
@@ -316,7 +265,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
             <div className="flex items-start space-x-3">
               <Avatar className="h-10 w-10 border-2 border-accent/50 flex-shrink-0 shadow-sm">
                 <AvatarFallback className="bg-muted text-accent font-semibold">
-                  P
+                  {sessionUser?.name.charAt(0).toUpperCase() || 'P'}
                 </AvatarFallback>
               </Avatar>
               <Textarea

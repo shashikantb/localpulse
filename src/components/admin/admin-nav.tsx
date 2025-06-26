@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { adminLogout } from '@/app/admin/actions';
-import { LayoutDashboard, FileText, Users, LogOut, Settings, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, FileText, Users, LogOut, Settings, ShieldCheck, UserCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 
@@ -14,6 +14,7 @@ const navItems = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/posts', label: 'Manage Posts', icon: FileText },
   { href: '/admin/users', label: 'Manage Users', icon: Users },
+  { href: '/admin/approvals', label: 'Approvals', icon: UserCheck },
   { href: '/admin/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -29,7 +30,6 @@ export const AdminNav: FC = () => {
         title: 'Logged Out',
         description: 'You have been successfully logged out.',
       });
-      // Redirect is handled by the server action, but router.refresh() can ensure client state is updated if needed.
       router.refresh(); 
     } catch (error) {
       console.error('Logout failed:', error);
@@ -53,10 +53,10 @@ export const AdminNav: FC = () => {
         {navItems.map((item) => (
           <Button
             key={item.href}
-            variant={pathname === item.href ? 'default' : 'ghost'}
+            variant={pathname.startsWith(item.href) && item.href !== '/admin' || pathname === '/admin' && item.href === '/admin' ? 'default' : 'ghost'}
             className={cn(
               "w-full justify-start text-base",
-              pathname === item.href ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+               (pathname.startsWith(item.href) && item.href !== '/admin' || pathname === '/admin' && item.href === '/admin') ? "bg-primary text-primary-foreground" : "hover:bg-muted"
             )}
             asChild
           >

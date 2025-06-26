@@ -3,16 +3,39 @@ import type { FC } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Users, PlusCircle, Search } from 'lucide-react';
+import { Users, PlusCircle, Search, MoreVertical, Trash2, Edit, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { getAllUsersDb } from '@/lib/db';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Badge } from '@/components/ui/badge';
 
-// Placeholder data
-const sampleUsers = [
-  { id: 1, name: "Alice Wonderland", email: "alice@example.com", role: "User", joinedAt: new Date().toISOString(), posts: 15 },
-  { id: 2, name: "Bob The Builder", email: "bob@example.com", role: "User", joinedAt: new Date(Date.now() - 86400000 * 5).toISOString(), posts: 3 },
-  { id: 3, name: "Charlie Brown", email: "charlie@example.com", role: "Admin", joinedAt: new Date(Date.now() - 86400000 * 30).toISOString(), posts: 0 },
-];
 
-const AdminManageUsersPage: FC = () => {
+const AdminManageUsersPage: FC = async () => {
+  const users = await getAllUsersDb();
+
+  const getStatusVariant = (status: string): "default" | "secondary" | "destructive" => {
+    switch (status) {
+        case 'approved': return 'default';
+        case 'pending': return 'secondary';
+        case 'rejected': return 'destructive';
+        default: return 'secondary';
+    }
+  }
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+        case 'approved': return <CheckCircle className="w-3 h-3 mr-1 text-green-500"/>;
+        case 'pending': return <Clock className="w-3 h-3 mr-1 text-yellow-500"/>;
+        case 'rejected': return <XCircle className="w-3 h-3 mr-1 text-red-500"/>;
+        default: return null;
+    }
+  }
+
+
   return (
     <div className="space-y-8">
       <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -20,7 +43,7 @@ const AdminManageUsersPage: FC = () => {
           <h1 className="text-4xl font-bold tracking-tight text-foreground">Manage Users</h1>
           <p className="text-lg text-muted-foreground">View, edit roles, or manage user accounts.</p>
         </div>
-        <Button>
+        <Button disabled>
           <PlusCircle className="mr-2 h-5 w-5" />
           Add New User
         </Button>
@@ -33,7 +56,7 @@ const AdminManageUsersPage: FC = () => {
            <div className="pt-2">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-              <Input placeholder="Search users by name, email, role..." className="pl-10 w-full md:w-1/2 lg:w-1/3" />
+              <Input placeholder="Search users by name, email, role..." className="pl-10 w-full md:w-1/2 lg:w-1/3" disabled/>
             </div>
           </div>
         </CardHeader>
@@ -42,38 +65,51 @@ const AdminManageUsersPage: FC = () => {
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b">
-                  <th className="p-3 font-semibold">ID</th>
                   <th className="p-3 font-semibold">Name</th>
                   <th className="p-3 font-semibold">Email</th>
                   <th className="p-3 font-semibold">Role</th>
-                  <th className="p-3 font-semibold">Posts</th>
+                  <th className="p-3 font-semibold">Status</th>
                   <th className="p-3 font-semibold">Joined At</th>
                   <th className="p-3 font-semibold text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {sampleUsers.map((user) => (
+                {users.map((user) => (
                   <tr key={user.id} className="border-b hover:bg-muted/50">
-                    <td className="p-3">{user.id}</td>
-                    <td className="p-3">{user.name}</td>
-                    <td className="p-3">{user.email}</td>
+                    <td className="p-3 font-medium">{user.name}</td>
+                    <td className="p-3 text-muted-foreground">{user.email}</td>
                     <td className="p-3">
-                      <span className={`px-2 py-1 text-xs rounded-full ${user.role === 'Admin' ? 'bg-primary/20 text-primary' : 'bg-secondary text-secondary-foreground'}`}>
+                      <Badge variant={user.role === 'Admin' ? 'default' : user.role === 'Business' ? 'secondary' : 'outline'}>
                         {user.role}
-                      </span>
+                      </Badge>
                     </td>
-                    <td className="p-3">{user.posts}</td>
-                    <td className="p-3">{new Date(user.joinedAt).toLocaleDateString()}</td>
-                    <td className="p-3 text-right space-x-2">
-                      <Button variant="outline" size="sm">View</Button>
-                      <Button variant="outline" size="sm" className="text-yellow-600 hover:text-yellow-700 border-yellow-500 hover:border-yellow-600">Edit Role</Button>
-                      <Button variant="destructive" size="sm">Suspend</Button>
+                    <td className="p-3">
+                        <Badge variant={getStatusVariant(user.status)} className="capitalize">
+                            {getStatusIcon(user.status)}
+                            {user.status}
+                        </Badge>
+                    </td>
+                    <td className="p-3 text-muted-foreground">{new Date(user.createdat).toLocaleDateString()}</td>
+                    <td className="p-3 text-right">
+                       <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem disabled><Edit className="mr-2 h-4 w-4"/>Edit User</DropdownMenuItem>
+                          <DropdownMenuItem disabled className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                            <Trash2 className="mr-2 h-4 w-4"/>Delete User
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </td>
                   </tr>
                 ))}
-                {sampleUsers.length === 0 && (
+                {users.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="p-6 text-center text-muted-foreground">
+                    <td colSpan={6} className="p-6 text-center text-muted-foreground">
                       <Users className="mx-auto h-12 w-12 mb-2" />
                       No users found.
                     </td>
@@ -84,8 +120,8 @@ const AdminManageUsersPage: FC = () => {
           </div>
            {/* Placeholder for Pagination */}
            <div className="flex justify-end mt-6">
-            <Button variant="outline" size="sm" className="mr-2">Previous</Button>
-            <Button variant="outline" size="sm">Next</Button>
+            <Button variant="outline" size="sm" className="mr-2" disabled>Previous</Button>
+            <Button variant="outline" size="sm" disabled>Next</Button>
           </div>
         </CardContent>
       </Card>
