@@ -6,33 +6,45 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { Post } from '@/lib/db-types';
-import { getPosts } from '@/app/actions';
+import { getMediaPosts } from '@/app/actions';
 import { ReelItem } from '@/components/reel-item';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, Home, Loader2, Film } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useSwipeable } from 'react-swipeable';
+
+const REELS_PER_PAGE = 10;
 
 const ReelsPage: FC = () => {
   const { toast } = useToast();
   const router = useRouter();
-  const [allPosts, setAllPosts] = useState<Post[]>([]);
   const [reelPosts, setReelPosts] = useState<Post[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
 
-  const fetchReelPosts = useCallback(async () => {
+  const fetchReelPosts = useCallback(async (page: number) => {
     setIsLoading(true);
     try {
-      const fetchedPosts = await getPosts();
-      setAllPosts(fetchedPosts);
-      const mediaPosts = fetchedPosts.filter(post => 
-        post.mediaurl && (post.mediatype === 'image' || post.mediatype === 'video')
-      ).sort((a, b) => new Date(b.createdat).getTime() - new Date(a.createdat).getTime()); // Sort by newest first for consistency
-      
-      setReelPosts(mediaPosts);
-      if (mediaPosts.length === 0) {
+      const newPosts = await getMediaPosts({ page, limit: REELS_PER_PAGE });
+
+      if (newPosts.length > 0) {
+        setReelPosts(prev => {
+          const existingIds = new Set(prev.map(p => p.id));
+          const filteredNewPosts = newPosts.filter(p => !existingIds.has(p.id));
+          return [...prev, ...filteredNewPosts];
+        });
+        setCurrentPage(page + 1);
+        if (newPosts.length < REELS_PER_PAGE) {
+            setHasMore(false);
+        }
+      } else {
+        setHasMore(false);
+      }
+
+      if (page === 1 && newPosts.length === 0) {
         toast({
           variant: "default",
           title: "No Reels Yet",
@@ -54,15 +66,22 @@ const ReelsPage: FC = () => {
   }, [toast]);
 
   useEffect(() => {
-    fetchReelPosts();
-  }, [fetchReelPosts]);
+    fetchReelPosts(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (hasMore && !isLoading && reelPosts.length > 0 && currentIndex >= reelPosts.length - 3) {
+      fetchReelPosts(currentPage);
+    }
+  }, [currentIndex, reelPosts.length, hasMore, isLoading, currentPage, fetchReelPosts]);
 
   const goToPreviousReel = useCallback(() => {
-    setCurrentIndex(prevIndex => (prevIndex === 0 ? reelPosts.length - 1 : prevIndex - 1));
-  }, [reelPosts.length]);
+    setCurrentIndex(prevIndex => (prevIndex === 0 ? 0 : prevIndex - 1));
+  }, []);
 
   const goToNextReel = useCallback(() => {
-    setCurrentIndex(prevIndex => (prevIndex === reelPosts.length - 1 ? 0 : prevIndex + 1));
+    setCurrentIndex(prevIndex => (prevIndex < reelPosts.length - 1 ? prevIndex + 1 : prevIndex));
   }, [reelPosts.length]);
 
   const swipeHandlers = useSwipeable({
@@ -73,7 +92,7 @@ const ReelsPage: FC = () => {
        if (reelPosts.length > 1) goToPreviousReel();
     },
     preventScrollOnSwipe: true,
-    trackMouse: true // Allows mouse swiping for testing on desktop
+    trackMouse: true
   });
 
   useEffect(() => {
@@ -84,15 +103,11 @@ const ReelsPage: FC = () => {
         goToPreviousReel();
       }
     };
-
     window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [goToNextReel, goToPreviousReel]);
 
-
-  if (isLoading) {
+  if (isLoading && reelPosts.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-black text-white p-4">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
@@ -123,7 +138,6 @@ const ReelsPage: FC = () => {
 
   return (
     <div {...swipeHandlers} className="h-screen w-screen overflow-hidden flex flex-col bg-black touch-none">
-      {/* Header with Back Button */}
       <div className="absolute top-0 left-0 z-20 p-4">
         <Button
           onClick={() => router.push('/')}
@@ -136,32 +150,38 @@ const ReelsPage: FC = () => {
         </Button>
       </div>
       
-      {/* Reel Item Display */}
       <div className="flex-grow relative">
         {currentPost && <ReelItem key={currentPost.id} post={currentPost} isActive={true} />}
       </div>
 
-      {/* Bottom Navigation Controls - kept for non-touch or as alternative */}
       {reelPosts.length > 1 && (
         <div className="absolute bottom-0 left-0 right-0 z-10 flex justify-between items-center p-3 bg-gradient-to-t from-black/50 to-transparent">
           <Button 
             onClick={goToPreviousReel} 
             variant="ghost" 
             size="lg" 
-            className="text-white hover:bg-white/20 backdrop-blur-sm rounded-full p-3"
+            className="text-white hover:bg-white/20 backdrop-blur-sm rounded-full p-3 disabled:opacity-50"
             aria-label="Previous Reel"
+            disabled={currentIndex === 0}
           >
             <ChevronLeft className="h-7 w-7" />
           </Button>
-          <p className="text-xs text-white/80 bg-black/30 px-2 py-1 rounded-md backdrop-blur-sm">
-            {currentIndex + 1} / {reelPosts.length}
-          </p>
+          
+          <div className="text-xs text-white/80 bg-black/30 px-2 py-1 rounded-md backdrop-blur-sm flex items-center">
+            {isLoading && hasMore ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <span>{currentIndex + 1} / {reelPosts.length}</span>
+            )}
+          </div>
+          
           <Button 
             onClick={goToNextReel} 
             variant="ghost" 
             size="lg" 
-            className="text-white hover:bg-white/20 backdrop-blur-sm rounded-full p-3"
+            className="text-white hover:bg-white/20 backdrop-blur-sm rounded-full p-3 disabled:opacity-50"
             aria-label="Next Reel"
+            disabled={currentIndex === reelPosts.length - 1}
           >
             <ChevronRight className="h-7 w-7" />
           </Button>

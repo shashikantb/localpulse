@@ -57,7 +57,6 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
   const { toast } = useToast();
   const [allPosts, setAllPosts] = useState<Post[]>(initialPosts);
   const [filteredAndSortedPosts, setFilteredAndSortedPosts] = useState<Post[]>([]);
-  const [postsToDisplay, setPostsToDisplay] = useState<Post[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [latestPostIdClientKnows, setLatestPostIdClientKnows] = useState<number>(0);
   const [newPulsesAvailable, setNewPulsesAvailable] = useState(false);
@@ -66,8 +65,11 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [loadingLocation, setLoadingLocation] = useState(true);
-  const [isFullListLoaded, setIsFullListLoaded] = useState<boolean>(initialPosts.length === 0);
-  const [clientSideLoading, setClientSideLoading] = useState(true);
+
+  // This state now tracks if we've reached the end of the server's data.
+  const [hasMorePosts, setHasMorePosts] = useState<boolean>(initialPosts.length === POSTS_PER_PAGE);
+  // This state tracks loading of *subsequent* pages.
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [distanceFilterKm, setDistanceFilterKm] = useState<number>(101); 
@@ -129,32 +131,6 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
     }
   }, [toast]);
 
-  // This effect loads the full list of posts in the background after the initial page has rendered.
-  useEffect(() => {
-    const fetchAllPostsInBackground = async () => {
-      try {
-        const allServerPosts = await getPosts(); // Fetches all posts
-        setAllPosts(allServerPosts);
-      } catch (error) {
-        console.error("Failed to load full post list in background", error);
-        toast({
-            variant: "destructive",
-            title: "Could not load all posts",
-            description: "Filtering may be incomplete.",
-        });
-      } finally {
-        setIsFullListLoaded(true);
-        setClientSideLoading(false); // Finished loading everything we need initially
-      }
-    };
-
-    if (initialPosts.length > 0 && !isFullListLoaded) {
-      fetchAllPostsInBackground();
-    } else {
-      setClientSideLoading(false); // No posts to load, so we're done
-    }
-  }, [initialPosts, isFullListLoaded, toast]);
-
   const handleNotificationRegistration = async () => {
     if (notificationPermissionStatus === 'granted') {
       toast({ title: 'Notifications are already on!', description: 'You will continue to receive updates for nearby pulses.' });
@@ -198,15 +174,14 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
 
 
   const fetchAndSetAllPosts = useCallback(async () => {
-    // This function is for manual refresh, so it should get everything and show loading state
-    setClientSideLoading(true);
+    setIsLoadingMore(true);
     try {
       const fetchedPosts = await getPosts(); // Fetches all posts
       setAllPosts(fetchedPosts);
       if (fetchedPosts.length > 0) {
         setLatestPostIdClientKnows(fetchedPosts.reduce((max, p) => p.id > max ? p.id : max, 0));
       }
-      setIsFullListLoaded(true); // After a refresh, the list is full
+      setHasMorePosts(false); // Assume we have all posts after a manual refresh
     } catch (error) {
       console.error("Error fetching posts:", error);
       toast({
@@ -214,20 +189,18 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
         title: "Fetch Error",
         description: "Could not load posts. Please try again later.",
       });
-      setAllPosts([]); // Keep existing or clear based on strategy
+      setAllPosts([]);
     } finally {
-      setClientSideLoading(false);
+      setIsLoadingMore(false);
     }
   }, [toast]);
 
-  // Initialize latestPostIdClientKnows from initialPosts
   useEffect(() => {
     if (allPosts.length > 0) {
         setLatestPostIdClientKnows(allPosts.reduce((max, p) => p.id > max ? p.id : max, 0));
     }
   }, [allPosts]);
 
-  // Effect for filtering and sorting when the source data or filters change
   useEffect(() => {
     if (loadingLocation && (!showAnyDistance || !location) && !locationError) {
       return;
@@ -264,7 +237,6 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
     }
     
     setFilteredAndSortedPosts(sorted);
-    setCurrentPage(1); // Reset to page 1 whenever filters change
   }, [
     allPosts,
     location,
@@ -276,16 +248,8 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
     locationError
   ]);
 
-  // Effect for pagination when the filtered list or current page changes
   useEffect(() => {
-    const newPostsToDisplay = filteredAndSortedPosts.slice(0, currentPage * POSTS_PER_PAGE);
-    setPostsToDisplay(newPostsToDisplay);
-  }, [filteredAndSortedPosts, currentPage]);
-
-
-  // Polling for new posts
-  useEffect(() => {
-    if (clientSideLoading || loadingLocation) return; 
+    if (loadingLocation) return; 
 
     const intervalId = setInterval(async () => {
       if (document.hidden) return; 
@@ -298,7 +262,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
     }, NEW_POST_POLL_INTERVAL);
 
     return () => clearInterval(intervalId);
-  }, [clientSideLoading, loadingLocation, latestPostIdClientKnows]);
+  }, [loadingLocation, latestPostIdClientKnows]);
 
   const handleLoadNewPulses = async () => {
     setNewPulsesAvailable(false);
@@ -349,9 +313,32 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
     }
   };
   
-  const handleLoadMore = () => {
-    if (clientSideLoading) return; 
-    setCurrentPage(prevPage => prevPage + 1);
+  const handleLoadMore = async () => {
+    if (isLoadingMore || !hasMorePosts) return; 
+
+    setIsLoadingMore(true);
+    const nextPage = currentPage + 1;
+    try {
+        const newPosts = await getPosts({ page: nextPage, limit: POSTS_PER_PAGE });
+        if (newPosts.length > 0) {
+            setAllPosts(prevPosts => [...prevPosts, ...newPosts]);
+            setCurrentPage(nextPage);
+            if (newPosts.length < POSTS_PER_PAGE) {
+                setHasMorePosts(false); // This was the last page
+            }
+        } else {
+            setHasMorePosts(false); // No more posts found
+            toast({
+                title: "You've reached the end!",
+                description: "No more pulses to show for now.",
+            });
+        }
+    } catch (error) {
+        console.error("Error loading more posts:", error);
+        toast({ variant: "destructive", title: "Fetch Error", description: "Could not load more posts." });
+    } finally {
+        setIsLoadingMore(false);
+    }
   };
 
   const handleDistanceChange = (value: number[]) => {
@@ -395,7 +382,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
               step={1}
               value={[distanceFilterKm]} 
               onValueChange={handleDistanceChange} 
-              disabled={!location || clientSideLoading}
+              disabled={!location || isLoadingMore}
               aria-label="Distance filter"
             />
             {!location && <p className="text-xs text-destructive mt-1">Enable location services to use distance filter.</p>}
@@ -408,7 +395,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
             </Label>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="w-full justify-between" disabled={clientSideLoading}>
+                <Button variant="outline" className="w-full justify-between" disabled={isLoadingMore}>
                   <span>Select Hashtags ({filterHashtags.length || 0} selected)</span>
                   <ChevronDown className="ml-2 h-4 w-4" />
                 </Button>
@@ -422,7 +409,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
                         key={tag}
                         checked={filterHashtags.includes(tag)}
                         onCheckedChange={(checked) => handleHashtagFilterChange(tag, !!checked)}
-                        disabled={clientSideLoading}
+                        disabled={isLoadingMore}
                       >
                         {tag}
                       </DropdownMenuCheckboxItem>
@@ -437,7 +424,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
           <Button
               variant="outline"
               onClick={resetAllFilters}
-              disabled={clientSideLoading && (showAnyDistance && filterHashtags.length === 0)}
+              disabled={isLoadingMore && (showAnyDistance && filterHashtags.length === 0)}
               className="w-full"
           >
               Reset All Filters
@@ -453,7 +440,6 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
   );
 
   const activeFilterCount = (filterHashtags.length > 0 ? 1 : 0) + (!showAnyDistance ? 1 : 0);
-  const hasMorePostsToDisplay = postsToDisplay.length < filteredAndSortedPosts.length;
 
   return (
     <div className="space-y-8">
@@ -548,24 +534,9 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
                     )}
                 </div>
 
-                {clientSideLoading && postsToDisplay.length === 0 ? (
-                  Array.from({ length: Math.min(POSTS_PER_PAGE, 3) }).map((_, index) => (
-                      <div key={index} className="space-y-4 p-5 bg-card/70 backdrop-blur-sm rounded-xl shadow-xl animate-pulse border border-border/30">
-                      <div className="flex items-center space-x-3">
-                          <Skeleton className="h-12 w-12 rounded-full bg-muted/50" />
-                          <div className="space-y-2 flex-1">
-                          <Skeleton className="h-4 w-1/3 bg-muted/50" />
-                          <Skeleton className="h-3 w-1/4 bg-muted/50" />
-                          </div>
-                      </div>
-                      <Skeleton className="h-5 w-full bg-muted/50" />
-                      <Skeleton className="h-5 w-5/6 bg-muted/50" />
-                      <Skeleton className="h-40 w-full bg-muted/50 rounded-md" data-ai-hint="placeholder content" />
-                      </div>
-                  ))
-                ) : postsToDisplay.length > 0 ? (
+                {filteredAndSortedPosts.length > 0 ? (
                     <>
-                    {postsToDisplay.map((post) => (
+                    {filteredAndSortedPosts.map((post) => (
                         <PostCard
                         key={post.id}
                         post={post}
@@ -573,14 +544,14 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
                         calculateDistance={calculateDistance}
                         />
                     ))}
-                    {hasMorePostsToDisplay && (
+                    {hasMorePosts && (
                         <Button 
                             onClick={handleLoadMore} 
                             variant="outline" 
                             className="w-full mt-6 py-3 text-lg shadow-md hover:shadow-lg transition-shadow bg-card hover:bg-muted"
-                            disabled={clientSideLoading}
+                            disabled={isLoadingMore}
                         >
-                           {clientSideLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <ListPlus className="mr-2 h-5 w-5" /> }
+                           {isLoadingMore ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <ListPlus className="mr-2 h-5 w-5" /> }
                             Load More Pulses
                         </Button>
                     )}
@@ -590,13 +561,13 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
                     <CardContent className="flex flex-col items-center">
                     <Zap className="mx-auto h-20 w-20 text-muted-foreground/30 mb-6" />
                     <p className="text-2xl text-muted-foreground font-semibold">
-                        {(!clientSideLoading && allPosts.length > 0 && activeFilterCount > 0) || (!clientSideLoading && allPosts.length > 0 && location === null && !showAnyDistance && !locationError) 
+                        {(allPosts.length > 0 && activeFilterCount > 0) || (allPosts.length > 0 && location === null && !showAnyDistance && !locationError) 
                             ? "No pulses match your current filters or location." 
                             : (locationError && allPosts.length === 0 ? "Could not determine location or fetch pulses." : "The air is quiet here...")
                         }
                     </p>
                     <p className="text-md text-muted-foreground/80 mt-2">
-                        {(!clientSideLoading && allPosts.length > 0 && activeFilterCount > 0) || (!clientSideLoading && allPosts.length > 0 && location === null && !showAnyDistance && !locationError) 
+                        {(allPosts.length > 0 && activeFilterCount > 0) || (allPosts.length > 0 && location === null && !showAnyDistance && !locationError) 
                             ? "Try adjusting your filters or enabling location. " 
                             : (locationError && allPosts.length === 0 ? "Please check your connection and location settings." : "")}
                         Be the first to make some noise!
@@ -612,5 +583,3 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
 };
 
 export default PostFeedClient;
-
-    

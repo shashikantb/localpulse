@@ -7,6 +7,7 @@ export * from './db-types';
 
 // Declare variables that will hold the function implementations
 let getPostsDb: (options?: { limit: number; offset: number; }) => Promise<Post[]>;
+let getMediaPostsDb: (options?: { limit: number; offset: number; }) => Promise<Post[]>;
 let addPostDb: (newPost: DbNewPost) => Promise<Post>;
 let incrementPostLikeCountDb: (postId: number) => Promise<Post | null>;
 let addCommentDb: (commentData: NewComment) => Promise<Comment>;
@@ -39,6 +40,7 @@ if (!process.env.POSTGRES_URL) {
 
   // --- MOCK IMPLEMENTATIONS ---
   getPostsDb = async (options?: { limit: number; offset: number; }): Promise<Post[]> => { console.warn("MOCK DB: getPostsDb called"); return []; };
+  getMediaPostsDb = async (options?: { limit: number; offset: number; }): Promise<Post[]> => { console.warn("MOCK DB: getMediaPostsDb called"); return []; };
   addPostDb = async (newPost: DbNewPost): Promise<Post> => { await dbNotConfiguredError(); return null as any; };
   incrementPostLikeCountDb = async (postId: number): Promise<Post | null> => { await dbNotConfiguredError(); return null; };
   addCommentDb = async (commentData: NewComment): Promise<Comment> => { await dbNotConfiguredError(); return null as any; };
@@ -227,6 +229,38 @@ if (!process.env.POSTGRES_URL) {
           throw new Error("Database schema error: 'posts' table not found. Try restarting the application to initialize the schema.");
       }
       throw error; // Re-throw original error if table exists but query failed for other reasons
+    }
+  }
+
+  getMediaPostsDb = async (options?: { limit: number; offset: number; }): Promise<Post[]> => {
+    try {
+      let queryText = `
+        SELECT id, content, latitude, longitude, createdAt, mediaUrl, mediaType, likeCount, city, hashtags 
+        FROM posts 
+        WHERE mediaurl IS NOT NULL AND (mediatype = 'image' OR mediatype = 'video')
+        ORDER BY createdAt DESC`;
+      const queryParams: number[] = [];
+
+      if (options?.limit) {
+          queryParams.push(options.limit);
+          queryText += ` LIMIT $${queryParams.length}`;
+      }
+
+      if (options?.offset) {
+          queryParams.push(options.offset);
+          queryText += ` OFFSET $${queryParams.length}`;
+      }
+      
+      const result: QueryResult<Post> = await pool.query(queryText, queryParams);
+      return result.rows;
+    } catch (error) {
+      console.error("Error fetching media posts from DB:", error);
+      const postsTableExists = await checkTableExists(await pool.connect(), 'posts');
+      if (!postsTableExists) {
+          console.error("The 'posts' table does not exist. Please ensure the database schema is initialized correctly.");
+          throw new Error("Database schema error: 'posts' table not found.");
+      }
+      throw error;
     }
   }
   
@@ -513,6 +547,7 @@ if (!process.env.POSTGRES_URL) {
 // Export the functions
 export {
   getPostsDb,
+  getMediaPostsDb,
   addPostDb,
   incrementPostLikeCountDb,
   addCommentDb,

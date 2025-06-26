@@ -43,6 +43,28 @@ export async function getPosts(options?: { page: number; limit: number }): Promi
   }
 }
 
+export async function getMediaPosts(options?: { page: number; limit: number }): Promise<Post[]> {
+  try {
+    const dbOptions = options ? {
+        limit: options.limit,
+        offset: (options.page - 1) * options.limit
+    } : undefined;
+
+    const posts = await db.getMediaPostsDb(dbOptions);
+    return posts.map(post => ({
+      ...post,
+      createdAt: post.createdat,
+      likeCount: post.likecount,
+      mediaUrl: post.mediaurl,
+      mediaType: post.mediatype,
+      hashtags: post.hashtags || [], // Ensure hashtags is an array
+    }));
+  } catch (error) {
+    console.error("Server action error fetching media posts:", error);
+    return [];
+  }
+}
+
 async function sendNotificationsForNewPost(post: Post) {
   if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON || firebaseAdmin.apps.length === 0) {
     console.warn('Firebase Admin SDK not initialized. Skipping push notifications.');
