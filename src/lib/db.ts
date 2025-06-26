@@ -25,6 +25,7 @@ let closeDb: () => Promise<void>;
 let createUserDb: (newUser: NewUser) => Promise<User>;
 let getUserByEmailDb: (email: string) => Promise<UserWithPassword | null>;
 let getUserByIdDb: (id: number) => Promise<User | null>;
+let getPostsByUserIdDb: (userId: number) => Promise<Post[]>;
 let getPendingUsersDb: () => Promise<User[]>;
 let updateUserStatusDb: (userId: number, status: 'approved' | 'rejected') => Promise<User | null>;
 let getAllUsersDb: () => Promise<User[]>;
@@ -66,6 +67,7 @@ if (!process.env.POSTGRES_URL) {
   createUserDb = async (newUser: NewUser): Promise<User> => { await dbNotConfiguredError(); return null as any; };
   getUserByEmailDb = async (email: string): Promise<UserWithPassword | null> => { await dbNotConfiguredError(); return null; };
   getUserByIdDb = async (id: number): Promise<User | null> => { await dbNotConfiguredError(); return null; };
+  getPostsByUserIdDb = async (userId: number): Promise<Post[]> => { console.warn("MOCK DB: getPostsByUserIdDb called for user", userId); return []; };
   getPendingUsersDb = async (): Promise<User[]> => { console.warn("MOCK DB: getPendingUsersDb called"); return []; };
   updateUserStatusDb = async (userId: number, status: 'approved' | 'rejected'): Promise<User | null> => { await dbNotConfiguredError(); return null; };
   getAllUsersDb = async (): Promise<User[]> => { console.warn("MOCK DB: getAllUsersDb called"); return []; };
@@ -216,6 +218,24 @@ if (!process.env.POSTGRES_URL) {
       [id]
     );
     return result.rows[0] || null;
+  }
+  
+  getPostsByUserIdDb = async (userId: number): Promise<Post[]> => {
+    try {
+        const queryText = `
+        SELECT p.id, p.content, p.latitude, p.longitude, p.createdAt, p.mediaUrl, p.mediaType, p.likeCount, p.city, p.hashtags,
+                u.id as authorId, u.name as authorName, u.role as authorRole
+        FROM posts p
+        JOIN users u ON p.authorId = u.id
+        WHERE p.authorId = $1 AND u.status = 'approved'
+        ORDER BY p.createdAt DESC
+        `;
+        const result: QueryResult<Post> = await pool.query(queryText, [userId]);
+        return result.rows;
+    } catch (error) {
+        console.error(`Error fetching posts for user ${userId} from DB:`, error);
+        throw error;
+    }
   }
 
   getPendingUsersDb = async (): Promise<User[]> => {
@@ -464,5 +484,5 @@ export {
   getVisitorCountsDb, addOrUpdateDeviceTokenDb, deleteDeviceTokenDb,
   getNearbyDeviceTokensDb, getNewerPostsCountDb, closeDb,
   // User functions
-  createUserDb, getUserByEmailDb, getUserByIdDb, getPendingUsersDb, updateUserStatusDb, getAllUsersDb
+  createUserDb, getUserByEmailDb, getUserByIdDb, getPostsByUserIdDb, getPendingUsersDb, updateUserStatusDb, getAllUsersDb
 };

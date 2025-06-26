@@ -238,3 +238,34 @@ export async function checkForNewerPosts(latestPostIdClientKnows: number): Promi
     return { hasNewerPosts: false, count: 0 };
   }
 }
+
+// New actions for user profile pages
+export async function getUser(userId: number): Promise<User | null> {
+    try {
+        const user = await db.getUserByIdDb(userId);
+        return user;
+    } catch (error) {
+        console.error(`Server action error fetching user ${userId}:`, error);
+        return null;
+    }
+}
+
+export async function getPostsByUserId(userId: number): Promise<Post[]> {
+  try {
+    const posts = await db.getPostsByUserIdDb(userId);
+    return posts.map(post => ({
+      ...post,
+      createdAt: post.createdat,
+      likeCount: post.likecount,
+      mediaUrl: post.mediaurl,
+      mediaType: post.mediatype,
+      hashtags: post.hashtags || [],
+      authorId: post.authorid,
+      authorName: post.authorname,
+      authorRole: post.authorrole,
+    }));
+  } catch (error) {
+    console.error(`Server action error fetching posts for user ${userId}:`, error);
+    return [];
+  }
+}

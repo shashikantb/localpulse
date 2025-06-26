@@ -3,6 +3,7 @@
 import type { FC, FormEvent } from 'react';
 import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import type { Post, Comment as CommentType, User } from '@/lib/db-types';
@@ -162,9 +163,15 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, calculateDista
         </Avatar>
         <div className="flex-1">
           <div className="flex items-center justify-between">
-            <p className="text-sm text-primary font-semibold flex items-center">
-              {authorName}
-            </p>
+            {post.authorid ? (
+              <Link href={`/users/${post.authorid}`} className="text-sm text-primary font-semibold flex items-center hover:underline">
+                {authorName}
+              </Link>
+            ) : (
+              <p className="text-sm text-primary font-semibold flex items-center">
+                {authorName}
+              </p>
+            )}
             <CardDescription className="text-xs text-muted-foreground font-medium">
               {timeAgo}
             </CardDescription>
