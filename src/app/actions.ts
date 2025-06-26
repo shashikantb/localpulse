@@ -64,8 +64,6 @@ export async function getMediaPosts(options?: { page: number; limit: number }): 
 }
 
 async function sendNotificationsForNewPost(post: Post) {
-  if (!post.authorname || (post.authorrole !== 'Business' && post.authorrole !== 'Gorakshak')) return;
-
   try {
     const tokens = await db.getNearbyDeviceTokensDb(post.latitude, post.longitude, 20); // 20km radius
 
@@ -73,10 +71,12 @@ async function sendNotificationsForNewPost(post: Post) {
       console.log(`No nearby devices to notify for post ${post.id}`);
       return;
     }
+    
+    const authorDisplayName = post.authorname || 'an Anonymous Pulsar';
 
     const message = {
       notification: {
-        title: `New Pulse from ${post.authorname}!`,
+        title: `New Pulse from ${authorDisplayName}!`,
         body: post.content.substring(0, 100) + (post.content.length > 100 ? '...' : ''),
       },
       tokens: tokens,
@@ -139,12 +139,10 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
 
     revalidatePath('/');
     
-    // Send notifications if the user is a Business or Gorakshak
-    if (user && (user.role === 'Business' || user.role === 'Gorakshak')) {
-      sendNotificationsForNewPost(finalPost).catch(err => {
-        console.error("Background notification sending failed:", err);
-      });
-    }
+    // Always send notifications for any new post
+    sendNotificationsForNewPost(finalPost).catch(err => {
+      console.error("Background notification sending failed:", err);
+    });
 
     return { post: finalPost };
   } catch (error: any) {
