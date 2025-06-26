@@ -29,14 +29,18 @@ export const UserNav: FC<UserNavProps> = ({ user }) => {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="rounded-full">
+        {/*
+          Making the button larger (48x48px) to ensure an easy-to-tap
+          touch target on mobile devices.
+        */}
+        <Button variant="ghost" className="relative h-12 w-12 rounded-full">
           {user ? (
-            <Avatar className="h-9 w-9">
+            <Avatar className="h-10 w-10">
               <AvatarImage src="/avatars/01.png" alt={user.name} />
               <AvatarFallback>{user.name.charAt(0).toUpperCase()}</AvatarFallback>
             </Avatar>
           ) : (
-             <Menu className="h-6 w-6" />
+             <Menu className="h-7 w-7" />
           )}
         </Button>
       </DropdownMenuTrigger>
