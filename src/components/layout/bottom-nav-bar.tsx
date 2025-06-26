@@ -4,16 +4,22 @@
 import type { FC } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Film, Shield } from 'lucide-react';
+import { Home, Film } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { UserNav } from './user-nav'; // Import UserNav
+import type { User } from '@/lib/db-types';
 
+// The "Privacy" link is removed to make space for the more important user menu.
 const navItems = [
   { href: '/', label: 'Home', icon: Home },
   { href: '/reels', label: 'Reels', icon: Film },
-  { href: '/privacy-policy', label: 'Privacy', icon: Shield },
 ];
 
-const BottomNavBar: FC = () => {
+interface BottomNavBarProps {
+  user: User | null;
+}
+
+const BottomNavBar: FC<BottomNavBarProps> = ({ user }) => {
   const pathname = usePathname();
 
   return (
@@ -35,6 +41,10 @@ const BottomNavBar: FC = () => {
           </Link>
         );
       })}
+      {/* Add the UserNav component directly into the bottom bar */}
+      <div className="flex h-full items-center justify-center px-2">
+         <UserNav user={user} />
+      </div>
     </nav>
   );
 };

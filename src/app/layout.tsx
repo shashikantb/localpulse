@@ -7,6 +7,7 @@ import Footer from '@/components/layout/footer';
 import BottomNavBar from '@/components/layout/bottom-nav-bar';
 import { AppInstallPrompt } from '@/components/app-install-prompt';
 import Header from '@/components/layout/header';
+import { getSession } from './auth/actions';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -18,11 +19,13 @@ export const metadata: Metadata = {
   description: 'Share and discover what\'s happening around you',
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const { user } = await getSession();
+
   return (
     <html lang="en" className="h-full">
       <head>
@@ -34,7 +37,7 @@ export default function RootLayout({
           {children}
         </div>
         <Footer />
-        <BottomNavBar /> {/* Add BottomNavBar here */}
+        <BottomNavBar user={user} /> {/* Pass user session to BottomNavBar */}
         <AppInstallPrompt />
         <Toaster />
       </body>

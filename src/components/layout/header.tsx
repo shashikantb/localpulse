@@ -20,7 +20,8 @@ const Header: FC = async () => {
           </Link>
         </div>
         <div className="flex flex-1 items-center justify-end space-x-2">
-          <nav className="flex items-center">
+          {/* This nav is now hidden on small (mobile) screens and visible on larger screens */}
+          <nav className="hidden items-center sm:flex">
             <UserNav user={user} />
           </nav>
         </div>
