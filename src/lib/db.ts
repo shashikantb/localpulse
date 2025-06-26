@@ -174,6 +174,15 @@ if (!process.env.POSTGRES_URL) {
         );
       `);
       console.log('Checked/Created device_tokens table.');
+
+      // Add indexes for performance
+      console.log('Creating indexes for performance...');
+      await client.query('CREATE INDEX IF NOT EXISTS idx_posts_authorid ON posts (authorid);');
+      await client.query('CREATE INDEX IF NOT EXISTS idx_posts_createdat ON posts (createdat DESC);');
+      await client.query('CREATE INDEX IF NOT EXISTS idx_users_status ON users (status);');
+      await client.query('CREATE INDEX IF NOT EXISTS idx_posts_media ON posts (mediaurl, mediatype);');
+      await client.query('CREATE INDEX IF NOT EXISTS idx_comments_postid ON comments (postid);');
+      console.log('Indexes created.');
   
       const todayStr = new Date().toISOString().split('T')[0];
       await client.query("INSERT INTO visitor_stats (stat_name, stat_value) VALUES ('total_visits', '0') ON CONFLICT (stat_name) DO NOTHING");
