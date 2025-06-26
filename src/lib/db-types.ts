@@ -41,7 +41,7 @@ export interface Post {
   authorrole: UserRole | null; // This will be joined from the users table
 }
 
-// For creating a new post from the client, now requires authorId
+// For creating a new post from the client, now authorId is optional
 export type NewPost = {
   content: string;
   latitude: number;
@@ -49,16 +49,16 @@ export type NewPost = {
   mediaUrl?: string | null;
   mediaType?: 'image' | 'video' | null;
   hashtags: string[];
-  authorId: number;
+  authorId?: number;
 };
 
-// For inserting a new post into the DB
+// For inserting a new post into the DB, authorid is now nullable
 export type DbNewPost = Omit<NewPost, 'mediaUrl' | 'mediaType' | 'authorId'> & {
   mediaurl?: string | null;
   mediatype?: 'image' | 'video' | null;
   city?: string | null;
   hashtags: string[];
-  authorid: number; // Stored in DB
+  authorid: number | null; 
 };
 
 

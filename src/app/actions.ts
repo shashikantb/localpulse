@@ -64,17 +64,53 @@ export async function getMediaPosts(options?: { page: number; limit: number }): 
 }
 
 async function sendNotificationsForNewPost(post: Post) {
-  // ... (existing notification logic)
+  if (!post.authorname || (post.authorrole !== 'Business' && post.authorrole !== 'Gorakshak')) return;
+
+  try {
+    const tokens = await db.getNearbyDeviceTokensDb(post.latitude, post.longitude, 20); // 20km radius
+
+    if (tokens.length === 0) {
+      console.log(`No nearby devices to notify for post ${post.id}`);
+      return;
+    }
+
+    const message = {
+      notification: {
+        title: `New Pulse from ${post.authorname}!`,
+        body: post.content.substring(0, 100) + (post.content.length > 100 ? '...' : ''),
+      },
+      tokens: tokens,
+    };
+    
+    console.log(`Sending notification for post ${post.id} to ${tokens.length} devices.`);
+    const response = await firebaseAdmin.messaging().sendEachForMulticast(message);
+    
+    console.log('Successfully sent message:', response.successCount, 'successes,', response.failureCount, 'failures');
+
+    if (response.failureCount > 0) {
+      const failedTokens: string[] = [];
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success) {
+          failedTokens.push(tokens[idx]);
+        }
+      });
+      console.log('List of tokens that caused failures:', failedTokens);
+      for (const token of failedTokens) {
+        await db.deleteDeviceTokenDb(token);
+      }
+    }
+  } catch (error) {
+    console.error('Error sending push notifications:', error);
+  }
 }
 
 export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post; error?: string }> {
   try {
-    const { user } = await getSession();
-    if (!user || user.id !== newPostData.authorId) {
-      return { error: 'Authentication failed. You must be logged in to post.' };
-    }
-     if (user.role !== 'Business') {
-      return { error: 'Permission denied. Only Business users can create posts.' };
+    const { user } = await getSession(); // user can be null
+
+    // If authorId is provided, it must match the logged-in user.
+    if (newPostData.authorId && (!user || user.id !== newPostData.authorId)) {
+        return { error: 'Authentication mismatch. You can only post for yourself.' };
     }
 
     const cityName = await geocodeCoordinates(newPostData.latitude, newPostData.longitude);
@@ -87,13 +123,15 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
       mediatype: newPostData.mediaType,
       hashtags: newPostData.hashtags || [], 
       city: cityName,
-      authorid: newPostData.authorId,
+      authorid: user ? user.id : null, // Use logged-in user's ID or null
     };
 
     const addedPostDb = await db.addPostDb(postDataForDb);
     
-    // We need to fetch the post again to join author details
-    const finalPost = (await db.getPostsDb({ limit: 1, offset: 0 }, user.role)).find(p => p.id === addedPostDb.id);
+    // Fetch the full post details, including joined author info
+    const allPosts = await db.getPostsDb(undefined, user?.role);
+    const finalPost = allPosts.find(p => p.id === addedPostDb.id);
+
 
     if (!finalPost) {
         return { error: 'Failed to retrieve post after creation.' };
@@ -101,9 +139,12 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
 
     revalidatePath('/');
     
-    sendNotificationsForNewPost(finalPost).catch(err => {
-      console.error("Background notification sending failed:", err);
-    });
+    // Send notifications if the user is a Business or Gorakshak
+    if (user && (user.role === 'Business' || user.role === 'Gorakshak')) {
+      sendNotificationsForNewPost(finalPost).catch(err => {
+        console.error("Background notification sending failed:", err);
+      });
+    }
 
     return { post: finalPost };
   } catch (error: any) {

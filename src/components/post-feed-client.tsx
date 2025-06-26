@@ -188,10 +188,6 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
 
 
   const handleAddPost = async (content: string, hashtags: string[], mediaUrl?: string, mediaType?: 'image' | 'video') => {
-    if (!sessionUser) {
-        toast({ variant: "destructive", title: "Authentication Error", description: "You must be logged in to post." });
-        return;
-    }
     if (!location && !locationError) { 
       const errMessage = "Cannot determine location. Please enable location services or try again.";
       toast({ variant: "destructive", title: "Post Error", description: errMessage });
@@ -211,7 +207,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
         mediaUrl: mediaUrl,
         mediaType: mediaType,
         hashtags: hashtags || [],
-        authorId: sessionUser.id
+        authorId: sessionUser ? sessionUser.id : undefined,
       };
       const result = await addPost(postData);
 
@@ -364,122 +360,108 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
 
   return (
     <div className="space-y-8">
-        {loadingLocation && (
-            <Card className="rounded-xl shadow-lg">
-                <CardHeader>
-                    <Skeleton className="h-6 w-2/3" />
-                    <Skeleton className="h-4 w-1/3" />
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <Skeleton className="h-24 w-full" />
-                    <div className="flex justify-end">
-                        <Skeleton className="h-10 w-24" />
-                    </div>
-                </CardContent>
-            </Card>
-        )}
-        {locationError && !loadingLocation && (
-            <Alert variant="destructive">
-                <Terminal className="h-4 w-4" />
-                <AlertTitle>Location Error</AlertTitle>
-                <AlertDescription>
-                    {locationError}
-                </AlertDescription>
-            </Alert>
-        )}
+      {loadingLocation && (
+          <Card className="rounded-xl shadow-lg">
+              <CardHeader>
+                  <Skeleton className="h-6 w-2/3" />
+                  <Skeleton className="h-4 w-1/3" />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                  <Skeleton className="h-24 w-full" />
+                  <div className="flex justify-end">
+                      <Skeleton className="h-10 w-24" />
+                  </div>
+              </CardContent>
+          </Card>
+      )}
+      {locationError && !loadingLocation && (
+          <Alert variant="destructive">
+              <Terminal className="h-4 w-4" />
+              <AlertTitle>Location Error</AlertTitle>
+              <AlertDescription>
+                  {locationError}
+              </AlertDescription>
+          </Alert>
+      )}
 
-        {!loadingLocation && (
-            <>
-            {sessionUser?.role === 'Business' ? (
-                <Card className="overflow-hidden shadow-2xl border border-primary/30 rounded-xl bg-card/90 backdrop-blur-md transform hover:shadow-primary/20 transition-all duration-300 hover:border-primary/60">
-                    <CardHeader className="bg-gradient-to-br from-primary/10 to-accent/5 p-5">
-                        <CardTitle className="text-2xl font-semibold text-primary flex items-center">
-                            <Zap className="w-7 h-7 mr-2 text-accent drop-shadow-sm" />
-                            Share Your Business Pulse
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-5">
-                        <PostForm onSubmit={handleAddPost} submitting={formSubmitting} />
-                    </CardContent>
-                </Card>
-            ) : (
-                 <Card className="text-center py-8 rounded-xl shadow-lg border border-border/40 bg-card/80 backdrop-blur-sm">
-                    <CardContent className="flex flex-col items-center">
-                    <Lock className="mx-auto h-12 w-12 text-muted-foreground/50 mb-4" />
-                    <p className="text-xl text-muted-foreground font-semibold">
-                        Log in as a Business to post.
-                    </p>
-                    <p className="text-md text-muted-foreground/80 mt-1">
-                        Only users with the 'Business' role can create new pulses.
-                    </p>
-                    </CardContent>
-                </Card>
-            )}
+      {!loadingLocation && (
+        <>
+          <Card className="overflow-hidden shadow-2xl border border-primary/30 rounded-xl bg-card/90 backdrop-blur-md transform hover:shadow-primary/20 transition-all duration-300 hover:border-primary/60">
+              <CardHeader className="bg-gradient-to-br from-primary/10 to-accent/5 p-5">
+                  <CardTitle className="text-2xl font-semibold text-primary flex items-center">
+                      <Zap className="w-7 h-7 mr-2 text-accent drop-shadow-sm" />
+                      Share Your Pulse
+                  </CardTitle>
+              </CardHeader>
+              <CardContent className="p-5">
+                  <PostForm onSubmit={handleAddPost} submitting={formSubmitting} />
+              </CardContent>
+          </Card>
 
-            <div className="flex justify-end items-center sticky top-6 z-30 mb-4 px-1 gap-2">
-                <Button
-                    variant="outline"
-                    className="shadow-lg hover:shadow-xl transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary"
-                    onClick={handleNotificationRegistration}
-                >
-                    {notificationPermissionStatus === 'granted' ? (
-                        <BellRing className="w-5 h-5 mr-2 text-green-500" />
-                    ) : (
-                        <Bell className="w-5 h-5 mr-2" />
-                    )}
-                    <span className="hidden sm:inline">Notifications</span>
-                </Button>
-                <Sheet>
-                    <SheetTrigger asChild>
-                        <Button variant="outline" className="shadow-lg hover:shadow-xl transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary">
-                        <SlidersHorizontal className="w-5 h-5 mr-2" />
-                        Filters {activeFilterCount > 0 && <span className="ml-2 bg-accent text-accent-foreground text-xs px-1.5 py-0.5 rounded-full">{activeFilterCount}</span>}
-                        </Button>
-                    </SheetTrigger>
-                    <SheetContent className="bg-card/95 backdrop-blur-md border-border w-full sm:max-w-md flex flex-col">
-                        <FilterSheetContent />
-                    </SheetContent>
-                </Sheet>
-            </div>
+          <div className="flex justify-end items-center sticky top-6 z-30 mb-4 px-1 gap-2">
+              <Button
+                  variant="outline"
+                  className="shadow-lg hover:shadow-xl transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary"
+                  onClick={handleNotificationRegistration}
+              >
+                  {notificationPermissionStatus === 'granted' ? (
+                      <BellRing className="w-5 h-5 mr-2 text-green-500" />
+                  ) : (
+                      <Bell className="w-5 h-5 mr-2" />
+                  )}
+                  <span className="hidden sm:inline">Notifications</span>
+              </Button>
+              <Sheet>
+                  <SheetTrigger asChild>
+                      <Button variant="outline" className="shadow-lg hover:shadow-xl transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary">
+                      <SlidersHorizontal className="w-5 h-5 mr-2" />
+                      Filters {activeFilterCount > 0 && <span className="ml-2 bg-accent text-accent-foreground text-xs px-1.5 py-0.5 rounded-full">{activeFilterCount}</span>}
+                      </Button>
+                  </SheetTrigger>
+                  <SheetContent className="bg-card/95 backdrop-blur-md border-border w-full sm:max-w-md flex flex-col">
+                      <FilterSheetContent />
+                  </SheetContent>
+              </Sheet>
+          </div>
 
-            <div className="space-y-6">
-                <div className="flex justify-between items-center border-b-2 border-primary/30 pb-3 mb-6">
-                    <h2 className="text-4xl font-bold text-primary pl-1 flex items-center">
-                    <Rss className="w-9 h-9 mr-3 text-accent opacity-90" />
-                    Nearby Pulses
-                    </h2>
-                    {newPulsesAvailable && (
-                        <Button variant="outline" size="sm" onClick={handleLoadNewPulses} className="animate-pulse bg-accent/10 hover:bg-accent/20 border-accent/50 text-accent hover:text-accent/90 shadow-md">
-                            <RefreshCw className="w-4 h-4 mr-2" />
-                            Load {newPulsesCount} New {newPulsesCount === 1 ? "Pulse" : "Pulses"}
-                        </Button>
-                    )}
-                </div>
+          <div className="space-y-6">
+              <div className="flex justify-between items-center border-b-2 border-primary/30 pb-3 mb-6">
+                  <h2 className="text-4xl font-bold text-primary pl-1 flex items-center">
+                  <Rss className="w-9 h-9 mr-3 text-accent opacity-90" />
+                  Nearby Pulses
+                  </h2>
+                  {newPulsesAvailable && (
+                      <Button variant="outline" size="sm" onClick={handleLoadNewPulses} className="animate-pulse bg-accent/10 hover:bg-accent/20 border-accent/50 text-accent hover:text-accent/90 shadow-md">
+                          <RefreshCw className="w-4 h-4 mr-2" />
+                          Load {newPulsesCount} New {newPulsesCount === 1 ? "Pulse" : "Pulses"}
+                      </Button>
+                  )}
+              </div>
 
-                {filteredAndSortedPosts.length > 0 ? (
-                    <>
-                    {filteredAndSortedPosts.map((post) => (
-                        <PostCard key={post.id} post={post} userLocation={location} calculateDistance={calculateDistance} sessionUser={sessionUser} />
-                    ))}
-                    {hasMorePosts && (
-                        <Button onClick={handleLoadMore} variant="outline" className="w-full mt-6 py-3 text-lg shadow-md hover:shadow-lg transition-shadow bg-card hover:bg-muted" disabled={isLoadingMore}>
-                           {isLoadingMore ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <ListPlus className="mr-2 h-5 w-5" /> }
-                            Load More Pulses
-                        </Button>
-                    )}
-                    </>
-                ) : (
-                <Card className="text-center py-16 rounded-xl shadow-xl border border-border/40 bg-card/80 backdrop-blur-sm">
-                    <CardContent className="flex flex-col items-center">
-                    <Zap className="mx-auto h-20 w-20 text-muted-foreground/30 mb-6" />
-                    <p className="text-2xl text-muted-foreground font-semibold">The air is quiet here...</p>
-                    <p className="text-md text-muted-foreground/80 mt-2">No pulses found. Try adjusting your filters or be the first to post!</p>
-                    </CardContent>
-                </Card>
-                )}
-            </div>
-            </>
-        )}
+              {filteredAndSortedPosts.length > 0 ? (
+                  <>
+                  {filteredAndSortedPosts.map((post) => (
+                      <PostCard key={post.id} post={post} userLocation={location} calculateDistance={calculateDistance} sessionUser={sessionUser} />
+                  ))}
+                  {hasMorePosts && (
+                      <Button onClick={handleLoadMore} variant="outline" className="w-full mt-6 py-3 text-lg shadow-md hover:shadow-lg transition-shadow bg-card hover:bg-muted" disabled={isLoadingMore}>
+                         {isLoadingMore ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <ListPlus className="mr-2 h-5 w-5" /> }
+                          Load More Pulses
+                      </Button>
+                  )}
+                  </>
+              ) : (
+              <Card className="text-center py-16 rounded-xl shadow-xl border border-border/40 bg-card/80 backdrop-blur-sm">
+                  <CardContent className="flex flex-col items-center">
+                  <Zap className="mx-auto h-20 w-20 text-muted-foreground/30 mb-6" />
+                  <p className="text-2xl text-muted-foreground font-semibold">The air is quiet here...</p>
+                  <p className="text-md text-muted-foreground/80 mt-2">No pulses found. Try adjusting your filters or be the first to post!</p>
+                  </CardContent>
+              </Card>
+              )}
+          </div>
+        </>
+      )}
     </div>
   );
 };
