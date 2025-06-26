@@ -76,7 +76,6 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
   const [filterHashtags, setFilterHashtags] = useState<string[]>([]);
   const [notificationPermissionStatus, setNotificationPermissionStatus] = useState<string>('default');
 
-
   const calculateDistance = useCallback((lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371; // Radius of the Earth in km
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -89,6 +88,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
     const distance = R * c; // Distance in km
     return distance;
   }, []);
+
 
   useEffect(() => {
     setLoadingLocation(true);
@@ -431,7 +431,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
           {filteredAndSortedPosts.length > 0 ? (
               <>
               {filteredAndSortedPosts.map((post) => (
-                  <PostCard key={post.id} post={post} userLocation={location} calculateDistance={calculateDistance} sessionUser={sessionUser} />
+                  <PostCard key={post.id} post={post} userLocation={location} sessionUser={sessionUser} />
               ))}
               {hasMorePosts && (
                   <Button onClick={handleLoadMore} variant="outline" className="w-full mt-6 py-3 text-lg shadow-md hover:shadow-lg transition-shadow bg-card hover:bg-muted" disabled={isLoadingMore}>
