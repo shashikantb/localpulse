@@ -2,7 +2,8 @@
 import type { NextPage } from 'next';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, Bell } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const PrivacyPolicyPage: NextPage = () => {
   return (
@@ -21,6 +22,18 @@ const PrivacyPolicyPage: NextPage = () => {
                 <p className="text-sm text-muted-foreground">
                   Last Updated: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
                 </p>
+                
+                <section>
+                    <Alert variant="default" className="bg-accent/10 border-accent/30">
+                        <Bell className="h-5 w-5 text-accent" />
+                        <AlertTitle className="font-bold text-base text-accent-foreground/90">
+                            Prominent Disclosure for Location Access
+                        </AlertTitle>
+                        <AlertDescription className="text-foreground/80">
+                            LocalPulse collects location data to deliver city-wise news, alerts, and real-time updates relevant to your area — even when the app is closed or not in use. This data is only used to provide core app functionality and is never sold to third parties. You may disable location access anytime from your device settings.
+                        </AlertDescription>
+                    </Alert>
+                </section>
 
                 <section className="space-y-2">
                   <h2 className="text-xl font-semibold text-primary">1. Introduction</h2>
