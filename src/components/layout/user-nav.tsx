@@ -2,6 +2,7 @@
 
 import type { FC } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -22,8 +23,11 @@ interface UserNavProps {
 }
 
 export const UserNav: FC<UserNavProps> = ({ user }) => {
+  const router = useRouter();
+
   const handleLogout = async () => {
     await logout();
+    router.refresh();
   };
 
   return (

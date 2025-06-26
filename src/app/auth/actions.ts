@@ -7,6 +7,7 @@ import * as jose from 'jose';
 import bcrypt from 'bcryptjs';
 import { createUserDb, getUserByEmailDb, getUserByIdDb } from '@/lib/db';
 import type { NewUser, User } from '@/lib/db-types';
+import { revalidatePath } from 'next/cache';
 
 const USER_COOKIE_NAME = 'user-auth-token';
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback-secret-for-jwt-that-is-at-least-32-bytes-long');
@@ -94,7 +95,8 @@ export async function login(email: string, password: string): Promise<{ success:
 
 export async function logout(): Promise<void> {
   cookies().delete(USER_COOKIE_NAME);
-  redirect('/');
+  // Revalidate the entire layout to ensure the session is re-read everywhere.
+  revalidatePath('/', 'layout');
 }
 
 export async function getSession(): Promise<{ user: User | null }> {
