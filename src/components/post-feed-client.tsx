@@ -364,8 +364,29 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
 
   return (
     <div className="space-y-8">
-        {loadingLocation && ( /* ...existing loading skeleton */ )}
-        {locationError && !loadingLocation && ( /* ...existing location error alert */ )}
+        {loadingLocation && (
+            <Card className="rounded-xl shadow-lg">
+                <CardHeader>
+                    <Skeleton className="h-6 w-2/3" />
+                    <Skeleton className="h-4 w-1/3" />
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <Skeleton className="h-24 w-full" />
+                    <div className="flex justify-end">
+                        <Skeleton className="h-10 w-24" />
+                    </div>
+                </CardContent>
+            </Card>
+        )}
+        {locationError && !loadingLocation && (
+            <Alert variant="destructive">
+                <Terminal className="h-4 w-4" />
+                <AlertTitle>Location Error</AlertTitle>
+                <AlertDescription>
+                    {locationError}
+                </AlertDescription>
+            </Alert>
+        )}
 
         {!loadingLocation && (
             <>
