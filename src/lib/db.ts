@@ -180,7 +180,6 @@ if (!process.env.POSTGRES_URL) {
       await client.query('CREATE INDEX IF NOT EXISTS idx_posts_authorid ON posts (authorid);');
       await client.query('CREATE INDEX IF NOT EXISTS idx_posts_createdat ON posts (createdat DESC);');
       await client.query('CREATE INDEX IF NOT EXISTS idx_users_status ON users (status);');
-      await client.query('CREATE INDEX IF NOT EXISTS idx_posts_media ON posts (mediaurl, mediatype);');
       await client.query('CREATE INDEX IF NOT EXISTS idx_comments_postid ON comments (postid);');
       console.log('Indexes created.');
   
