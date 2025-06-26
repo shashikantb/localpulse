@@ -4,12 +4,13 @@
 import type { FC } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Film } from 'lucide-react';
+import { Home, Film, Shield } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
   { href: '/', label: 'Home', icon: Home },
   { href: '/reels', label: 'Reels', icon: Film },
+  { href: '/privacy-policy', label: 'Privacy', icon: Shield },
 ];
 
 const BottomNavBar: FC = () => {
@@ -18,7 +19,7 @@ const BottomNavBar: FC = () => {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-around border-t border-border/40 bg-background/95 shadow-[0_-2px_10px_-3px_rgba(0,0,0,0.1)] backdrop-blur-md sm:hidden">
       {navItems.map((item) => {
-        const isActive = (pathname === item.href) || (pathname === '/' && item.href === '/'); // Ensure home matches exactly or is the root
+        const isActive = pathname === item.href;
         return (
           <Link
             key={item.href}
