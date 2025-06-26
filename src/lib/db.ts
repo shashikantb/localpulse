@@ -283,10 +283,8 @@ if (!process.env.POSTGRES_URL) {
       `;
       const whereClause = `WHERE (u.status = 'approved' OR p.authorId IS NULL)`;
       
-      let orderByClause = 'ORDER BY p.createdAt DESC';
-      if (userRole === 'Gorakshak') {
-        orderByClause = `ORDER BY CASE WHEN u.role = 'Gorakshak' THEN 0 ELSE 1 END, p.createdAt DESC`;
-      }
+      // OPTIMIZATION: Always use the fast, indexed sort. The client will handle role-based sorting.
+      const orderByClause = 'ORDER BY p.createdAt DESC';
       
       let queryText = `${selectClause} ${whereClause} ${orderByClause}`;
       const queryParams: number[] = [];
