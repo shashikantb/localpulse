@@ -68,7 +68,6 @@ async function sendNotificationsForNewPost(post: Post) {
     const tokens = await db.getNearbyDeviceTokensDb(post.latitude, post.longitude, 20); // 20km radius
 
     if (tokens.length === 0) {
-      console.log(`No nearby devices to notify for post ${post.id}`);
       return;
     }
     
@@ -82,11 +81,8 @@ async function sendNotificationsForNewPost(post: Post) {
       tokens: tokens,
     };
     
-    console.log(`Sending notification for post ${post.id} to ${tokens.length} devices.`);
     const response = await firebaseAdmin.messaging().sendEachForMulticast(message);
     
-    console.log('Successfully sent message:', response.successCount, 'successes,', response.failureCount, 'failures');
-
     if (response.failureCount > 0) {
       const failedTokens: string[] = [];
       response.responses.forEach((resp, idx) => {
@@ -94,7 +90,7 @@ async function sendNotificationsForNewPost(post: Post) {
           failedTokens.push(tokens[idx]);
         }
       });
-      console.log('List of tokens that caused failures:', failedTokens);
+      console.error('List of tokens that caused failures:', failedTokens);
       for (const token of failedTokens) {
         await db.deleteDeviceTokenDb(token);
       }
@@ -222,7 +218,6 @@ export async function registerDeviceToken(
   }
   try {
     await db.addOrUpdateDeviceTokenDb(token, latitude, longitude);
-    console.log(`Device token registered/updated: ${token.substring(0,20)}...`);
     return { success: true };
   } catch (error: any) {
     console.error('Server action error registering device token:', error);
