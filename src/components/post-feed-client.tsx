@@ -77,6 +77,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
   const [notificationPermissionStatus, setNotificationPermissionStatus] = useState<string>('default');
 
   const calculateDistance = useCallback((lat1: number, lon1: number, lat2: number, lon2: number) => {
+    if (!lat1 || !lon1 || !lat2 || !lon2) return Infinity; // Put posts with no location data at the end.
     const R = 6371; // Radius of the Earth in km
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
@@ -153,16 +154,57 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
     }
   }, [allPosts]);
 
+  // This effect handles both filtering and sorting of posts on the client-side.
   useEffect(() => {
-    let filtered = allPosts;
+    let processedPosts = [...allPosts];
+
+    // 1. Filtering Logic
     if (location && !showAnyDistance) {
-      filtered = allPosts.filter(p => p.latitude && p.longitude && calculateDistance(location.latitude, location.longitude, p.latitude, p.longitude) <= distanceFilterKm);
+      processedPosts = processedPosts.filter(p => 
+        p.latitude && p.longitude && 
+        calculateDistance(location.latitude, location.longitude, p.latitude, p.longitude) <= distanceFilterKm
+      );
     }
     if (filterHashtags.length > 0) {
-      filtered = filtered.filter(p => p.hashtags && p.hashtags.length > 0 && filterHashtags.some(fh => p.hashtags!.includes(fh)));
+      processedPosts = processedPosts.filter(p => 
+        p.hashtags && p.hashtags.length > 0 && 
+        filterHashtags.some(fh => p.hashtags!.includes(fh))
+      );
     }
-    setFilteredAndSortedPosts([...filtered]);
-  }, [allPosts, location, distanceFilterKm, showAnyDistance, filterHashtags, calculateDistance]);
+
+    // 2. Sorting Logic
+    if (sessionUser?.role === 'Gorakshak') {
+      // For Gorakshak users, prioritize other Gorakshak posts, then sort by time.
+      processedPosts.sort((a, b) => {
+        const roleA = a.authorrole === 'Gorakshak' ? 0 : 1;
+        const roleB = b.authorrole === 'Gorakshak' ? 0 : 1;
+        if (roleA !== roleB) {
+          return roleA - roleB; // Gorakshak posts (0) come before others (1).
+        }
+        // If roles are the same, sort by most recent time.
+        return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
+      });
+    } else {
+      // For Business and Anonymous users, sort by distance, then by time.
+      if (location) {
+        processedPosts.sort((a, b) => {
+          const distA = calculateDistance(location.latitude, location.longitude, a.latitude, a.longitude);
+          const distB = calculateDistance(location.latitude, location.longitude, b.latitude, b.longitude);
+          
+          // If distances are very similar (e.g., within 100m), fall back to time-based sorting.
+          if (Math.abs(distA - distB) < 0.1) {
+            return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
+          }
+          
+          return distA - distB; // Sort by closest distance first.
+        });
+      }
+      // If no location is available, posts remain sorted by time (the default from the DB), which is a sensible fallback.
+    }
+    
+    setFilteredAndSortedPosts(processedPosts);
+  }, [allPosts, location, distanceFilterKm, showAnyDistance, filterHashtags, sessionUser, calculateDistance]);
+
 
   useEffect(() => {
     // We don't want to poll if the page is not visible.
