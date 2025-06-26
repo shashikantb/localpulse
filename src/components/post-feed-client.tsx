@@ -2,7 +2,7 @@
 'use client';
 
 import type { FC } from 'react';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { Post, NewPost } from '@/lib/db-types';
 import { getPosts, addPost, registerDeviceToken, checkForNewerPosts } from '@/app/actions'; // Actions are server-side
 import { PostCard } from '@/components/post-card';
@@ -66,9 +66,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
   const [locationError, setLocationError] = useState<string | null>(null);
   const [loadingLocation, setLoadingLocation] = useState(true);
 
-  // This state now tracks if we've reached the end of the server's data.
   const [hasMorePosts, setHasMorePosts] = useState<boolean>(initialPosts.length === POSTS_PER_PAGE);
-  // This state tracks loading of *subsequent* pages.
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   
   const [formSubmitting, setFormSubmitting] = useState(false);
@@ -172,28 +170,29 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
     }
   };
 
-
-  const fetchAndSetAllPosts = useCallback(async () => {
-    setIsLoadingMore(true);
+  const refreshPosts = useCallback(async () => {
+    setIsLoadingMore(true); // Reuse this state to show a loading indicator
     try {
-      const fetchedPosts = await getPosts(); // Fetches all posts
-      setAllPosts(fetchedPosts);
-      if (fetchedPosts.length > 0) {
-        setLatestPostIdClientKnows(fetchedPosts.reduce((max, p) => p.id > max ? p.id : max, 0));
+      const newInitialPosts = await getPosts({ page: 1, limit: POSTS_PER_PAGE });
+      setAllPosts(newInitialPosts);
+      setCurrentPage(1);
+      setHasMorePosts(newInitialPosts.length === POSTS_PER_PAGE);
+      setNewPulsesAvailable(false);
+      setNewPulsesCount(0);
+      if (window) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
-      setHasMorePosts(false); // Assume we have all posts after a manual refresh
     } catch (error) {
-      console.error("Error fetching posts:", error);
       toast({
         variant: "destructive",
-        title: "Fetch Error",
-        description: "Could not load posts. Please try again later.",
+        title: "Refresh Error",
+        description: "Could not refresh posts.",
       });
-      setAllPosts([]);
     } finally {
       setIsLoadingMore(false);
     }
   }, [toast]);
+
 
   useEffect(() => {
     if (allPosts.length > 0) {
@@ -265,10 +264,8 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
   }, [loadingLocation, latestPostIdClientKnows]);
 
   const handleLoadNewPulses = async () => {
-    setNewPulsesAvailable(false);
-    setNewPulsesCount(0);
     toast({ title: "Refreshing Pulses...", description: "Fetching the latest vibes for you." });
-    await fetchAndSetAllPosts(); // This will re-fetch all posts
+    await refreshPosts();
   };
 
 
