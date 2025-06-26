@@ -24,15 +24,18 @@ env:
     value: production
   # Example for PostgreSQL URL (better to use Secret Manager for this)
   # - variable: POSTGRES_URL
-  #   value: "your_postgres_connection_string_here_or_from_secret_manager"
+  #   secret: your-postgres-url-secret
+  # Example for JWT Secret (better to use Secret Manager for this)
+  # - variable: JWT_SECRET
+  #   secret: your-jwt-secret
   # Example for Genkit API Key (better to use Secret Manager for this)
   # - variable: GOOGLE_GENAI_API_KEY
-  #   value: "your_genai_api_key_here_or_from_secret_manager"
+  #   secret: your-genai-api-key-secret
   # Example for Admin Credentials (better to use Secret Manager for these)
   # - variable: ADMIN_USERNAME
-  #   value: "your_admin_username"
+  #   secret: your-admin-username-secret
   # - variable: ADMIN_PASSWORD
-  #   value: "your_admin_password"
+  #   secret: your-admin-password-secret
 
 # Settings for the main web server that App Hosting provisions.
 # For more information, visit https://cloud.google.com/app-hosting/docs/configuration#servingconfig

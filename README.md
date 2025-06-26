@@ -24,6 +24,11 @@ POSTGRES_URL=your_postgresql_connection_string
 # Set to true if SSL is required, e.g., for Google Cloud SQL, AWS RDS, Azure PostgreSQL.
 # POSTGRES_SSL=true 
 
+# Secure key for signing user session tokens (JWTs)
+# This is crucial for production security.
+# You can generate a strong secret with the command: openssl rand -hex 32
+JWT_SECRET=your_super_secret_jwt_key_here
+
 # Google Generative AI API Key (if using Genkit features)
 GOOGLE_GENAI_API_KEY=your_google_genai_api_key
 
@@ -33,6 +38,7 @@ ADMIN_PASSWORD=password123
 ```
 
 Replace `your_postgresql_connection_string` with the actual connection string for your PostgreSQL database.
+You must also replace `your_super_secret_jwt_key_here` with a secure, randomly generated string.
 Update `ADMIN_USERNAME` and `ADMIN_PASSWORD` to secure values, especially for production.
 
 **Important Notes for `POSTGRES_URL`:**
@@ -50,7 +56,7 @@ Update `ADMIN_USERNAME` and `ADMIN_PASSWORD` to secure values, especially for pr
     ```
 
 2.  **Set Up Environment Variables:**
-    Create or update the `.env.local` file as described above with your PostgreSQL connection string and other necessary variables.
+    Create or update the `.env.local` file as described above with your PostgreSQL connection string and other necessary variables. **Setting a secure `JWT_SECRET` is critical for production.**
 
 3.  **Initialize Database Schema:**
     The application will attempt to create the necessary tables in your PostgreSQL database on startup if they don't already exist. Ensure your PostgreSQL server is running and accessible using the `POSTGRES_URL` you provided.
