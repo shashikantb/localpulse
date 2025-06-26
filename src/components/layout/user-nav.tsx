@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { FC } from 'react';
@@ -30,9 +29,9 @@ export const UserNav: FC<UserNavProps> = ({ user }) => {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+        <Button variant="ghost" size="icon" className="rounded-full">
           {user ? (
-            <Avatar className="h-8 w-8">
+            <Avatar className="h-9 w-9">
               <AvatarImage src="/avatars/01.png" alt={user.name} />
               <AvatarFallback>{user.name.charAt(0).toUpperCase()}</AvatarFallback>
             </Avatar>
