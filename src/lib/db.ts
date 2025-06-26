@@ -181,6 +181,9 @@ if (!process.env.POSTGRES_URL) {
       await client.query('CREATE INDEX IF NOT EXISTS idx_posts_createdat ON posts (createdat DESC);');
       await client.query('CREATE INDEX IF NOT EXISTS idx_users_status ON users (status);');
       await client.query('CREATE INDEX IF NOT EXISTS idx_comments_postid ON comments (postid);');
+      // New, more specific indexes for performance
+      await client.query('CREATE INDEX IF NOT EXISTS idx_posts_media_createdat ON posts (createdat DESC) WHERE mediaurl IS NOT NULL;');
+      await client.query('CREATE INDEX IF NOT EXISTS idx_users_role_status ON users (role, status);');
       console.log('Indexes created.');
   
       const todayStr = new Date().toISOString().split('T')[0];
