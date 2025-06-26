@@ -1,4 +1,3 @@
-
 'use client';
 import React, { type FC, FormEvent } from 'react'; // Import React
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -82,7 +81,7 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive }) => {
   useEffect(() => {
     const videoElement = videoRef.current;
     if (!videoElement || post.mediatype !== 'video') {
-      return; // Not a video, do nothing.
+      return;
     }
 
     if (isActive) {
@@ -91,11 +90,8 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive }) => {
       const playPromise = videoElement.play();
       if (playPromise !== undefined) {
         playPromise.catch(error => {
-          // Autoplay was likely prevented by the browser.
-          // This is a common policy, especially for unmuted videos.
-          // We'll ensure it's muted and try playing again.
           console.warn("Unmuted autoplay failed. Muting and retrying.", error);
-          if (videoElement) { // Check if element still exists
+          if (videoElement) { 
             setIsInternallyMuted(true);
             videoElement.muted = true;
             videoElement.play().catch(finalError => {
@@ -105,12 +101,11 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive }) => {
         });
       }
     } else {
-      // This reel is not active, so we pause it and reset to the beginning.
-      // This is important for when the user swipes away.
+      // This reel is not active, just pause it.
+      // Do NOT reset currentTime, as this will interrupt buffering.
       videoElement.pause();
-      videoElement.currentTime = 0;
     }
-  }, [isActive, post.id, post.mediatype, isInternallyMuted]);
+  }, [isActive, post.mediatype, isInternallyMuted]);
 
 
   const fetchPostComments = useCallback(async () => {
