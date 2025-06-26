@@ -3,17 +3,16 @@
 
 import type { FC } from 'react';
 import { useState, useEffect, useCallback } from 'react';
-import type { Post, NewPost, User } from '@/lib/db-types';
-import { getPosts, addPost, registerDeviceToken, checkForNewerPosts } from '@/app/actions';
+import type { Post, User } from '@/lib/db-types';
+import { getPosts, registerDeviceToken, checkForNewerPosts } from '@/app/actions';
 import { PostCard } from '@/components/post-card';
-import { PostForm, HASHTAG_CATEGORIES } from '@/components/post-form';
-import { Skeleton } from '@/components/ui/skeleton';
+import { HASHTAG_CATEGORIES } from '@/components/post-form';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { MapPin, Terminal, Zap, Loader2, Filter, SlidersHorizontal, Rss, Tag, ChevronDown, Bell, BellOff, BellRing, ListPlus, RefreshCw, Lock } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -63,21 +62,20 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
   const [newPulsesAvailable, setNewPulsesAvailable] = useState(false);
   const [newPulsesCount, setNewPulsesCount] = useState(0);
 
+  // This component still needs location for filtering and sorting
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [locationError, setLocationError] = useState<string | null>(null);
-  const [loadingLocation, setLoadingLocation] = useState(true);
+  const [isLoadingLocation, setIsLoadingLocation] = useState(true);
 
   const [hasMorePosts, setHasMorePosts] = useState<boolean>(initialPosts.length === POSTS_PER_PAGE);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   
-  const [formSubmitting, setFormSubmitting] = useState(false);
   const [distanceFilterKm, setDistanceFilterKm] = useState<number>(101); 
   const [showAnyDistance, setShowAnyDistance] = useState<boolean>(true);
   const [filterHashtags, setFilterHashtags] = useState<string[]>([]);
   const [notificationPermissionStatus, setNotificationPermissionStatus] = useState<string>('default');
 
   const calculateDistance = useCallback((lat1: number, lon1: number, lat2: number, lon2: number) => {
-    if (!lat1 || !lon1 || !lat2 || !lon2) return Infinity; // Put posts with no location data at the end.
+    if (!lat1 || !lon1 || !lat2 || !lon2) return Infinity;
     const R = 6371; // Radius of the Earth in km
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
@@ -90,9 +88,8 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
     return distance;
   }, []);
 
-
   useEffect(() => {
-    setLoadingLocation(true);
+    setIsLoadingLocation(true);
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -100,25 +97,19 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
           });
-          setLocationError(null);
-          setLoadingLocation(false);
+          setIsLoadingLocation(false);
         },
         (error) => {
-          console.error("Geolocation error:", error);
-          let errorMessage = `Error getting location: ${error.message}. Please ensure location services are enabled.`;
-          if (error.code === error.PERMISSION_DENIED && error.message.includes('Only secure origins are allowed')) {
-            errorMessage = `Error getting location: Location access is only available on secure (HTTPS) connections. Functionality might be limited. Enable HTTPS for your site.`;
-          }
-          setLocationError(errorMessage);
-          setLoadingLocation(false);
+          console.error("Geolocation error in feed:", error);
+          setIsLoadingLocation(false);
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     } else {
-      setLocationError("Geolocation is not supported by this browser.");
-      setLoadingLocation(false);
+      setIsLoadingLocation(false);
     }
   }, []);
+
 
   const handleNotificationRegistration = async () => {
     // ... (existing notification logic)
@@ -154,11 +145,9 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
     }
   }, [allPosts]);
 
-  // This effect handles both filtering and sorting of posts on the client-side.
   useEffect(() => {
     let processedPosts = [...allPosts];
 
-    // 1. Filtering Logic
     if (location && !showAnyDistance) {
       processedPosts = processedPosts.filter(p => 
         p.latitude && p.longitude && 
@@ -172,34 +161,28 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
       );
     }
 
-    // 2. Sorting Logic
     if (sessionUser?.role === 'Gorakshak') {
-      // For Gorakshak users, prioritize other Gorakshak posts, then sort by time.
       processedPosts.sort((a, b) => {
         const roleA = a.authorrole === 'Gorakshak' ? 0 : 1;
         const roleB = b.authorrole === 'Gorakshak' ? 0 : 1;
         if (roleA !== roleB) {
-          return roleA - roleB; // Gorakshak posts (0) come before others (1).
+          return roleA - roleB;
         }
-        // If roles are the same, sort by most recent time.
         return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
       });
     } else {
-      // For Business and Anonymous users, sort by distance, then by time.
       if (location) {
         processedPosts.sort((a, b) => {
           const distA = calculateDistance(location.latitude, location.longitude, a.latitude, a.longitude);
           const distB = calculateDistance(location.latitude, location.longitude, b.latitude, b.longitude);
           
-          // If distances are very similar (e.g., within 100m), fall back to time-based sorting.
           if (Math.abs(distA - distB) < 0.1) {
             return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
           }
           
-          return distA - distB; // Sort by closest distance first.
+          return distA - distB;
         });
       }
-      // If no location is available, posts remain sorted by time (the default from the DB), which is a sensible fallback.
     }
     
     setFilteredAndSortedPosts(processedPosts);
@@ -207,8 +190,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
 
 
   useEffect(() => {
-    // We don't want to poll if the page is not visible.
-    if (loadingLocation || document.hidden) return;
+    if (isLoadingLocation || document.hidden) return;
 
     const intervalId = setInterval(async () => {
       if (document.hidden) return; 
@@ -221,55 +203,11 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
     }, NEW_POST_POLL_INTERVAL);
 
     return () => clearInterval(intervalId);
-  }, [loadingLocation, latestPostIdClientKnows]);
+  }, [isLoadingLocation, latestPostIdClientKnows]);
 
   const handleLoadNewPulses = async () => {
     toast({ title: "Refreshing Pulses...", description: "Fetching the latest vibes for you." });
     await refreshPosts();
-  };
-
-
-  const handleAddPost = async (content: string, hashtags: string[], mediaUrl?: string, mediaType?: 'image' | 'video') => {
-    if (!location) { 
-      const errMessage = locationError || "Cannot determine location. Please enable location services and refresh.";
-      toast({ variant: "destructive", title: "Location Error", description: errMessage });
-      return;
-    }
-     if (!content.trim()) {
-      toast({ variant: "destructive", title: "Post Error", description: "Post content cannot be empty." });
-      return;
-    }
-
-    setFormSubmitting(true);
-    try {
-      const postData: NewPost = {
-        content,
-        latitude: location.latitude, 
-        longitude: location.longitude,
-        mediaUrl: mediaUrl,
-        mediaType: mediaType,
-        hashtags: hashtags || [],
-        authorId: sessionUser ? sessionUser.id : undefined,
-      };
-      const result = await addPost(postData);
-
-      if (result.error) {
-        toast({ variant: "destructive", title: "Post Error", description: result.error || "Failed to add post." });
-      } else if (result.post) {
-        setAllPosts(prevPosts => [result.post!, ...prevPosts]); 
-        setLatestPostIdClientKnows(prevLatestId => Math.max(prevLatestId, result.post!.id));
-        toast({ title: "Post Added!", description: "Your pulse is now live!", variant: "default", className: "bg-primary text-primary-foreground"});
-        setNewPulsesAvailable(false); 
-        setNewPulsesCount(0);
-        await refreshPosts();
-      } else {
-         toast({ variant: "destructive", title: "Post Error", description: "An unexpected issue occurred." });
-      }
-    } catch (error: any) {
-      toast({ variant: "destructive", title: "Post Error", description: error.message || "An unexpected error." });
-    } finally {
-      setFormSubmitting(false);
-    }
   };
   
   const handleLoadMore = async () => {
@@ -401,35 +339,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
   const activeFilterCount = (filterHashtags.length > 0 ? 1 : 0) + (!showAnyDistance ? 1 : 0);
 
   return (
-    <div className="space-y-8">
-      {locationError && (
-          <Alert variant="destructive">
-              <Terminal className="h-4 w-4" />
-              <AlertTitle>Location Error</AlertTitle>
-              <AlertDescription>
-                  {locationError}
-              </AlertDescription>
-          </Alert>
-      )}
-
-      <Card className="overflow-hidden shadow-2xl border border-primary/30 rounded-xl bg-card/90 backdrop-blur-md transform hover:shadow-primary/20 transition-all duration-300 hover:border-primary/60">
-          <CardHeader className="bg-gradient-to-br from-primary/10 to-accent/5 p-5">
-              <CardTitle className="text-2xl font-semibold text-primary flex items-center">
-                  <Zap className="w-7 h-7 mr-2 text-accent drop-shadow-sm" />
-                  Share Your Pulse
-              </CardTitle>
-              {loadingLocation && (
-                <p className="text-sm text-muted-foreground flex items-center pt-1">
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Determining your location...
-                </p>
-              )}
-          </CardHeader>
-          <CardContent className="p-5">
-              <PostForm onSubmit={handleAddPost} submitting={formSubmitting || loadingLocation} />
-          </CardContent>
-      </Card>
-
+    <div>
       <div className="flex justify-end items-center sticky top-6 z-30 mb-4 px-1 gap-2">
           <Button
               variant="outline"

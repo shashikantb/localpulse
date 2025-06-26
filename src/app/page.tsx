@@ -3,13 +3,14 @@ import type { FC } from 'react';
 import { Suspense } from 'react';
 import { getPosts } from './actions';
 import PostFeedClient from '@/components/post-feed-client';
+import PostComposer from '@/components/post-composer'; // New component for the form
 import type { Post } from '@/lib/db-types';
 import { getSession } from './auth/actions';
 import { PostFeedSkeleton } from '@/components/post-feed-skeleton';
 
 const POSTS_PER_PAGE = 5;
 
-// This new async component will be wrapped in Suspense.
+// This async component will be wrapped in Suspense.
 // It fetches the data, and its rendering is deferred until the data is ready.
 async function FeedLoader() {
   const { user } = await getSession();
@@ -24,14 +25,21 @@ async function FeedLoader() {
     initialPosts = [];
   }
   
+  // PostFeedClient is now just the feed, not the form.
   return <PostFeedClient initialPosts={initialPosts} sessionUser={user} />;
 }
 
 
 const HomePage: FC = async () => {
+  const { user } = await getSession();
+
   return (
     <main className="flex min-h-screen flex-col items-center p-4 sm:p-6 md:p-8 lg:p-16 bg-gradient-to-br from-background to-muted/30">
       <div className="container mx-auto max-w-2xl space-y-8 py-8">
+        {/* The PostComposer is rendered immediately, outside of Suspense */}
+        <PostComposer sessionUser={user} />
+        
+        {/* The PostFeed is suspended, showing a skeleton while it loads */}
         <Suspense fallback={<PostFeedSkeleton />}>
           <FeedLoader />
         </Suspense>
