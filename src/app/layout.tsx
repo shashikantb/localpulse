@@ -5,6 +5,7 @@ import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 import Footer from '@/components/layout/footer';
 import BottomNavBar from '@/components/layout/bottom-nav-bar'; // Import BottomNavBar
+import { AppInstallPrompt } from '@/components/app-install-prompt';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -32,6 +33,7 @@ export default function RootLayout({
         </div>
         <Footer />
         <BottomNavBar /> {/* Add BottomNavBar here */}
+        <AppInstallPrompt />
         <Toaster />
       </body>
     </html>
