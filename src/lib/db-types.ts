@@ -1,5 +1,5 @@
 
-export type UserRole = 'Business' | 'Gorakshak' | 'Admin';
+export type UserRole = 'Business' | 'Gorakshak' | 'Admin' | 'Janta';
 
 // Define the structure of a User for client-side use (omitting password)
 export interface User {
@@ -20,7 +20,7 @@ export interface UserWithPassword extends User {
 export type NewUser = {
   name: string;
   email: string;
-  role: 'Business' | 'Gorakshak';
+  role: 'Business' | 'Gorakshak' | 'Janta';
   passwordplaintext: string;
 };
 

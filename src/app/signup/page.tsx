@@ -15,7 +15,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { signUp } from '@/app/auth/actions';
-import { Loader2, UserPlus, ShieldAlert, Building, ShieldCheck } from 'lucide-react';
+import { Loader2, UserPlus, ShieldAlert, Building, ShieldCheck, User } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 
@@ -23,7 +23,7 @@ const signupSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters.'),
   email: z.string().email('Please enter a valid email address.'),
   password: z.string().min(8, 'Password must be at least 8 characters.'),
-  role: z.enum(['Business', 'Gorakshak'], { required_error: 'You must select a role.' }),
+  role: z.enum(['Business', 'Gorakshak', 'Janta'], { required_error: 'You must select a role.' }),
 });
 
 type SignupFormInputs = z.infer<typeof signupSchema>;
@@ -34,7 +34,7 @@ const SignupPage: FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
-  const [signupRole, setSignupRole] = useState<'Business' | 'Gorakshak' | null>(null);
+  const [signupRole, setSignupRole] = useState<'Business' | 'Gorakshak' | 'Janta' | null>(null);
 
   const form = useForm<SignupFormInputs>({
     resolver: zodResolver(signupSchema),
@@ -53,7 +53,7 @@ const SignupPage: FC = () => {
       if (result.success) {
         setSignupRole(data.role);
         setIsSuccess(true);
-        if (data.role === 'Gorakshak') {
+        if (data.role === 'Gorakshak' || data.role === 'Janta') {
             toast({
               title: 'Account Created!',
               description: 'Your account is active and ready to use. You can now log in.',
@@ -84,7 +84,7 @@ const SignupPage: FC = () => {
             </CardHeader>
             <CardContent>
                 <p className="text-muted-foreground">
-                    {signupRole === 'Gorakshak'
+                    {signupRole === 'Gorakshak' || signupRole === 'Janta'
                         ? 'Your account has been created and is ready to use. You can now log in.'
                         : 'Your account has been created and is awaiting approval from an administrator. You will be notified once your account is activated.'}
                 </p>
@@ -101,7 +101,7 @@ const SignupPage: FC = () => {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md shadow-2xl">
+      <Card className="w-full max-w-lg shadow-2xl">
         <CardHeader className="text-center">
           <CardTitle className="text-3xl font-bold text-primary flex items-center justify-center">
             <UserPlus className="mr-2 h-8 w-8" />
@@ -172,7 +172,7 @@ const SignupPage: FC = () => {
                       <RadioGroup
                         onValueChange={field.onChange}
                         defaultValue={field.value}
-                        className="grid grid-cols-2 gap-4"
+                        className="grid grid-cols-1 sm:grid-cols-3 gap-4"
                         disabled={isSubmitting}
                       >
                         <FormItem>
@@ -191,6 +191,15 @@ const SignupPage: FC = () => {
                           <Label htmlFor="role-gorakshak" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer">
                             <ShieldCheck className="mb-3 h-6 w-6" />
                             Gorakshak
+                          </Label>
+                        </FormItem>
+                         <FormItem>
+                          <FormControl>
+                            <RadioGroupItem value="Janta" id="role-janta" className="peer sr-only" />
+                          </FormControl>
+                          <Label htmlFor="role-janta" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer">
+                            <User className="mb-3 h-6 w-6" />
+                            Janta
                           </Label>
                         </FormItem>
                       </RadioGroup>
