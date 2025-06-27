@@ -16,6 +16,33 @@ async function geocodeCoordinates(latitude: number, longitude: number): Promise<
   return "Unknown City";
 }
 
+// Helper to attach like status to posts for a logged-in user
+async function attachLikeStatus(posts: Post[], user: User | null): Promise<Post[]> {
+    if (user && posts.length > 0) {
+      const postIds = posts.map(p => p.id);
+      const likedPostIds = await db.getLikedPostIdsForUserDb(user.id, postIds);
+      posts.forEach(post => {
+        post.isLikedByCurrentUser = likedPostIds.has(post.id);
+      });
+    }
+    return posts;
+}
+
+const mapPostFromDb = (post: Post) => ({
+    ...post,
+    createdAt: post.createdat,
+    likeCount: post.likecount,
+    notifiedCount: post.notifiedcount,
+    viewCount: post.viewcount,
+    mediaUrl: post.mediaurl,
+    mediaType: post.mediatype,
+    hashtags: post.hashtags || [],
+    authorId: post.authorid,
+    authorName: post.authorname,
+    authorRole: post.authorrole,
+});
+
+
 export async function getPosts(options?: { page: number; limit: number }): Promise<Post[]> {
   try {
     const { user } = await getSession();
@@ -24,20 +51,10 @@ export async function getPosts(options?: { page: number; limit: number }): Promi
         offset: (options.page - 1) * options.limit
     } : undefined;
 
-    const posts = await db.getPostsDb(dbOptions, user?.role);
-    return posts.map(post => ({
-      ...post,
-      createdAt: post.createdat,
-      likeCount: post.likecount,
-      notifiedCount: post.notifiedcount,
-      viewCount: post.viewcount,
-      mediaUrl: post.mediaurl,
-      mediaType: post.mediatype,
-      hashtags: post.hashtags || [],
-      authorId: post.authorid,
-      authorName: post.authorname,
-      authorRole: post.authorrole,
-    }));
+    let posts = await db.getPostsDb(dbOptions, user?.role);
+    posts = await attachLikeStatus(posts, user);
+    
+    return posts.map(mapPostFromDb);
   } catch (error) {
     console.error("Server action error fetching posts:", error);
     return [];
@@ -46,21 +63,13 @@ export async function getPosts(options?: { page: number; limit: number }): Promi
 
 export async function getMediaPosts(options?: { page: number; limit: number }): Promise<Post[]> {
   try {
+    const { user } = await getSession();
     const dbOptions = options ? { limit: options.limit, offset: (options.page - 1) * options.limit } : undefined;
-    const posts = await db.getMediaPostsDb(dbOptions);
-    return posts.map(post => ({
-      ...post,
-      createdAt: post.createdat,
-      likeCount: post.likecount,
-      notifiedCount: post.notifiedcount,
-      viewCount: post.viewcount,
-      mediaUrl: post.mediaurl,
-      mediaType: post.mediatype,
-      hashtags: post.hashtags || [],
-      authorId: post.authorid,
-      authorName: post.authorname,
-      authorRole: post.authorrole,
-    }));
+    
+    let posts = await db.getMediaPostsDb(dbOptions);
+    posts = await attachLikeStatus(posts, user);
+
+    return posts.map(mapPostFromDb);
   } catch (error) {
     console.error("Server action error fetching media posts:", error);
     return [];
@@ -155,13 +164,31 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
 }
 
 
-export async function likePost(postId: number): Promise<{ post?: Post; error?: string }> {
+export async function toggleLikePost(postId: number): Promise<{ post?: Post; error?: string }> {
   try {
-    const updatedPost = await db.incrementPostLikeCountDb(postId);
+    const { user } = await getSession();
+    if (!user) {
+      return { error: 'You must be logged in to like a post.' };
+    }
+
+    const hasLiked = await db.checkIfUserLikedPostDb(user.id, postId);
+    let updatedPost: Post | null;
+
+    if (hasLiked) {
+      await db.removeLikeDb(user.id, postId);
+      updatedPost = await db.updatePostLikeCountDb(postId, 'decrement');
+    } else {
+      await db.addLikeDb(user.id, postId);
+      updatedPost = await db.updatePostLikeCountDb(postId, 'increment');
+    }
+    
     if (updatedPost) {
       revalidatePath('/'); 
       revalidatePath(`/posts/${postId}`);
-      return { post: { ...updatedPost, notifiedCount: updatedPost.notifiedcount, viewCount: updatedPost.viewcount } }; 
+      // Manually set the isLikedByCurrentUser flag for the response
+      const finalPost = mapPostFromDb(updatedPost);
+      finalPost.isLikedByCurrentUser = !hasLiked;
+      return { post: finalPost };
     }
     return { error: 'Post not found or failed to update.' };
   } catch (error: any) {
@@ -272,20 +299,11 @@ export async function getUser(userId: number): Promise<User | null> {
 
 export async function getPostsByUserId(userId: number): Promise<Post[]> {
   try {
-    const posts = await db.getPostsByUserIdDb(userId);
-    return posts.map(post => ({
-      ...post,
-      createdAt: post.createdat,
-      likeCount: post.likecount,
-      notifiedCount: post.notifiedcount,
-      viewCount: post.viewcount,
-      mediaUrl: post.mediaurl,
-      mediaType: post.mediatype,
-      hashtags: post.hashtags || [],
-      authorId: post.authorid,
-      authorName: post.authorname,
-      authorRole: post.authorrole,
-    }));
+    const { user: sessionUser } = await getSession();
+    let posts = await db.getPostsByUserIdDb(userId);
+    posts = await attachLikeStatus(posts, sessionUser);
+    
+    return posts.map(mapPostFromDb);
   } catch (error) {
     console.error(`Server action error fetching posts for user ${userId}:`, error);
     return [];
@@ -294,23 +312,13 @@ export async function getPostsByUserId(userId: number): Promise<Post[]> {
 
 export async function getPostById(postId: number): Promise<Post | null> {
   try {
-    const { user } = await getSession(); // To respect role-based visibility if needed in the future
-    const post = await db.getPostByIdDb(postId, user?.role);
+    const { user } = await getSession();
+    let post = await db.getPostByIdDb(postId, user?.role);
     if (!post) return null;
 
-    return {
-      ...post,
-      createdat: post.createdat,
-      likeCount: post.likecount,
-      notifiedCount: post.notifiedcount,
-      viewCount: post.viewcount,
-      mediaUrl: post.mediaurl,
-      mediaType: post.mediatype,
-      hashtags: post.hashtags || [],
-      authorId: post.authorid,
-      authorName: post.authorname,
-      authorRole: post.authorrole,
-    };
+    const posts = await attachLikeStatus([post], user);
+
+    return mapPostFromDb(posts[0]);
   } catch (error) {
     console.error(`Server action error fetching post ${postId}:`, error);
     return null;

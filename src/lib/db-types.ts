@@ -41,6 +41,7 @@ export interface Post {
   authorid: number | null; // This will come from the posts table
   authorname: string | null; // This will be joined from the users table
   authorrole: UserRole | null; // This will be joined from the users table
+  isLikedByCurrentUser?: boolean; // Added to track if the session user liked this post
 }
 
 // For creating a new post from the client, now authorId is optional
@@ -94,5 +95,3 @@ export interface DeviceToken {
   longitude: number | null;
   last_updated: string;
 }
-
-    

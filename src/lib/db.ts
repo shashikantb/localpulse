@@ -87,6 +87,18 @@ async function initializeDbSchema(): Promise<void> {
         authorid INTEGER REFERENCES users(id) ON DELETE SET NULL
       );
     `);
+    
+    // Post Likes Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS post_likes (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+        createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, post_id)
+      );
+    `);
+
 
     // Comments Table
     await client.query(`
@@ -172,6 +184,7 @@ async function initializeDbSchema(): Promise<void> {
     await client.query('CREATE INDEX IF NOT EXISTS posts_geo_idx ON posts USING gist (ll_to_earth(latitude, longitude))');
     await client.query(`CREATE INDEX IF NOT EXISTS idx_posts_media ON posts (createdat DESC) WHERE mediaurl IS NOT NULL`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_users_role_id ON users(role, id)`);
+    await client.query('CREATE INDEX IF NOT EXISTS idx_post_likes_user_post ON post_likes (user_id, post_id)');
 
     await client.query('COMMIT');
     console.log('Database schema initialized successfully.');
@@ -271,14 +284,14 @@ export async function addPostDb(newPost: DbNewPost): Promise<Post> {
   return result.rows[0];
 }
 
-export async function incrementPostLikeCountDb(postId: number): Promise<Post | null> {
+export async function updatePostLikeCountDb(postId: number, direction: 'increment' | 'decrement'): Promise<Post | null> {
   const dbPool = getDbPool();
-  if (!dbPool) throw new Error("Database not configured. Cannot like post.");
-
+  if (!dbPool) throw new Error("Database not configured. Cannot update like count.");
+  const operator = direction === 'increment' ? '+' : '-';
   const query = `
     UPDATE posts
-    SET likecount = likecount + 1
-    WHERE id = $1
+    SET likecount = likecount ${operator} 1
+    WHERE id = $1 AND likecount >= 0
     RETURNING *;
   `;
   const result: QueryResult<Post> = await dbPool.query(query, [postId]);
@@ -445,7 +458,40 @@ export async function updateNotifiedCountDb(postId: number, count: number): Prom
     await dbPool.query('UPDATE posts SET notifiedcount = $1 WHERE id = $2', [count, postId]);
 }
 
-// --- User Functions ---
+// --- User & Like Functions ---
+
+export async function checkIfUserLikedPostDb(userId: number, postId: number): Promise<boolean> {
+  const dbPool = getDbPool();
+  if (!dbPool) return false;
+  const query = 'SELECT 1 FROM post_likes WHERE user_id = $1 AND post_id = $2';
+  const result = await dbPool.query(query, [userId, postId]);
+  return result.rowCount > 0;
+}
+
+export async function addLikeDb(userId: number, postId: number): Promise<void> {
+  const dbPool = getDbPool();
+  if (!dbPool) throw new Error("Database not configured.");
+  const query = 'INSERT INTO post_likes (user_id, post_id) VALUES ($1, $2) ON CONFLICT DO NOTHING';
+  await dbPool.query(query, [userId, postId]);
+}
+
+export async function removeLikeDb(userId: number, postId: number): Promise<void> {
+  const dbPool = getDbPool();
+  if (!dbPool) throw new Error("Database not configured.");
+  const query = 'DELETE FROM post_likes WHERE user_id = $1 AND post_id = $2';
+  await dbPool.query(query, [userId, postId]);
+}
+
+export async function getLikedPostIdsForUserDb(userId: number, postIds: number[]): Promise<Set<number>> {
+  const dbPool = getDbPool();
+  if (!dbPool || postIds.length === 0) return new Set();
+
+  const query = `
+    SELECT post_id FROM post_likes WHERE user_id = $1 AND post_id = ANY($2::int[])
+  `;
+  const result = await dbPool.query(query, [userId, postIds]);
+  return new Set(result.rows.map(r => r.post_id));
+}
 
 export async function createUserDb(newUser: NewUser, status: 'pending' | 'approved' = 'pending'): Promise<User> {
     const dbPool = getDbPool();

@@ -5,7 +5,7 @@ import type { FC } from 'react';
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import type { Post } from '@/lib/db-types';
+import type { Post, User } from '@/lib/db-types';
 import { getMediaPosts } from '@/app/actions';
 import { ReelItem } from '@/components/reel-item';
 import { Button } from '@/components/ui/button';
@@ -40,9 +40,10 @@ const getInitialCachedReels = (serverInitialPosts: Post[]): Post[] => {
 
 interface ReelsViewerProps {
   initialPosts: Post[];
+  sessionUser: User | null;
 }
 
-const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts }) => {
+const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts, sessionUser }) => {
   const { toast } = useToast();
   const router = useRouter();
   const [reelPosts, setReelPosts] = useState<Post[]>(() => getInitialCachedReels(initialPosts));
@@ -210,6 +211,7 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts }) => {
                     <ReelItem
                         post={post}
                         isActive={index === currentIndex}
+                        sessionUser={sessionUser}
                     />
                 </div>
             );
@@ -260,5 +262,3 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts }) => {
 };
 
 export default ReelsViewer;
-
-    

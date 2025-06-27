@@ -11,9 +11,10 @@ import { formatDistanceToNowStrict } from 'date-fns';
 import { MapPin, UserCircle, MessageCircle, Send, Map, CornerDownRight, Share2, Rss, ThumbsUp, Tag, ShieldCheck, Building, Eye, BellRing } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { likePost, addComment, getComments, recordPostView } from '@/app/actions';
+import { toggleLikePost, addComment, getComments, recordPostView } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
 const CommentCard: FC<{ comment: CommentType }> = ({ comment }) => {
   return (
@@ -65,6 +66,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser })
   const authorName = post.authorname || 'Anonymous Pulsar';
   const authorRole = post.authorrole;
 
+  const [isLiked, setIsLiked] = useState(post.isLikedByCurrentUser || false);
   const [displayLikeCount, setDisplayLikeCount] = useState<number>(post.likecount);
   const [isLiking, setIsLiking] = useState<boolean>(false);
   const [comments, setComments] = useState<CommentType[]>([]);
@@ -114,6 +116,13 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser })
       setCurrentOrigin(window.location.origin);
     }
   }, []);
+  
+  // Sync state if post prop changes (e.g., from feed refresh)
+  useEffect(() => {
+    setIsLiked(post.isLikedByCurrentUser || false);
+    setDisplayLikeCount(post.likecount);
+  }, [post.isLikedByCurrentUser, post.likecount]);
+
 
   const fetchPostComments = useCallback(async () => {
     if (!showComments) return;
@@ -134,26 +143,44 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser })
 
 
   const handleLikeClick = async () => {
-    if (isLiking) return; 
+    if (!sessionUser) {
+        toast({
+            variant: "destructive",
+            title: "Authentication Required",
+            description: "You must be logged in to like a pulse.",
+        });
+        return;
+    }
+    if (isLiking) return;
     setIsLiking(true);
-    const previousLikeCount = displayLikeCount;
-    setDisplayLikeCount(prevCount => prevCount + 1);
+
+    // Optimistic update
+    const wasLiked = isLiked;
+    setIsLiked(!wasLiked);
+    setDisplayLikeCount(prev => wasLiked ? prev - 1 : prev + 1);
+
     try {
-      const result = await likePost(post.id);
-      if (result.error || !result.post) {
-        setDisplayLikeCount(previousLikeCount);
-        toast({ variant: 'destructive', title: 'Like Error', description: result.error || 'Could not like the post.' });
-      } else {
-        setDisplayLikeCount(result.post.likecount);
-        toast({ title: 'Liked!', description: 'Pulse liked successfully.', duration: 2000 });
-      }
+        const result = await toggleLikePost(post.id);
+        if (result.error || !result.post) {
+            // Revert on failure
+            setIsLiked(wasLiked);
+            setDisplayLikeCount(prev => wasLiked ? prev + 1 : prev - 1);
+            toast({ variant: 'destructive', title: 'Like Error', description: result.error || 'Could not update like status.' });
+        } else {
+            // Sync with server state
+            setDisplayLikeCount(result.post.likecount);
+            setIsLiked(result.post.isLikedByCurrentUser || false);
+        }
     } catch (error: any) {
-      setDisplayLikeCount(previousLikeCount);
-      toast({ variant: 'destructive', title: 'Like Error', description: error.message || 'An unexpected error occurred.' });
+        // Revert on exception
+        setIsLiked(wasLiked);
+        setDisplayLikeCount(prev => wasLiked ? prev + 1 : prev - 1);
+        toast({ variant: 'destructive', title: 'Like Error', description: error.message || 'An unexpected error occurred.' });
     } finally {
-      setIsLiking(false);
+        setIsLiking(false);
     }
   };
+
 
   const handleCommentSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -304,8 +331,8 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser })
       )}
 
       <div className="px-5 pb-4 pt-2 flex items-center space-x-2 border-t border-border/30 bg-card/20 flex-wrap gap-y-2">
-        <Button variant="ghost" size="sm" onClick={handleLikeClick} disabled={isLiking} className="flex items-center space-x-1.5 text-muted-foreground hover:text-primary transition-colors duration-150 group disabled:opacity-50 disabled:cursor-not-allowed">
-          <ThumbsUp className={`w-5 h-5 transition-all duration-200 group-hover:scale-110 group-hover:text-blue-500 ${isLiking ? 'text-blue-500 animate-pulse' : 'text-muted-foreground'}`} />
+        <Button variant="ghost" size="sm" onClick={handleLikeClick} disabled={isLiking || !sessionUser} className="flex items-center space-x-1.5 text-muted-foreground hover:text-primary transition-colors duration-150 group disabled:opacity-50 disabled:cursor-not-allowed">
+          <ThumbsUp className={cn('w-5 h-5 transition-all duration-200 group-hover:scale-110 group-hover:text-blue-500', isLiked ? 'text-blue-500 fill-blue-500' : 'text-muted-foreground')} />
           <span className="font-medium text-sm">{displayLikeCount} {displayLikeCount === 1 ? 'Like' : 'Likes'}</span>
         </Button>
         <Button variant="ghost" size="sm" onClick={() => { setShowComments(!showComments); if(!showComments) fetchPostComments(); }} className="flex items-center space-x-1.5 text-muted-foreground hover:text-primary transition-colors duration-150 group">

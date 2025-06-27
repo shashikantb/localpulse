@@ -4,12 +4,12 @@ import React, { type FC, FormEvent } from 'react'; // Import React
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Image from 'next/image';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import type { Post, Comment as CommentType } from '@/lib/db-types';
+import type { Post, Comment as CommentType, User } from '@/lib/db-types';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { UserCircle, MessageCircle, Send, Share2, ThumbsUp, PlayCircle, VolumeX, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { likePost, addComment, getComments } from '@/app/actions';
+import { toggleLikePost, addComment, getComments } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -39,12 +39,14 @@ const CommentCard: FC<{ comment: CommentType }> = ({ comment }) => {
 interface ReelItemProps {
   post: Post;
   isActive: boolean;
+  sessionUser: User | null;
 }
 
-export const ReelItem: FC<ReelItemProps> = ({ post, isActive }) => {
+export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => {
   const { toast } = useToast();
   const timeAgo = formatDistanceToNowStrict(new Date(post.createdat), { addSuffix: true });
 
+  const [isLiked, setIsLiked] = useState(post.isLikedByCurrentUser || false);
   const [displayLikeCount, setDisplayLikeCount] = useState<number>(post.likecount);
   const [isLiking, setIsLiking] = useState<boolean>(false);
   const [comments, setComments] = useState<CommentType[]>([]);
@@ -62,13 +64,14 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive }) => {
       setCurrentOrigin(window.location.origin);
     }
   }, []);
-
+  
   useEffect(() => {
+    setIsLiked(post.isLikedByCurrentUser || false);
     setDisplayLikeCount(post.likecount);
     setComments([]);
     setShowComments(false);
     setIsInternallyMuted(true);
-  }, [post.id, post.likecount]);
+  }, [post.id, post.likecount, post.isLikedByCurrentUser]);
 
 
   useEffect(() => {
@@ -121,25 +124,44 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive }) => {
   }, [fetchPostComments, showComments, comments.length, isLoadingComments]);
 
   const handleLikeClick = async () => {
+    if (!sessionUser) {
+        toast({
+            variant: "destructive",
+            title: "Authentication Required",
+            description: "You must be logged in to like a reel.",
+        });
+        return;
+    }
     if (isLiking) return;
     setIsLiking(true);
-    const previousLikeCount = displayLikeCount;
-    setDisplayLikeCount(prevCount => prevCount + 1);
+    
+    // Optimistic update
+    const wasLiked = isLiked;
+    setIsLiked(!wasLiked);
+    setDisplayLikeCount(prev => wasLiked ? prev - 1 : prev + 1);
+
     try {
-      const result = await likePost(post.id);
-      if (result.error || !result.post) {
-        setDisplayLikeCount(previousLikeCount);
-        toast({ variant: 'destructive', title: 'Like Error', description: result.error || 'Could not like the post.' });
-      } else {
-        setDisplayLikeCount(result.post.likecount);
-      }
+        const result = await toggleLikePost(post.id);
+        if (result.error || !result.post) {
+            // Revert on failure
+            setIsLiked(wasLiked);
+            setDisplayLikeCount(prev => wasLiked ? prev + 1 : prev - 1);
+            toast({ variant: 'destructive', title: 'Like Error', description: result.error || 'Could not update like status.' });
+        } else {
+            // Sync with server state
+            setDisplayLikeCount(result.post.likecount);
+            setIsLiked(result.post.isLikedByCurrentUser || false);
+        }
     } catch (error: any) {
-      setDisplayLikeCount(previousLikeCount);
-      toast({ variant: 'destructive', title: 'Like Error', description: error.message || 'An unexpected error occurred.' });
+        // Revert on exception
+        setIsLiked(wasLiked);
+        setDisplayLikeCount(prev => wasLiked ? prev + 1 : prev - 1);
+        toast({ variant: 'destructive', title: 'Like Error', description: error.message || 'An unexpected error occurred.' });
     } finally {
-      setIsLiking(false);
+        setIsLiking(false);
     }
   };
+
 
   const handleCommentSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -149,7 +171,8 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive }) => {
     }
     setIsSubmittingComment(true);
     try {
-      const added = await addComment({ postId: post.id, content: newComment.trim(), author: 'ReelViewer' });
+      const author = sessionUser?.name || 'ReelViewer';
+      const added = await addComment({ postId: post.id, content: newComment.trim(), author });
       setComments(prev => [added, ...prev]);
       setNewComment('');
     } catch (error) {
@@ -264,8 +287,8 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive }) => {
         </div>
 
         <div className="flex flex-col space-y-3 items-center z-10">
-            <Button variant="ghost" size="sm" onClick={handleLikeClick} disabled={isLiking} className="flex flex-col items-center text-white hover:text-pink-400 p-1 h-auto">
-              <ThumbsUp className={cn("w-6 h-6", isLiking ? "text-pink-500 fill-pink-500" : "")} />
+            <Button variant="ghost" size="sm" onClick={handleLikeClick} disabled={isLiking || !sessionUser} className="flex flex-col items-center text-white hover:text-pink-400 p-1 h-auto disabled:opacity-50">
+              <ThumbsUp className={cn("w-6 h-6", isLiked ? "text-pink-500 fill-pink-500" : "")} />
               <span className="font-medium text-xs mt-0.5">{displayLikeCount}</span>
             </Button>
             <Button variant="ghost" size="sm" onClick={() => { setShowComments(prev => !prev); }} className="flex flex-col items-center text-white hover:text-cyan-400 p-1 h-auto">
