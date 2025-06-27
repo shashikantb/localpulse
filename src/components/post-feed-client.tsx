@@ -405,6 +405,16 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
               )}
           </div>
 
+          {initialPosts.length === 0 && (
+             <Card className="text-center py-16 rounded-xl shadow-xl border border-border/40 bg-card/80 backdrop-blur-sm">
+                <CardContent className="flex flex-col items-center">
+                <Zap className="mx-auto h-20 w-20 text-muted-foreground/30 mb-6" />
+                <p className="text-2xl text-muted-foreground font-semibold">The air is quiet here...</p>
+                <p className="text-md text-muted-foreground/80 mt-2">No pulses found. Be the first to post!</p>
+                </CardContent>
+            </Card>
+          )}
+
           {filteredAndSortedPosts.length > 0 ? (
               <>
               {filteredAndSortedPosts.map((post) => (
@@ -418,13 +428,15 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
               )}
               </>
           ) : (
-          <Card className="text-center py-16 rounded-xl shadow-xl border border-border/40 bg-card/80 backdrop-blur-sm">
-              <CardContent className="flex flex-col items-center">
-              <Zap className="mx-auto h-20 w-20 text-muted-foreground/30 mb-6" />
-              <p className="text-2xl text-muted-foreground font-semibold">The air is quiet here...</p>
-              <p className="text-md text-muted-foreground/80 mt-2">No pulses found. Try adjusting your filters or be the first to post!</p>
-              </CardContent>
-          </Card>
+           initialPosts.length > 0 && (
+            <Card className="text-center py-16 rounded-xl shadow-xl border border-border/40 bg-card/80 backdrop-blur-sm">
+                <CardContent className="flex flex-col items-center">
+                <Zap className="mx-auto h-20 w-20 text-muted-foreground/30 mb-6" />
+                <p className="text-2xl text-muted-foreground font-semibold">The air is quiet here...</p>
+                <p className="text-md text-muted-foreground/80 mt-2">No pulses found for your current filters. Try adjusting them!</p>
+                </CardContent>
+            </Card>
+           )
           )}
       </div>
     </div>

@@ -9,9 +9,9 @@ import type { Post } from '@/lib/db-types';
 import { getMediaPosts } from '@/app/actions';
 import { ReelItem } from '@/components/reel-item';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, Home, Loader2, Film } from 'lucide-react';
+import { ChevronUp, ChevronDown, Home, Loader2, Film } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertDescription, AlertTitle, Alert } from '@/components/ui/alert';
 import { useSwipeable } from 'react-swipeable';
 
 const REELS_PER_PAGE = 10;
@@ -109,32 +109,34 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts }) => {
       }
   }, [initialPosts, toast]);
 
-  if (reelPosts.length === 0) {
+  if (initialPosts.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-black text-white p-4 text-center">
-        <Film className="h-20 w-20 text-muted-foreground mb-6" />
-        <AlertTitle className="text-2xl font-semibold mb-2">No Reels to Show</AlertTitle>
-        <AlertDescription className="text-base text-muted-foreground mb-8">
-          It looks like there are no image or video posts available right now.
-        </AlertDescription>
-        <Button asChild variant="outline" className="bg-primary text-primary-foreground hover:bg-primary/90 border-primary">
-          <Link href="/">
-            <Home className="mr-2 h-5 w-5" />
-            Back to Main Feed
-          </Link>
-        </Button>
+        <Alert className="max-w-md bg-gray-900/80 border-gray-700 text-white">
+          <Film className="h-5 w-5 text-primary" />
+          <AlertTitle className="text-xl font-semibold mb-2">No Reels to Show</AlertTitle>
+          <AlertDescription className="text-base text-gray-300 mb-6">
+            It looks like there are no image or video posts available right now. Create one from the main feed!
+          </AlertDescription>
+           <Button asChild variant="outline" className="bg-primary text-primary-foreground hover:bg-primary/90 border-primary w-full">
+            <Link href="/">
+              <Home className="mr-2 h-5 w-5" />
+              Back to Main Feed
+            </Link>
+          </Button>
+        </Alert>
       </div>
     );
   }
 
   return (
     <div {...swipeHandlers} className="h-screen w-screen overflow-hidden flex flex-col bg-black touch-none">
-      <div className="absolute top-0 left-0 z-30 p-4">
+      <div className="absolute top-4 left-4 z-30">
         <Button
           onClick={() => router.push('/')}
           variant="ghost"
           size="icon"
-          className="text-white hover:bg-white/20 backdrop-blur-sm rounded-full"
+          className="text-white hover:bg-white/20 backdrop-blur-sm rounded-full h-11 w-11"
           aria-label="Back to Feed"
         >
           <Home className="h-6 w-6" />
@@ -179,19 +181,19 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts }) => {
       </div>
 
       {reelPosts.length > 1 && (
-        <div className="absolute bottom-0 left-0 right-0 z-30 flex justify-between items-center p-3 bg-gradient-to-t from-black/50 to-transparent pointer-events-none">
+        <div className="absolute right-4 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-2 pointer-events-none">
           <Button 
             onClick={goToPreviousReel} 
             variant="ghost" 
-            size="lg" 
-            className="text-white hover:bg-white/20 backdrop-blur-sm rounded-full p-3 disabled:opacity-50 pointer-events-auto"
+            size="icon"
+            className="text-white hover:bg-white/20 backdrop-blur-sm rounded-full h-11 w-11 disabled:opacity-30 pointer-events-auto"
             aria-label="Previous Reel"
             disabled={currentIndex === 0}
           >
-            <ChevronLeft className="h-7 w-7" />
+            <ChevronUp className="h-7 w-7" />
           </Button>
           
-          <div className="text-xs text-white/80 bg-black/30 px-2 py-1 rounded-md backdrop-blur-sm flex items-center">
+          <div className="text-xs text-white/80 bg-black/30 px-2 py-1 rounded-md backdrop-blur-sm flex items-center pointer-events-auto">
             {isLoading && hasMore ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
@@ -202,12 +204,12 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts }) => {
           <Button 
             onClick={goToNextReel} 
             variant="ghost" 
-            size="lg" 
-            className="text-white hover:bg-white/20 backdrop-blur-sm rounded-full p-3 disabled:opacity-50 pointer-events-auto"
+            size="icon"
+            className="text-white hover:bg-white/20 backdrop-blur-sm rounded-full h-11 w-11 disabled:opacity-30 pointer-events-auto"
             aria-label="Next Reel"
             disabled={currentIndex === reelPosts.length - 1 && !hasMore}
           >
-            <ChevronRight className="h-7 w-7" />
+            <ChevronDown className="h-7 w-7" />
           </Button>
         </div>
       )}
