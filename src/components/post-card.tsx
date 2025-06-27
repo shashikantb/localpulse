@@ -1,17 +1,17 @@
 
 'use client';
 import type { FC, FormEvent } from 'react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import type { Post, Comment as CommentType, User } from '@/lib/db-types';
 import { formatDistanceToNowStrict } from 'date-fns';
-import { MapPin, UserCircle, MessageCircle, Send, Map, CornerDownRight, Instagram, Share2, Rss, ThumbsUp, Tag, ShieldCheck, Building } from 'lucide-react';
+import { MapPin, UserCircle, MessageCircle, Send, Map, CornerDownRight, Instagram, Share2, Rss, ThumbsUp, Tag, ShieldCheck, Building, Eye, BellRing } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { likePost, addComment, getComments } from '@/app/actions';
+import { likePost, addComment, getComments, recordPostView } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 
@@ -71,7 +71,6 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser })
   
   const authorName = post.authorname || 'Anonymous Pulsar';
   const authorRole = post.authorrole;
-  const authorInitial = authorName.charAt(0).toUpperCase();
 
   const [displayLikeCount, setDisplayLikeCount] = useState<number>(post.likecount);
   const [isLiking, setIsLiking] = useState<boolean>(false);
@@ -81,6 +80,41 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser })
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [currentOrigin, setCurrentOrigin] = useState('');
+
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [wasViewed, setWasViewed] = useState(false);
+
+  useEffect(() => {
+    // Only run view tracking if it's not the author's own post.
+    if (sessionUser && sessionUser.id === post.authorid) {
+        return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry.isIntersecting && !wasViewed) {
+          recordPostView(post.id);
+          setWasViewed(true); // Ensure it's only called once per page load
+          observer.disconnect(); // We're done with this observer for this card
+        }
+      },
+      { threshold: 0.6 } // Trigger when 60% of the card is visible
+    );
+
+    const currentCardRef = cardRef.current;
+    if (currentCardRef) {
+      observer.observe(currentCardRef);
+    }
+
+    return () => {
+      if (currentCardRef) {
+        observer.unobserve(currentCardRef);
+      }
+      observer.disconnect();
+    };
+  }, [post.id, wasViewed, sessionUser, post.authorid]);
+
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -166,7 +200,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser })
 
 
   return (
-    <Card className="overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-300 ease-out border border-border/60 rounded-xl bg-card/80 backdrop-blur-sm hover:border-primary/50 transform hover:scale-[1.005]">
+    <Card ref={cardRef} className="overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-300 ease-out border border-border/60 rounded-xl bg-card/80 backdrop-blur-sm hover:border-primary/50 transform hover:scale-[1.005]">
       <CardHeader className="pb-3 pt-5 px-5 flex flex-row items-start space-x-4 bg-gradient-to-br from-card to-muted/10">
         <Avatar className="h-12 w-12 border-2 border-primary/60 shadow-md">
           <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20">
@@ -245,6 +279,22 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser })
         </a>
       </CardFooter>
 
+      {sessionUser && sessionUser.id === post.authorid && (
+        <div className="px-5 py-3 border-t border-border/30 bg-primary/5">
+          <p className="text-xs font-semibold text-primary/90 mb-2 uppercase tracking-wider">Your Post Stats</p>
+          <div className="flex items-center justify-around text-sm text-primary/80">
+            <div className="flex items-center gap-2" title={`${post.viewcount.toLocaleString()} views`}>
+              <Eye className="w-4 h-4 text-accent" />
+              <span>{post.viewcount.toLocaleString()}</span>
+            </div>
+            <div className="flex items-center gap-2" title={`${post.notifiedcount.toLocaleString()} users notified`}>
+              <BellRing className="w-4 h-4 text-accent" />
+              <span>{post.notifiedcount.toLocaleString()}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="px-5 pb-4 pt-2 flex items-center space-x-2 border-t border-border/30 bg-card/20 flex-wrap gap-y-2">
         <Button variant="ghost" size="sm" onClick={handleLikeClick} disabled={isLiking} className="flex items-center space-x-1.5 text-muted-foreground hover:text-primary transition-colors duration-150 group disabled:opacity-50 disabled:cursor-not-allowed">
           <ThumbsUp className={`w-5 h-5 transition-all duration-200 group-hover:scale-110 group-hover:text-blue-500 ${isLiking ? 'text-blue-500 animate-pulse' : 'text-muted-foreground'}`} />
@@ -316,3 +366,5 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser })
     </Card>
   );
 };
+
+    

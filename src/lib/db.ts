@@ -20,6 +20,8 @@ let getNearbyDeviceTokensDb: (latitude: number, longitude: number, radiusKm?: nu
 let deleteDeviceTokenDb: (token: string) => Promise<void>;
 let getNewerPostsCountDb: (latestIdKnown: number) => Promise<number>;
 let closeDb: () => Promise<void>;
+let incrementPostViewCountDb: (postId: number) => Promise<void>;
+let updateNotifiedCountDb: (postId: number, count: number) => Promise<void>;
 
 // New user functions
 let createUserDb: (newUser: NewUser, status?: 'pending' | 'approved') => Promise<User>;
@@ -62,6 +64,8 @@ if (!process.env.POSTGRES_URL) {
   deleteDeviceTokenDb = async (token: string): Promise<void> => { console.warn("MOCK DB: deleteDeviceTokenDb called"); return; };
   getNewerPostsCountDb = async (latestIdKnown: number): Promise<number> => { console.warn("MOCK DB: getNewerPostsCountDb called"); return 0; };
   closeDb = async (): Promise<void> => { console.warn("MOCK DB: closeDb called"); return; };
+  incrementPostViewCountDb = async (postId: number): Promise<void> => { console.warn("MOCK DB: incrementPostViewCountDb called for post", postId); return; };
+  updateNotifiedCountDb = async (postId: number, count: number): Promise<void> => { console.warn("MOCK DB: updateNotifiedCountDb called for post", postId); return; };
 
   // Mock User functions
   createUserDb = async (newUser: NewUser, status: 'pending' | 'approved' = 'pending'): Promise<User> => { await dbNotConfiguredError(); return null as any; };
@@ -127,16 +131,32 @@ if (!process.env.POSTGRES_URL) {
           hashtags TEXT[] NULL
         );
       `);
-      // Add authorId to posts table if it doesn't exist
+      // Add authorId, viewcount, notifiedcount to posts table if it doesn't exist
        if (postsTableExists) {
-          const hasAuthorId = await client.query(`SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='posts' AND column_name='authorid');`);
-          if (!hasAuthorId.rows[0].exists) {
+          const columnsResult = await client.query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name='posts' AND column_name IN ('authorid', 'viewcount', 'notifiedcount');
+          `);
+          const existingColumns = columnsResult.rows.map(r => r.column_name);
+
+          if (!existingColumns.includes('authorid')) {
             await client.query('ALTER TABLE posts ADD COLUMN authorId INTEGER REFERENCES users(id) ON DELETE SET NULL;');
             console.log('Added authorId column to posts table.');
           }
+          if (!existingColumns.includes('viewcount')) {
+            await client.query('ALTER TABLE posts ADD COLUMN viewcount INTEGER NOT NULL DEFAULT 0;');
+            console.log('Added viewcount column to posts table.');
+          }
+          if (!existingColumns.includes('notifiedcount')) {
+            await client.query('ALTER TABLE posts ADD COLUMN notifiedcount INTEGER NOT NULL DEFAULT 0;');
+            console.log('Added notifiedcount column to posts table.');
+          }
       } else {
-        // If table is new, we still need to add the column after creation if not in the initial CREATE
+        // If table is new, add columns after creation
         await client.query('ALTER TABLE posts ADD COLUMN IF NOT EXISTS authorId INTEGER REFERENCES users(id) ON DELETE SET NULL;');
+        await client.query('ALTER TABLE posts ADD COLUMN IF NOT EXISTS viewcount INTEGER NOT NULL DEFAULT 0;');
+        await client.query('ALTER TABLE posts ADD COLUMN IF NOT EXISTS notifiedcount INTEGER NOT NULL DEFAULT 0;');
       }
       console.log('Checked/Created posts table structure.');
   
@@ -234,7 +254,7 @@ if (!process.env.POSTGRES_URL) {
   getPostsByUserIdDb = async (userId: number): Promise<Post[]> => {
     try {
         const queryText = `
-        SELECT p.id, p.content, p.latitude, p.longitude, p.createdAt, p.mediaUrl, p.mediaType, p.likeCount, p.city, p.hashtags,
+        SELECT p.id, p.content, p.latitude, p.longitude, p.createdAt, p.mediaUrl, p.mediaType, p.likeCount, p.notifiedCount, p.viewCount, p.city, p.hashtags,
                 u.id as authorId, u.name as authorName, u.role as authorRole
         FROM posts p
         JOIN users u ON p.authorId = u.id
@@ -276,7 +296,7 @@ if (!process.env.POSTGRES_URL) {
   getPostsDb = async (options?: { limit: number; offset: number }, userRole?: UserRole): Promise<Post[]> => {
     try {
       const selectClause = `
-        SELECT p.id, p.content, p.latitude, p.longitude, p.createdAt, p.mediaUrl, p.mediaType, p.likeCount, p.city, p.hashtags,
+        SELECT p.id, p.content, p.latitude, p.longitude, p.createdAt, p.mediaUrl, p.mediaType, p.likeCount, p.notifiedCount, p.viewCount, p.city, p.hashtags,
                u.id as authorId, u.name as authorName, u.role as authorRole
         FROM posts p
         LEFT JOIN users u ON p.authorId = u.id
@@ -309,7 +329,7 @@ if (!process.env.POSTGRES_URL) {
   getMediaPostsDb = async (options?: { limit: number; offset: number; }): Promise<Post[]> => {
     try {
       let queryText = `
-        SELECT p.id, p.content, p.latitude, p.longitude, p.createdAt, p.mediaUrl, p.mediaType, p.likeCount, p.city, p.hashtags,
+        SELECT p.id, p.content, p.latitude, p.longitude, p.createdAt, p.mediaUrl, p.mediaType, p.likeCount, p.notifiedCount, p.viewCount, p.city, p.hashtags,
                u.id as authorId, u.name as authorName, u.role as authorRole
         FROM posts p
         LEFT JOIN users u ON p.authorId = u.id
@@ -339,7 +359,7 @@ if (!process.env.POSTGRES_URL) {
   addPostDb = async (newPost: DbNewPost): Promise<Post> => {
     try {
       const result: QueryResult<Post> = await pool.query(
-        'INSERT INTO posts (content, latitude, longitude, mediaUrl, mediaType, city, hashtags, authorId) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, content, latitude, longitude, createdAt, mediaUrl, mediaType, likeCount, city, hashtags, authorId',
+        'INSERT INTO posts (content, latitude, longitude, mediaUrl, mediaType, city, hashtags, authorId) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
         [
           newPost.content, newPost.latitude, newPost.longitude, 
           newPost.mediaurl ?? null, newPost.mediatype ?? null, 
@@ -472,6 +492,22 @@ if (!process.env.POSTGRES_URL) {
     }
   }
   
+  incrementPostViewCountDb = async (postId: number): Promise<void> => {
+    try {
+      await pool.query('UPDATE posts SET viewcount = viewcount + 1 WHERE id = $1', [postId]);
+    } catch (error) {
+      console.error(`Error incrementing view count for post ${postId} in DB:`, error);
+    }
+  }
+
+  updateNotifiedCountDb = async (postId: number, count: number): Promise<void> => {
+    try {
+      await pool.query('UPDATE posts SET notifiedcount = $1 WHERE id = $2', [count, postId]);
+    } catch (error) {
+      console.error(`Error updating notified count for post ${postId} in DB:`, error);
+    }
+  }
+
   closeDb = async (): Promise<void> => {
     try {
       await pool.end();
@@ -492,6 +528,9 @@ export {
   addCommentDb, getCommentsByPostIdDb, incrementAndGetVisitorCountsDb,
   getVisitorCountsDb, addOrUpdateDeviceTokenDb, deleteDeviceTokenDb,
   getNearbyDeviceTokensDb, getNewerPostsCountDb, closeDb,
+  incrementPostViewCountDb, updateNotifiedCountDb,
   // User functions
   createUserDb, getUserByEmailDb, getUserByIdDb, getPostsByUserIdDb, getPendingUsersDb, updateUserStatusDb, getAllUsersDb
 };
+
+    

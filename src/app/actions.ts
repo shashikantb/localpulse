@@ -29,6 +29,8 @@ export async function getPosts(options?: { page: number; limit: number }): Promi
       ...post,
       createdAt: post.createdat,
       likeCount: post.likecount,
+      notifiedCount: post.notifiedcount,
+      viewCount: post.viewcount,
       mediaUrl: post.mediaurl,
       mediaType: post.mediatype,
       hashtags: post.hashtags || [],
@@ -50,6 +52,8 @@ export async function getMediaPosts(options?: { page: number; limit: number }): 
       ...post,
       createdAt: post.createdat,
       likeCount: post.likecount,
+      notifiedCount: post.notifiedcount,
+      viewCount: post.viewcount,
       mediaUrl: post.mediaurl,
       mediaType: post.mediatype,
       hashtags: post.hashtags || [],
@@ -68,6 +72,7 @@ async function sendNotificationsForNewPost(post: Post) {
     const tokens = await db.getNearbyDeviceTokensDb(post.latitude, post.longitude, 20); // 20km radius
 
     if (tokens.length === 0) {
+      await db.updateNotifiedCountDb(post.id, 0);
       return;
     }
     
@@ -83,6 +88,8 @@ async function sendNotificationsForNewPost(post: Post) {
     
     const response = await firebaseAdmin.messaging().sendEachForMulticast(message);
     
+    await db.updateNotifiedCountDb(post.id, response.successCount);
+
     if (response.failureCount > 0) {
       const failedTokens: string[] = [];
       response.responses.forEach((resp, idx) => {
@@ -153,7 +160,7 @@ export async function likePost(postId: number): Promise<{ post?: Post; error?: s
     const updatedPost = await db.incrementPostLikeCountDb(postId);
     if (updatedPost) {
       revalidatePath('/'); 
-      return { post: { ...updatedPost } }; // a bit simplified, but should work
+      return { post: { ...updatedPost, notifiedCount: updatedPost.notifiedcount, viewCount: updatedPost.viewcount } }; 
     }
     return { error: 'Post not found or failed to update.' };
   } catch (error: any) {
@@ -184,6 +191,17 @@ export async function getComments(postId: number): Promise<Comment[]> {
   } catch (error) {
     console.error(`Server action error fetching comments for post ${postId}:`, error);
     return [];
+  }
+}
+
+export async function recordPostView(postId: number): Promise<{ success: boolean }> {
+  try {
+    await db.incrementPostViewCountDb(postId);
+    return { success: true };
+  } catch (error) {
+    // Log but don't surface to the user, it's a background task.
+    console.error(`Server action error recording view for post ${postId}:`, error);
+    return { success: false };
   }
 }
 
@@ -257,6 +275,8 @@ export async function getPostsByUserId(userId: number): Promise<Post[]> {
       ...post,
       createdAt: post.createdat,
       likeCount: post.likecount,
+      notifiedCount: post.notifiedcount,
+      viewCount: post.viewcount,
       mediaUrl: post.mediaurl,
       mediaType: post.mediatype,
       hashtags: post.hashtags || [],
@@ -269,3 +289,5 @@ export async function getPostsByUserId(userId: number): Promise<Post[]> {
     return [];
   }
 }
+
+    

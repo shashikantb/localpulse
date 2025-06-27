@@ -34,6 +34,8 @@ export interface Post {
   mediaurl?: string | null;
   mediatype?: 'image' | 'video' | null;
   likecount: number;
+  notifiedcount: number;
+  viewcount: number;
   city?: string | null;
   hashtags?: string[] | null;
   authorid: number | null; // This will come from the posts table
@@ -92,3 +94,5 @@ export interface DeviceToken {
   longitude: number | null;
   last_updated: string;
 }
+
+    
