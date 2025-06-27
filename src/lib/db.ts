@@ -99,44 +99,44 @@ async function initializeDbSchema(): Promise<void> {
       );
     `);
 
-    // Visitor Stats Table - Robust Initialization
-    // We wrap this in a SAVEPOINT block to handle cases where the table is malformed
-    // from a previous buggy version, without aborting the whole transaction.
-    const vsSavepoint = 'visitor_stats_fix';
-    try {
-        await client.query(`SAVEPOINT ${vsSavepoint}`);
-        
-        // This is the check that was failing. If the table exists but is malformed,
-        // this will throw an error (e.g., column "stat_key" does not exist).
-        await client.query("SELECT stat_key, value FROM visitor_stats LIMIT 1");
-        
-        // If the check passes, ensure the value column is BIGINT
-        const colTypeRes = await client.query(`
-            SELECT data_type FROM information_schema.columns
-            WHERE table_name = 'visitor_stats' AND column_name = 'value';
+    // Visitor Stats Table - Robust check to prevent transaction errors
+    const tableExistsRes = await client.query(`
+        SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_schema = 'public'
+            AND table_name = 'visitor_stats'
+        );
+    `);
+    const tableExists = tableExistsRes.rows[0].exists;
+
+    let tableIsCorrect = false;
+    if (tableExists) {
+        const columnsRes = await client.query(`
+            SELECT column_name, data_type 
+            FROM information_schema.columns
+            WHERE table_name = 'visitor_stats'
+            AND column_name IN ('stat_key', 'value');
         `);
-        if (colTypeRes.rows[0]?.data_type.toLowerCase() !== 'bigint') {
-           // If type is wrong, we'll force a recreate by throwing an error.
-           throw new Error('visitor_stats.value column has wrong type.');
+        // Ensure both columns exist and the value column is of type bigint
+        const hasStatKey = columnsRes.rows.some(r => r.column_name === 'stat_key');
+        const hasValue = columnsRes.rows.some(r => r.column_name === 'value' && r.data_type === 'bigint');
+        if (hasStatKey && hasValue && columnsRes.rows.length === 2) {
+            tableIsCorrect = true;
         }
+    }
 
-    } catch (e: any) {
-        // Something is wrong with the table. Roll back the savepoint to continue the transaction.
-        await client.query(`ROLLBACK TO SAVEPOINT ${vsSavepoint}`);
-
-        // Now, safely drop the bad table and create the correct one.
-        console.warn("`visitor_stats` table appears to be malformed. It will be recreated.");
+    if (!tableIsCorrect) {
+        console.warn("`visitor_stats` table is missing or malformed. It will be recreated.");
         await client.query("DROP TABLE IF EXISTS visitor_stats;");
         await client.query(`
-          CREATE TABLE visitor_stats (
-            stat_key VARCHAR(255) PRIMARY KEY,
-            value BIGINT NOT NULL
-          );
+            CREATE TABLE visitor_stats (
+                stat_key VARCHAR(255) PRIMARY KEY,
+                value BIGINT NOT NULL
+            );
         `);
     }
 
-    // Now the table is guaranteed to exist and be correct.
-    // Insert initial data if it doesn't exist.
+    // This query is now safe to run whether the table was pre-existing or just created
     await client.query(`
       INSERT INTO visitor_stats (stat_key, value)
       VALUES ('total_visits', 0), ('daily_visits_date', 0), ('daily_visits_count', 0)
@@ -515,5 +515,3 @@ export async function updateUserStatusDb(userId: number, status: 'approved' | 'r
     const result: QueryResult<User> = await dbPool.query(query, [status, userId]);
     return result.rows[0] || null;
 }
-
-    
