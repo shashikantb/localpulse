@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { FC } from 'react';
@@ -40,7 +41,7 @@ export const UserNav: FC<UserNavProps> = ({ user }) => {
         <Button variant="ghost" className="relative h-12 w-12 rounded-full">
           {user ? (
             <Avatar className="h-10 w-10">
-              <AvatarImage src="/avatars/01.png" alt={user.name} />
+              <AvatarImage src={user.profilepictureurl ?? undefined} alt={user.name} />
               <AvatarFallback>{user.name.charAt(0).toUpperCase()}</AvatarFallback>
             </Avatar>
           ) : (

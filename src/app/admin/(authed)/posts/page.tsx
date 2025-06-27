@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { FileText, PlusCircle, Search } from 'lucide-react';
 import { getPostsDb } from '@/lib/db';
+import PostActions from '@/components/admin/post-actions';
 
 const AdminManagePostsPage: FC = async () => {
   const posts = await getPostsDb({ limit: 100, offset: 0 }); // Fetch posts for admin view
@@ -57,9 +58,7 @@ const AdminManagePostsPage: FC = async () => {
                     <td className="p-3">{post.likecount}</td>
                     <td className="p-3">{new Date(post.createdat).toLocaleDateString()}</td>
                     <td className="p-3 text-right space-x-2">
-                      <Button variant="outline" size="sm" disabled>View</Button>
-                      <Button variant="outline" size="sm" className="text-yellow-600 hover:text-yellow-700 border-yellow-500 hover:border-yellow-600" disabled>Edit</Button>
-                      <Button variant="destructive" size="sm" disabled>Delete</Button>
+                        <PostActions post={post} />
                     </td>
                   </tr>
                 ))}

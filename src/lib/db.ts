@@ -65,7 +65,8 @@ async function initializeDbSchema(): Promise<void> {
         passwordhash VARCHAR(255) NOT NULL,
         role VARCHAR(50) NOT NULL CHECK (role IN ('Business', 'Gorakshak', 'Admin', 'Janta')),
         status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
-        createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        profilepictureurl TEXT
       );
     `);
     
@@ -283,6 +284,14 @@ export async function addPostDb(newPost: DbNewPost): Promise<Post> {
   const result: QueryResult<Post> = await dbPool.query(query, values);
   return result.rows[0];
 }
+
+export async function deletePostDb(postId: number): Promise<void> {
+  const dbPool = getDbPool();
+  if (!dbPool) throw new Error("Database not configured.");
+  const query = 'DELETE FROM posts WHERE id = $1';
+  await dbPool.query(query, [postId]);
+}
+
 
 export async function updatePostLikeCountDb(postId: number, direction: 'increment' | 'decrement'): Promise<Post | null> {
   const dbPool = getDbPool();
@@ -503,7 +512,7 @@ export async function createUserDb(newUser: NewUser, status: 'pending' | 'approv
     const query = `
         INSERT INTO users(name, email, passwordhash, role, status)
         VALUES($1, $2, $3, $4, $5)
-        RETURNING id, name, email, role, status, createdat;
+        RETURNING id, name, email, role, status, createdat, profilepictureurl;
     `;
     const values = [newUser.name, newUser.email, passwordhash, newUser.role, status];
     const result: QueryResult<User> = await dbPool.query(query, values);
@@ -523,10 +532,18 @@ export async function getUserByIdDb(id: number): Promise<User | null> {
     const dbPool = getDbPool();
     if (!dbPool) return null;
 
-    const query = 'SELECT id, email, name, role, status, createdat FROM users WHERE id = $1';
+    const query = 'SELECT id, email, name, role, status, createdat, profilepictureurl FROM users WHERE id = $1';
     const result: QueryResult<User> = await dbPool.query(query, [id]);
     return result.rows[0] || null;
 }
+
+export async function updateUserProfilePictureDb(userId: number, imageUrl: string): Promise<void> {
+  const dbPool = getDbPool();
+  if (!dbPool) throw new Error("Database not configured.");
+  const query = 'UPDATE users SET profilepictureurl = $1 WHERE id = $2';
+  await dbPool.query(query, [imageUrl, userId]);
+}
+
 
 export async function getPostsByUserIdDb(userId: number): Promise<Post[]> {
   const dbPool = getDbPool();
@@ -548,7 +565,7 @@ export async function getPendingUsersDb(): Promise<User[]> {
     if (!dbPool) return [];
 
     const query = `
-        SELECT id, name, email, role, status, createdat 
+        SELECT id, name, email, role, status, createdat, profilepictureurl
         FROM users 
         WHERE status = 'pending'
         ORDER BY createdat ASC;
@@ -562,7 +579,7 @@ export async function getAllUsersDb(): Promise<User[]> {
     if (!dbPool) return [];
 
     const query = `
-        SELECT id, name, email, role, status, createdat 
+        SELECT id, name, email, role, status, createdat, profilepictureurl
         FROM users 
         ORDER BY createdat DESC;
     `;
@@ -578,8 +595,15 @@ export async function updateUserStatusDb(userId: number, status: 'approved' | 'r
         UPDATE users
         SET status = $1
         WHERE id = $2
-        RETURNING id, name, email, role, status, createdat;
+        RETURNING id, name, email, role, status, createdat, profilepictureurl;
     `;
     const result: QueryResult<User> = await dbPool.query(query, [status, userId]);
     return result.rows[0] || null;
+}
+
+export async function deleteUserDb(userId: number): Promise<void> {
+  const dbPool = getDbPool();
+  if (!dbPool) throw new Error("Database not configured.");
+  const query = 'DELETE FROM users WHERE id = $1';
+  await dbPool.query(query, [userId]);
 }

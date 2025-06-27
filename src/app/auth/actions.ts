@@ -5,7 +5,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import * as jose from 'jose';
 import bcrypt from 'bcryptjs';
-import { createUserDb, getUserByEmailDb, getUserByIdDb } from '@/lib/db';
+import { createUserDb, getUserByEmailDb, getUserByIdDb, updateUserProfilePictureDb } from '@/lib/db';
 import type { NewUser, User } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 import { cache } from 'react';
@@ -117,3 +117,25 @@ export const getSession = cache(async (): Promise<{ user: User | null }> => {
   const user = await getUserByIdDb(payload.userId);
   return { user };
 });
+
+export async function updateUserProfilePicture(formData: FormData): Promise<{ success: boolean; error?: string }> {
+  const { user } = await getSession();
+  if (!user) {
+    return { success: false, error: 'You must be logged in to update your profile picture.' };
+  }
+
+  const image = formData.get('profilePicture') as string | null;
+  if (!image) {
+    return { success: false, error: 'No image data provided.' };
+  }
+
+  try {
+    await updateUserProfilePictureDb(user.id, image);
+    revalidatePath(`/users/${user.id}`);
+    revalidatePath('/', 'layout'); // To update the user-nav avatar
+    return { success: true };
+  } catch (error: any) {
+    console.error(`Error updating profile picture for user ${user.id}:`, error);
+    return { success: false, error: error.message || 'Failed to update profile picture.' };
+  }
+}

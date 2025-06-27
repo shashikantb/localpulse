@@ -9,6 +9,7 @@ export interface User {
   role: UserRole;
   status: 'pending' | 'approved' | 'rejected';
   createdat: string;
+  profilepictureurl?: string | null;
 }
 
 // Full user structure from DB, including password hash

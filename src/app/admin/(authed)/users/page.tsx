@@ -3,15 +3,10 @@ import type { FC } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Users, PlusCircle, Search, MoreVertical, Trash2, Edit, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Users, PlusCircle, Search, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { getAllUsersDb } from '@/lib/db';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Badge } from '@/components/ui/badge';
+import UserActions from '@/components/admin/user-actions';
 
 
 const AdminManageUsersPage: FC = async () => {
@@ -91,19 +86,7 @@ const AdminManageUsersPage: FC = async () => {
                     </td>
                     <td className="p-3 text-muted-foreground">{new Date(user.createdat).toLocaleDateString()}</td>
                     <td className="p-3 text-right">
-                       <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem disabled><Edit className="mr-2 h-4 w-4"/>Edit User</DropdownMenuItem>
-                          <DropdownMenuItem disabled className="text-destructive focus:text-destructive focus:bg-destructive/10">
-                            <Trash2 className="mr-2 h-4 w-4"/>Delete User
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                       <UserActions user={user} />
                     </td>
                   </tr>
                 ))}
