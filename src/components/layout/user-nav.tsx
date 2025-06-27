@@ -14,12 +14,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { LogIn, LogOut, Menu, UserPlus } from 'lucide-react';
-import type { User } from '@/lib/db-types';
+import { LogIn, LogOut, Menu, User, UserPlus } from 'lucide-react';
+import type { User as UserType } from '@/lib/db-types';
 import { logout } from '@/app/auth/actions';
 
 interface UserNavProps {
-  user: User | null;
+  user: UserType | null;
 }
 
 export const UserNav: FC<UserNavProps> = ({ user }) => {
@@ -63,6 +63,12 @@ export const UserNav: FC<UserNavProps> = ({ user }) => {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link href={`/users/${user.id}`} className="cursor-pointer">
+                <User className="mr-2 h-4 w-4" />
+                <span>My Profile</span>
+              </Link>
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
               <LogOut className="mr-2 h-4 w-4" />
               <span>Log out</span>
