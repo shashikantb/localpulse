@@ -197,6 +197,23 @@ export async function toggleLikePost(postId: number): Promise<{ post?: Post; err
   }
 }
 
+export async function likePostAnonymously(postId: number): Promise<{ post?: Post; error?: string }> {
+  try {
+    // For anonymous users, we just increment the count. We can't toggle.
+    const updatedPost = await db.updatePostLikeCountDb(postId, 'increment');
+    
+    if (updatedPost) {
+      revalidatePath('/'); 
+      revalidatePath(`/posts/${postId}`);
+      return { post: mapPostFromDb(updatedPost) };
+    }
+    return { error: 'Post not found or failed to update.' };
+  } catch (error: any) {
+    console.error(`Server action error liking post ${postId} anonymously:`, error);
+    return { error: error.message || `Failed to update like count for post ${postId} due to a server error.` };
+  }
+}
+
 
 export async function addComment(commentData: NewComment): Promise<Comment> {
   try {

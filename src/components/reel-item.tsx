@@ -9,7 +9,7 @@ import { formatDistanceToNowStrict } from 'date-fns';
 import { UserCircle, MessageCircle, Send, Share2, ThumbsUp, PlayCircle, VolumeX, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { toggleLikePost, addComment, getComments } from '@/app/actions';
+import { toggleLikePost, addComment, getComments, likePostAnonymously } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -35,6 +35,16 @@ const CommentCard: FC<{ comment: CommentType }> = ({ comment }) => {
   );
 };
 
+const getAnonymousLikedPosts = (): number[] => {
+    if (typeof window === "undefined") return [];
+    try {
+        const item = window.localStorage.getItem('localpulse-anonymous-likes');
+        return item ? JSON.parse(item) : [];
+    } catch (error) {
+        console.warn("Error reading anonymous likes from localStorage", error);
+        return [];
+    }
+};
 
 interface ReelItemProps {
   post: Post;
@@ -46,7 +56,7 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
   const { toast } = useToast();
   const timeAgo = formatDistanceToNowStrict(new Date(post.createdat), { addSuffix: true });
 
-  const [isLiked, setIsLiked] = useState(post.isLikedByCurrentUser || false);
+  const [isLikedByClient, setIsLikedByClient] = useState(false);
   const [displayLikeCount, setDisplayLikeCount] = useState<number>(post.likecount);
   const [isLiking, setIsLiking] = useState<boolean>(false);
   const [comments, setComments] = useState<CommentType[]>([]);
@@ -66,12 +76,16 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
   }, []);
   
   useEffect(() => {
-    setIsLiked(post.isLikedByCurrentUser || false);
     setDisplayLikeCount(post.likecount);
+    if (sessionUser) {
+        setIsLikedByClient(post.isLikedByCurrentUser || false);
+    } else {
+        setIsLikedByClient(getAnonymousLikedPosts().includes(post.id));
+    }
     setComments([]);
     setShowComments(false);
     setIsInternallyMuted(true);
-  }, [post.id, post.likecount, post.isLikedByCurrentUser]);
+  }, [post.id, post.likecount, post.isLikedByCurrentUser, sessionUser]);
 
 
   useEffect(() => {
@@ -124,43 +138,67 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
   }, [fetchPostComments, showComments, comments.length, isLoadingComments]);
 
   const handleLikeClick = async () => {
-    if (!sessionUser) {
-        toast({
-            variant: "destructive",
-            title: "Authentication Required",
-            description: "You must be logged in to like a reel.",
-        });
-        return;
-    }
     if (isLiking) return;
-    setIsLiking(true);
-    
-    // Optimistic update
-    const wasLiked = isLiked;
-    setIsLiked(!wasLiked);
-    setDisplayLikeCount(prev => wasLiked ? prev - 1 : prev + 1);
 
-    try {
-        const result = await toggleLikePost(post.id);
-        if (result.error || !result.post) {
-            // Revert on failure
-            setIsLiked(wasLiked);
-            setDisplayLikeCount(prev => wasLiked ? prev + 1 : prev - 1);
-            toast({ variant: 'destructive', title: 'Like Error', description: result.error || 'Could not update like status.' });
-        } else {
-            // Sync with server state
-            setDisplayLikeCount(result.post.likecount);
-            setIsLiked(result.post.isLikedByCurrentUser || false);
+    if (sessionUser) {
+        // --- LOGGED-IN USER: TOGGLE LIKE ---
+        setIsLiking(true);
+        const originallyLiked = isLikedByClient;
+        setIsLikedByClient(!originallyLiked);
+        setDisplayLikeCount(prev => originallyLiked ? prev - 1 : prev + 1);
+
+        try {
+            const result = await toggleLikePost(post.id);
+            if (result.error || !result.post) {
+                // Revert on failure
+                setIsLikedByClient(originallyLiked);
+                setDisplayLikeCount(prev => originallyLiked ? prev + 1 : prev - 1);
+                toast({ variant: 'destructive', title: 'Error', description: result.error || 'Could not update like.' });
+            } else {
+                // Sync with server state
+                setDisplayLikeCount(result.post.likecount);
+                setIsLikedByClient(result.post.isLikedByCurrentUser || false);
+            }
+        } catch (error: any) {
+            setIsLikedByClient(originallyLiked);
+            setDisplayLikeCount(prev => originallyLiked ? prev + 1 : prev - 1);
+            toast({ variant: 'destructive', title: 'Error', description: 'An unexpected server error occurred.' });
+        } finally {
+            setIsLiking(false);
         }
-    } catch (error: any) {
-        // Revert on exception
-        setIsLiked(wasLiked);
-        setDisplayLikeCount(prev => wasLiked ? prev + 1 : prev - 1);
-        toast({ variant: 'destructive', title: 'Like Error', description: error.message || 'An unexpected error occurred.' });
-    } finally {
-        setIsLiking(false);
+    } else {
+        // --- ANONYMOUS USER: LIKE ONCE ---
+        if (isLikedByClient) {
+            toast({ title: "You've already liked this reel." });
+            return;
+        }
+
+        setIsLiking(true);
+        setIsLikedByClient(true);
+        setDisplayLikeCount(prev => prev + 1);
+
+        try {
+            const result = await likePostAnonymously(post.id);
+            if (result.error || !result.post) {
+                // Revert on error
+                setIsLikedByClient(false);
+                setDisplayLikeCount(prev => prev - 1);
+                toast({ variant: 'destructive', title: 'Error', description: 'Could not like reel.' });
+            } else {
+                // Success, so save to localStorage
+                const currentLikes = getAnonymousLikedPosts();
+                window.localStorage.setItem('localpulse-anonymous-likes', JSON.stringify([...currentLikes, post.id]));
+                setDisplayLikeCount(result.post.likecount); // Sync with server
+            }
+        } catch (error) {
+            setIsLikedByClient(false);
+            setDisplayLikeCount(prev => prev - 1);
+            toast({ variant: 'destructive', title: 'Error', description: 'An unexpected server error occurred.' });
+        } finally {
+            setIsLiking(false);
+        }
     }
-  };
+};
 
 
   const handleCommentSubmit = async (e: FormEvent) => {
@@ -287,8 +325,8 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
         </div>
 
         <div className="flex flex-col space-y-3 items-center z-10">
-            <Button variant="ghost" size="sm" onClick={handleLikeClick} disabled={isLiking || !sessionUser} className="flex flex-col items-center text-white hover:text-pink-400 p-1 h-auto disabled:opacity-50">
-              <ThumbsUp className={cn("w-6 h-6", isLiked ? "text-pink-500 fill-pink-500" : "")} />
+            <Button variant="ghost" size="sm" onClick={handleLikeClick} disabled={isLiking || (!sessionUser && isLikedByClient)} className="flex flex-col items-center text-white hover:text-pink-400 p-1 h-auto disabled:opacity-50">
+              <ThumbsUp className={cn("w-6 h-6", isLikedByClient ? "text-pink-500 fill-pink-500" : "")} />
               <span className="font-medium text-xs mt-0.5">{displayLikeCount}</span>
             </Button>
             <Button variant="ghost" size="sm" onClick={() => { setShowComments(prev => !prev); }} className="flex flex-col items-center text-white hover:text-cyan-400 p-1 h-auto">

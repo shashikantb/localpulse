@@ -11,7 +11,7 @@ import { formatDistanceToNowStrict } from 'date-fns';
 import { MapPin, UserCircle, MessageCircle, Send, Map, CornerDownRight, Share2, Rss, ThumbsUp, Tag, ShieldCheck, Building, Eye, BellRing } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { toggleLikePost, addComment, getComments, recordPostView } from '@/app/actions';
+import { toggleLikePost, addComment, getComments, recordPostView, likePostAnonymously } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -35,6 +35,17 @@ const CommentCard: FC<{ comment: CommentType }> = ({ comment }) => {
       </div>
     </div>
   );
+};
+
+const getAnonymousLikedPosts = (): number[] => {
+    if (typeof window === "undefined") return [];
+    try {
+        const item = window.localStorage.getItem('localpulse-anonymous-likes');
+        return item ? JSON.parse(item) : [];
+    } catch (error) {
+        console.warn("Error reading anonymous likes from localStorage", error);
+        return [];
+    }
 };
 
 interface PostCardProps {
@@ -66,7 +77,10 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser })
   const authorName = post.authorname || 'Anonymous Pulsar';
   const authorRole = post.authorrole;
 
-  const [isLiked, setIsLiked] = useState(post.isLikedByCurrentUser || false);
+  const [isLikedByClient, setIsLikedByClient] = useState(() => {
+    if (sessionUser) return post.isLikedByCurrentUser || false;
+    return getAnonymousLikedPosts().includes(post.id);
+  });
   const [displayLikeCount, setDisplayLikeCount] = useState<number>(post.likecount);
   const [isLiking, setIsLiking] = useState<boolean>(false);
   const [comments, setComments] = useState<CommentType[]>([]);
@@ -119,9 +133,13 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser })
   
   // Sync state if post prop changes (e.g., from feed refresh)
   useEffect(() => {
-    setIsLiked(post.isLikedByCurrentUser || false);
     setDisplayLikeCount(post.likecount);
-  }, [post.isLikedByCurrentUser, post.likecount]);
+    if (sessionUser) {
+        setIsLikedByClient(post.isLikedByCurrentUser || false);
+    } else {
+        setIsLikedByClient(getAnonymousLikedPosts().includes(post.id));
+    }
+  }, [post.isLikedByCurrentUser, post.likecount, post.id, sessionUser]);
 
 
   const fetchPostComments = useCallback(async () => {
@@ -141,45 +159,68 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser })
     fetchPostComments();
   }, [fetchPostComments]);
 
-
   const handleLikeClick = async () => {
-    if (!sessionUser) {
-        toast({
-            variant: "destructive",
-            title: "Authentication Required",
-            description: "You must be logged in to like a pulse.",
-        });
-        return;
-    }
     if (isLiking) return;
-    setIsLiking(true);
 
-    // Optimistic update
-    const wasLiked = isLiked;
-    setIsLiked(!wasLiked);
-    setDisplayLikeCount(prev => wasLiked ? prev - 1 : prev + 1);
+    if (sessionUser) {
+        // --- LOGGED-IN USER: TOGGLE LIKE ---
+        setIsLiking(true);
+        const originallyLiked = isLikedByClient;
+        setIsLikedByClient(!originallyLiked);
+        setDisplayLikeCount(prev => originallyLiked ? prev - 1 : prev + 1);
 
-    try {
-        const result = await toggleLikePost(post.id);
-        if (result.error || !result.post) {
-            // Revert on failure
-            setIsLiked(wasLiked);
-            setDisplayLikeCount(prev => wasLiked ? prev + 1 : prev - 1);
-            toast({ variant: 'destructive', title: 'Like Error', description: result.error || 'Could not update like status.' });
-        } else {
-            // Sync with server state
-            setDisplayLikeCount(result.post.likecount);
-            setIsLiked(result.post.isLikedByCurrentUser || false);
+        try {
+            const result = await toggleLikePost(post.id);
+            if (result.error || !result.post) {
+                // Revert on failure
+                setIsLikedByClient(originallyLiked);
+                setDisplayLikeCount(prev => originallyLiked ? prev + 1 : prev - 1);
+                toast({ variant: 'destructive', title: 'Error', description: result.error || 'Could not update like.' });
+            } else {
+                // Sync with server state
+                setDisplayLikeCount(result.post.likecount);
+                setIsLikedByClient(result.post.isLikedByCurrentUser || false);
+            }
+        } catch (error: any) {
+            setIsLikedByClient(originallyLiked);
+            setDisplayLikeCount(prev => originallyLiked ? prev + 1 : prev - 1);
+            toast({ variant: 'destructive', title: 'Error', description: 'An unexpected server error occurred.' });
+        } finally {
+            setIsLiking(false);
         }
-    } catch (error: any) {
-        // Revert on exception
-        setIsLiked(wasLiked);
-        setDisplayLikeCount(prev => wasLiked ? prev + 1 : prev - 1);
-        toast({ variant: 'destructive', title: 'Like Error', description: error.message || 'An unexpected error occurred.' });
-    } finally {
-        setIsLiking(false);
+    } else {
+        // --- ANONYMOUS USER: LIKE ONCE ---
+        if (isLikedByClient) {
+            toast({ title: "You've already liked this post." });
+            return;
+        }
+
+        setIsLiking(true);
+        setIsLikedByClient(true);
+        setDisplayLikeCount(prev => prev + 1);
+
+        try {
+            const result = await likePostAnonymously(post.id);
+            if (result.error || !result.post) {
+                // Revert on error
+                setIsLikedByClient(false);
+                setDisplayLikeCount(prev => prev - 1);
+                toast({ variant: 'destructive', title: 'Error', description: 'Could not like post.' });
+            } else {
+                // Success, so save to localStorage
+                const currentLikes = getAnonymousLikedPosts();
+                window.localStorage.setItem('localpulse-anonymous-likes', JSON.stringify([...currentLikes, post.id]));
+                setDisplayLikeCount(result.post.likecount); // Sync with server
+            }
+        } catch (error) {
+            setIsLikedByClient(false);
+            setDisplayLikeCount(prev => prev - 1);
+            toast({ variant: 'destructive', title: 'Error', description: 'An unexpected server error occurred.' });
+        } finally {
+            setIsLiking(false);
+        }
     }
-  };
+};
 
 
   const handleCommentSubmit = async (e: FormEvent) => {
@@ -331,8 +372,8 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser })
       )}
 
       <div className="px-5 pb-4 pt-2 flex items-center space-x-2 border-t border-border/30 bg-card/20 flex-wrap gap-y-2">
-        <Button variant="ghost" size="sm" onClick={handleLikeClick} disabled={isLiking || !sessionUser} className="flex items-center space-x-1.5 text-muted-foreground hover:text-primary transition-colors duration-150 group disabled:opacity-50 disabled:cursor-not-allowed">
-          <ThumbsUp className={cn('w-5 h-5 transition-all duration-200 group-hover:scale-110 group-hover:text-blue-500', isLiked ? 'text-blue-500 fill-blue-500' : 'text-muted-foreground')} />
+        <Button variant="ghost" size="sm" onClick={handleLikeClick} disabled={isLiking || (!sessionUser && isLikedByClient)} className="flex items-center space-x-1.5 text-muted-foreground hover:text-primary transition-colors duration-150 group disabled:opacity-50 disabled:cursor-not-allowed">
+          <ThumbsUp className={cn('w-5 h-5 transition-all duration-200 group-hover:scale-110 group-hover:text-blue-500', isLikedByClient ? 'text-blue-500 fill-blue-500' : 'text-muted-foreground')} />
           <span className="font-medium text-sm">{displayLikeCount} {displayLikeCount === 1 ? 'Like' : 'Likes'}</span>
         </Button>
         <Button variant="ghost" size="sm" onClick={() => { setShowComments(!showComments); if(!showComments) fetchPostComments(); }} className="flex items-center space-x-1.5 text-muted-foreground hover:text-primary transition-colors duration-150 group">
