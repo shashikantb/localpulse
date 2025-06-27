@@ -18,7 +18,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuCheckboxItem,
 } from '@/components/ui/dropdown-menu';
-import { Loader2, Paperclip, XCircle, UploadCloud, Film, Image as ImageIcon, Settings2, Tag, ChevronDown } from 'lucide-react';
+import { Loader2, XCircle, UploadCloud, Film, Image as ImageIcon, Tag, ChevronDown, Camera } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
@@ -73,7 +73,11 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   const [isReadingFile, setIsReadingFile] = useState(false);
   const [isOptimizingVideo, setIsOptimizingVideo] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [showCameraOptions, setShowCameraOptions] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageCaptureInputRef = useRef<HTMLInputElement>(null);
+  const videoCaptureInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -91,12 +95,13 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
       setFileError(null);
       setIsReadingFile(false);
       setIsOptimizingVideo(false);
+      setShowCameraOptions(false); // Hide camera options after selection
 
       if (file) {
           if (file.size > MAX_FILE_SIZE) {
               setFileError(`File is too large. Max size: ${MAX_FILE_SIZE / 1024 / 1024}MB.`);
               setSelectedFile(null);
-              if (fileInputRef.current) fileInputRef.current.value = '';
+              if (event.target) event.target.value = '';
               return;
           }
 
@@ -105,7 +110,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
           if (!currentFileType) {
               setFileError('Invalid file type. Please select an image or video.');
               setSelectedFile(null);
-              if (fileInputRef.current) fileInputRef.current.value = '';
+              if (event.target) event.target.value = '';
               return;
           }
 
@@ -145,7 +150,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
               setMediaType(null);
               setIsReadingFile(false);
               setIsOptimizingVideo(false);
-              if (fileInputRef.current) fileInputRef.current.value = '';
+              if (event.target) event.target.value = '';
           };
           reader.readAsDataURL(file);
       }
@@ -158,9 +163,10 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
       setFileError(null);
       setIsReadingFile(false);
       setIsOptimizingVideo(false);
-      if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-      }
+      // Reset all file inputs
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (imageCaptureInputRef.current) imageCaptureInputRef.current.value = '';
+      if (videoCaptureInputRef.current) videoCaptureInputRef.current.value = '';
   };
 
   const handleSubmitForm: SubmitHandler<FormData> = async (data) => {
@@ -174,7 +180,6 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
         });
         return;
       }
-      // Ensure hashtags is an array, even if undefined from optional schema field
       const hashtagsToSubmit = data.hashtags || [];
       await onSubmit(data.content, hashtagsToSubmit, previewUrl ?? undefined, mediaType ?? undefined);
 
@@ -271,84 +276,92 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
           )}
         />
 
-
         <FormItem>
           <FormLabel htmlFor="media-upload" className="text-sm font-medium text-muted-foreground mb-1 block">
             Attach Media (Optional)
           </FormLabel>
-          <div className={cn(
-            "relative flex flex-col items-center justify-center w-full p-4 border-2 border-dashed rounded-lg cursor-pointer hover:border-primary/70 transition-colors",
-            selectedFile ? "border-primary/50" : "border-border",
-            isButtonDisabled ? "opacity-70 cursor-not-allowed" : ""
-          )}
-            onClick={() => !isButtonDisabled && fileInputRef.current?.click()}
-          >
-            <FormControl>
-              <Input
-                id="media-upload"
-                type="file"
-                accept="image/*,video/*"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-                className="hidden"
-                disabled={isButtonDisabled}
-              />
-            </FormControl>
+          <FormControl>
+            <>
+              <Input id="file-upload" type="file" accept="image/*,video/*" ref={fileInputRef} onChange={handleFileChange} className="hidden" disabled={isButtonDisabled} />
+              <Input id="image-capture" type="file" accept="image/*" capture="environment" ref={imageCaptureInputRef} onChange={handleFileChange} className="hidden" disabled={isButtonDisabled} />
+              <Input id="video-capture" type="file" accept="video/*" capture="environment" ref={videoCaptureInputRef} onChange={handleFileChange} className="hidden" disabled={isButtonDisabled} />
+            </>
+          </FormControl>
 
-            {!selectedFile && !isReadingFile && !isOptimizingVideo && (
-              <div className="text-center">
-                <UploadCloud className="mx-auto h-10 w-10 text-muted-foreground mb-2" />
-                <p className="text-sm text-muted-foreground">
-                  <span className="font-semibold text-primary">Click to upload</span> or drag and drop
-                </p>
-                <p className="text-xs text-muted-foreground/80">Image or Video (Max {MAX_FILE_SIZE / 1024 / 1024}MB)</p>
-              </div>
-            )}
-
-            {(isReadingFile || isOptimizingVideo) && (
-              <div className="flex flex-col items-center text-muted-foreground py-4">
-                <Loader2 className="h-8 w-8 animate-spin mb-2 text-primary" />
-                <p className="text-sm">{isOptimizingVideo ? 'Optimizing video...' : 'Reading file...'}</p>
-              </div>
-            )}
-
-            {selectedFile && !isReadingFile && !isOptimizingVideo && previewUrl && (
-              <div className="w-full text-center">
-                {mediaType === 'image' && (
-                  <div className="relative w-full max-w-xs mx-auto aspect-video overflow-hidden rounded-md border shadow-md mb-2 bg-muted">
-                    <Image src={previewUrl} alt="Preview" fill objectFit="cover" data-ai-hint="user uploaded image"/>
-                  </div>
-                )}
-                {mediaType === 'video' && (
-                  <div className="relative w-full max-w-xs mx-auto aspect-video overflow-hidden rounded-md border shadow-md mb-2 bg-black">
-                    <video controls src={previewUrl} className="w-full h-full object-contain" />
-                  </div>
-                )}
-                <div className="flex items-center justify-center space-x-2 text-sm text-foreground bg-background/70 p-1 rounded-md">
-                  {mediaType === 'image' ? <ImageIcon className="h-4 w-4 text-primary" /> : <Film className="h-4 w-4 text-primary" />}
-                  <span className="truncate max-w-[200px]">{selectedFile.name}</span>
-                   <span className="text-xs text-muted-foreground">({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)</span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={(e) => { e.stopPropagation(); removeMedia(); }}
-                    disabled={submitting}
-                    className="text-destructive hover:text-destructive/80 h-6 w-6 ml-auto"
-                    aria-label="Remove media"
-                  >
-                    <XCircle className="h-4 w-4" />
-                  </Button>
+          {previewUrl && selectedFile ? (
+            <div className="w-full text-center p-4 border-2 border-dashed rounded-lg border-primary/50">
+              {mediaType === 'image' && (
+                <div className="relative w-full max-w-xs mx-auto aspect-video overflow-hidden rounded-md border shadow-md mb-2 bg-muted">
+                  <Image src={previewUrl} alt="Preview" fill objectFit="cover" data-ai-hint="user uploaded image"/>
                 </div>
+              )}
+              {mediaType === 'video' && (
+                <div className="relative w-full max-w-xs mx-auto aspect-video overflow-hidden rounded-md border shadow-md mb-2 bg-black">
+                  <video controls src={previewUrl} className="w-full h-full object-contain" />
+                </div>
+              )}
+              <div className="flex items-center justify-center space-x-2 text-sm text-foreground bg-background/70 p-1 rounded-md">
+                {mediaType === 'image' ? <ImageIcon className="h-4 w-4 text-primary" /> : <Film className="h-4 w-4 text-primary" />}
+                <span className="truncate max-w-[200px]">{selectedFile.name}</span>
+                 <span className="text-xs text-muted-foreground">({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={(e) => { e.stopPropagation(); removeMedia(); }}
+                  disabled={submitting}
+                  className="text-destructive hover:text-destructive/80 h-6 w-6 ml-auto"
+                  aria-label="Remove media"
+                >
+                  <XCircle className="h-4 w-4" />
+                </Button>
               </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="p-4 border-2 border-dashed rounded-lg">
+              <div className={cn("grid gap-2", showCameraOptions ? "grid-cols-1" : "grid-cols-2")}>
+                {!showCameraOptions && (
+                  <>
+                    <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isButtonDisabled}>
+                      <UploadCloud className="mr-2 h-4 w-4" /> Upload File
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => setShowCameraOptions(true)} disabled={isButtonDisabled}>
+                      <Camera className="mr-2 h-4 w-4" /> Use Camera
+                    </Button>
+                  </>
+                )}
+                {showCameraOptions && (
+                  <div className="space-y-2 text-center">
+                    <p className="text-sm text-muted-foreground">Choose a capture option:</p>
+                    <div className="grid grid-cols-2 gap-2">
+                       <Button type="button" variant="secondary" onClick={() => imageCaptureInputRef.current?.click()} disabled={isButtonDisabled}>
+                          <ImageIcon className="mr-2 h-4 w-4" /> Take Photo
+                      </Button>
+                      <Button type="button" variant="secondary" onClick={() => videoCaptureInputRef.current?.click()} disabled={isButtonDisabled}>
+                          <Film className="mr-2 h-4 w-4" /> Record Video
+                      </Button>
+                    </div>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setShowCameraOptions(false)} disabled={isButtonDisabled}>
+                      Cancel
+                    </Button>
+                  </div>
+                )}
+              </div>
+              {(isReadingFile || isOptimizingVideo) && (
+                <div className="flex flex-col items-center text-muted-foreground py-4">
+                  <Loader2 className="h-8 w-8 animate-spin mb-2 text-primary" />
+                  <p className="text-sm">{isOptimizingVideo ? 'Optimizing video...' : 'Reading file...'}</p>
+                </div>
+              )}
+            </div>
+          )}
           {fileError && (
             <Alert variant="destructive" className="mt-2 p-2 text-sm">
               <AlertDescription>{fileError}</AlertDescription>
             </Alert>
           )}
         </FormItem>
+
 
         <Button type="submit" disabled={isButtonDisabled || !form.formState.isValid} className="w-full text-base py-3 shadow-md hover:shadow-lg transition-shadow bg-accent hover:bg-accent/90 text-accent-foreground rounded-lg">
           {isButtonDisabled && !(submitting && !isReadingFile && !isOptimizingVideo) ? (
