@@ -99,19 +99,40 @@ async function initializeDbSchema(): Promise<void> {
       );
     `);
 
-    // Visitor Stats Table
+    // Visitor Stats Table - Robust Initialization
+    try {
+        await client.query("SELECT stat_key FROM visitor_stats LIMIT 1");
+        await client.query('ALTER TABLE visitor_stats ALTER COLUMN value TYPE BIGINT;');
+    } catch (e: any) {
+        if (e.code === '42703') { // column "stat_key" does not exist
+            console.warn("`visitor_stats` table is malformed. Backing it up and will recreate.");
+            try {
+                const backupTableName = `visitor_stats_backup_${Date.now()}`;
+                await client.query(`ALTER TABLE visitor_stats RENAME TO ${backupTableName}`);
+                console.log(`Malformed table backed up as ${backupTableName}`);
+            } catch (renameErr: any) {
+                console.error("Failed to backup malformed visitor_stats table.", renameErr.message);
+            }
+        } else if (e.code === '42P01') { // undefined_table
+            // This is fine, the table doesn't exist, so we'll create it below.
+        } else if (e.code !== '42701') { // 42701 is duplicate_column on ALTER
+            console.warn(`An unexpected error occurred during visitor_stats check, attempting to continue. Error: ${e.message}`);
+        }
+    }
+    
     await client.query(`
       CREATE TABLE IF NOT EXISTS visitor_stats (
         stat_key VARCHAR(255) PRIMARY KEY,
-        value INTEGER NOT NULL
+        value BIGINT NOT NULL
       );
     `);
-    const res = await client.query("SELECT * FROM visitor_stats WHERE stat_key = 'total_visits'");
-    if (res.rows.length === 0) {
-      await client.query("INSERT INTO visitor_stats (stat_key, value) VALUES ('total_visits', 0)");
-      await client.query("INSERT INTO visitor_stats (stat_key, value) VALUES ('daily_visits_date', 0)");
-      await client.query("INSERT INTO visitor_stats (stat_key, value) VALUES ('daily_visits_count', 0)");
-    }
+
+    await client.query(`
+      INSERT INTO visitor_stats (stat_key, value)
+      VALUES ('total_visits', 0), ('daily_visits_date', 0), ('daily_visits_count', 0)
+      ON CONFLICT (stat_key) DO NOTHING;
+    `);
+
 
     // Device Tokens Table
     await client.query(`
@@ -485,5 +506,3 @@ export async function updateUserStatusDb(userId: number, status: 'approved' | 'r
     const result: QueryResult<User> = await dbPool.query(query, [status, userId]);
     return result.rows[0] || null;
 }
-
-    
