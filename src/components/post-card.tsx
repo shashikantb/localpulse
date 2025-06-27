@@ -8,19 +8,12 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader } from '@/co
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import type { Post, Comment as CommentType, User } from '@/lib/db-types';
 import { formatDistanceToNowStrict } from 'date-fns';
-import { MapPin, UserCircle, MessageCircle, Send, Map, CornerDownRight, Instagram, Share2, Rss, ThumbsUp, Tag, ShieldCheck, Building, Eye, BellRing } from 'lucide-react';
+import { MapPin, UserCircle, MessageCircle, Send, Map, CornerDownRight, Share2, Rss, ThumbsUp, Tag, ShieldCheck, Building, Eye, BellRing } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { likePost, addComment, getComments, recordPostView } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
-
-const WhatsAppIcon: FC<React.SVGProps<SVGSVGElement>> = (props) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
-    <path d="m10.4 8.3-2.2 4.7a.8.8 0 0 0 .2 1l2.4 1.5a.8.8 0 0 0 1-.2l1-1.7a.8.8 0 0 0-.3-1l-2.3-2.1a.8.8 0 0 0-1 .2Z"></path>
-  </svg>
-);
 
 const CommentCard: FC<{ comment: CommentType }> = ({ comment }) => {
   return (
@@ -183,18 +176,33 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser })
     }
   };
 
-  const handleShareWhatsApp = () => {
-    const shareText = `Check out this pulse from ${authorName}: ${post.content}\n\nSee more at ${currentOrigin}`;
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
-    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
-  };
+  const handleShare = async () => {
+    const postUrl = `${currentOrigin}/posts/${post.id}`;
+    const shareData = {
+      title: 'Check out this pulse!',
+      text: post.content,
+      url: postUrl,
+    };
 
-  const handleShareInstagram = async () => {
-    try {
-      await navigator.clipboard.writeText(post.content);
-      toast({ title: 'Ready for Instagram!', description: 'Post content copied!' });
-    } catch (err) {
-      toast({ variant: 'destructive', title: 'Error', description: 'Could not copy content.' });
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch (error) {
+        // This error is often triggered by the user canceling the share dialog, so it's best to ignore it.
+        console.log('Share canceled or failed:', error);
+      }
+    } else {
+      // Fallback for desktop or browsers that don't support the Web Share API
+      try {
+        await navigator.clipboard.writeText(postUrl);
+        toast({ title: 'Link Copied!', description: 'The link to this pulse has been copied to your clipboard.' });
+      } catch (err) {
+        toast({
+          variant: 'destructive',
+          title: 'Copy Failed',
+          description: 'Could not copy the link to your clipboard.',
+        });
+      }
     }
   };
 
@@ -304,23 +312,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser })
           <MessageCircle className="w-5 h-5 group-hover:scale-110 transition-transform" />
           <span className="font-medium text-sm">{comments.length > 0 ? `${comments.length} ` : ''}{showComments ? 'Hide' : (comments.length > 0 ? 'Comments' : 'Comment')}</span>
         </Button>
-        <Button variant="ghost" size="sm" onClick={handleShareWhatsApp} className="flex items-center space-x-1.5 text-muted-foreground hover:text-green-500 transition-colors duration-150 group">
-          <WhatsAppIcon className="w-5 h-5 group-hover:scale-110 transition-transform" />
-          <span className="font-medium text-sm">WhatsApp</span>
-        </Button>
-        <Button variant="ghost" size="sm" onClick={handleShareInstagram} className="flex items-center space-x-1.5 text-muted-foreground hover:text-pink-500 transition-colors duration-150 group">
-          <Instagram className="w-5 h-5 group-hover:scale-110 transition-transform" />
-          <span className="font-medium text-sm">Instagram</span>
-        </Button>
-        <Button variant="ghost" size="sm" onClick={async () => {
-             if (navigator.share) {
-                try {
-                    await navigator.share({ title: 'Check out this LocalPulse!', text: post.content, url: currentOrigin, });
-                } catch (error) { console.error('Error sharing:', error); }
-            } else {
-                try { await navigator.clipboard.writeText(`${post.content}\n\nSee more at ${currentOrigin}`); toast({ title: 'Link Copied!' }); } catch (err) { toast({ variant: 'destructive', title: 'Error', description: 'Could not copy content.' }); }
-            }
-        }} className="flex items-center space-x-1.5 text-muted-foreground hover:text-blue-500 transition-colors duration-150 group">
+        <Button variant="ghost" size="sm" onClick={handleShare} className="flex items-center space-x-1.5 text-muted-foreground hover:text-blue-500 transition-colors duration-150 group">
           <Share2 className="w-5 h-5 group-hover:scale-110 transition-transform" />
           <span className="font-medium text-sm">Share</span>
         </Button>
@@ -366,5 +358,3 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser })
     </Card>
   );
 };
-
-    

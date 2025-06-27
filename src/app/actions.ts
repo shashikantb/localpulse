@@ -160,6 +160,7 @@ export async function likePost(postId: number): Promise<{ post?: Post; error?: s
     const updatedPost = await db.incrementPostLikeCountDb(postId);
     if (updatedPost) {
       revalidatePath('/'); 
+      revalidatePath(`/posts/${postId}`);
       return { post: { ...updatedPost, notifiedCount: updatedPost.notifiedcount, viewCount: updatedPost.viewcount } }; 
     }
     return { error: 'Post not found or failed to update.' };
@@ -177,6 +178,7 @@ export async function addComment(commentData: NewComment): Promise<Comment> {
     
     const addedComment = await db.addCommentDb({ ...commentData, author: authorName });
     revalidatePath('/');
+    revalidatePath(`/posts/${commentData.postId}`);
     return addedComment;
   } catch (error: any) {
     console.error(`Server action error adding comment to post ${commentData.postId}:`, error);
@@ -290,4 +292,27 @@ export async function getPostsByUserId(userId: number): Promise<Post[]> {
   }
 }
 
-    
+export async function getPostById(postId: number): Promise<Post | null> {
+  try {
+    const { user } = await getSession(); // To respect role-based visibility if needed in the future
+    const post = await db.getPostByIdDb(postId, user?.role);
+    if (!post) return null;
+
+    return {
+      ...post,
+      createdat: post.createdat,
+      likeCount: post.likecount,
+      notifiedCount: post.notifiedcount,
+      viewCount: post.viewcount,
+      mediaUrl: post.mediaurl,
+      mediaType: post.mediatype,
+      hashtags: post.hashtags || [],
+      authorId: post.authorid,
+      authorName: post.authorname,
+      authorRole: post.authorrole,
+    };
+  } catch (error) {
+    console.error(`Server action error fetching post ${postId}:`, error);
+    return null;
+  }
+}

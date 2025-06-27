@@ -111,18 +111,26 @@ async function initializeDbSchema(): Promise<void> {
 
     let tableIsCorrect = false;
     if (tableExists) {
-        const columnsRes = await client.query(`
-            SELECT column_name, data_type 
-            FROM information_schema.columns
-            WHERE table_name = 'visitor_stats'
-            AND column_name IN ('stat_key', 'value');
-        `);
-        // Ensure both columns exist and the value column is of type bigint
-        const hasStatKey = columnsRes.rows.some(r => r.column_name === 'stat_key');
-        const hasValue = columnsRes.rows.some(r => r.column_name === 'value' && r.data_type === 'bigint');
-        if (hasStatKey && hasValue && columnsRes.rows.length === 2) {
-            tableIsCorrect = true;
-        }
+      await client.query('SAVEPOINT check_stats_columns');
+      try {
+          const columnsRes = await client.query(`
+              SELECT column_name, data_type 
+              FROM information_schema.columns
+              WHERE table_name = 'visitor_stats'
+              AND column_name IN ('stat_key', 'value');
+          `);
+          const hasStatKey = columnsRes.rows.some(r => r.column_name === 'stat_key');
+          const hasValue = columnsRes.rows.some(r => r.column_name === 'value' && r.data_type === 'bigint');
+          if (hasStatKey && hasValue && columnsRes.rows.length === 2) {
+              tableIsCorrect = true;
+          }
+          await client.query('RELEASE SAVEPOINT check_stats_columns');
+      } catch(e) {
+          // This will catch errors like "column does not exist"
+          await client.query('ROLLBACK TO SAVEPOINT check_stats_columns');
+          console.warn("`visitor_stats` table check failed. It will be recreated.");
+          tableIsCorrect = false;
+      }
     }
 
     if (!tableIsCorrect) {
@@ -401,6 +409,20 @@ export async function getNewerPostsCountDb(latestIdKnown: number): Promise<numbe
   const query = 'SELECT COUNT(*) FROM posts WHERE id > $1';
   const result = await dbPool.query(query, [latestIdKnown]);
   return parseInt(result.rows[0].count, 10);
+}
+
+export async function getPostByIdDb(postId: number, userRole?: UserRole): Promise<Post | null> {
+  const dbPool = getDbPool();
+  if (!dbPool) return null;
+
+  const query = `
+    SELECT p.*, u.name as authorname, u.role as authorrole
+    FROM posts p
+    LEFT JOIN users u ON p.authorid = u.id
+    WHERE p.id = $1;
+  `;
+  const result: QueryResult<Post> = await dbPool.query(query, [postId]);
+  return result.rows[0] || null;
 }
 
 export async function closeDb(): Promise<void> {

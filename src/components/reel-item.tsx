@@ -1,3 +1,4 @@
+
 'use client';
 import React, { type FC, FormEvent } from 'react'; // Import React
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -5,21 +6,13 @@ import Image from 'next/image';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import type { Post, Comment as CommentType } from '@/lib/db-types';
 import { formatDistanceToNowStrict } from 'date-fns';
-import { MapPin, UserCircle, MessageCircle, Send, Share2, Rss, ThumbsUp, Tag, CornerDownRight, PlayCircle, Instagram, Image as ImageIconLucide, VolumeX, Volume2 } from 'lucide-react';
+import { UserCircle, MessageCircle, Send, Share2, ThumbsUp, PlayCircle, VolumeX, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { likePost, addComment, getComments } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-
-// Inline SVG for WhatsApp icon (reused from PostCard)
-const WhatsAppIcon: FC<React.SVGProps<SVGSVGElement>> = (props) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
-    <path d="m10.4 8.3-2.2 4.7a.8.8 0 0 0 .2 1l2.4 1.5a.8.8 0 0 0 1-.2l1-1.7a.8.8 0 0 0-.3-1l-2.3-2.1a.8.8 0 0 0-1 .2Z"></path>
-  </svg>
-);
 
 const CommentCard: FC<{ comment: CommentType }> = ({ comment }) => {
   return (
@@ -166,22 +159,27 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive }) => {
     }
   };
 
-  const handleShareWhatsApp = () => {
-    const shareText = `Check out this pulse: ${post.content}\n\nSee more at ${currentOrigin}/reels (Post ID: ${post.id})`;
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
-    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
-  };
+  const handleShare = async () => {
+    const postUrl = `${currentOrigin}/posts/${post.id}`;
+    const shareData = {
+      title: 'Check out this LocalPulse Reel!',
+      text: post.content,
+      url: postUrl,
+    };
 
-  const handleShareInstagram = async () => {
-    try {
-      await navigator.clipboard.writeText(post.content);
-      let toastMessage = "Post content copied! Open Instagram and paste it.";
-      if (post.mediaurl) {
-        toastMessage = "Post content copied! Remember to save the media first, then paste the content on Instagram.";
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch (error) {
+        console.error('Error sharing:', error);
       }
-      toast({ title: 'Ready for Instagram!', description: toastMessage });
-    } catch (err) {
-      toast({ variant: 'destructive', title: 'Error', description: 'Could not copy content.' });
+    } else {
+      try {
+        await navigator.clipboard.writeText(postUrl);
+        toast({ title: "Link Copied!", description: "The link to this reel has been copied." });
+      } catch (err) {
+        toast({ variant: "destructive", title: "Error", description: "Could not copy link." });
+      }
     }
   };
 
@@ -274,15 +272,7 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive }) => {
               <MessageCircle className="w-6 h-6" />
               <span className="font-medium text-xs mt-0.5">{comments.length > 0 ? `${comments.length}` : '0'}</span>
             </Button>
-             <Button variant="ghost" size="sm" onClick={async () => {
-                 if (navigator.share) {
-                    try {
-                        await navigator.share({ title: 'Check out this LocalPulse Reel!', text: post.content, url: currentOrigin });
-                    } catch (error) { console.error('Error sharing:', error); }
-                } else {
-                    try { await navigator.clipboard.writeText(`${post.content}\n\nSee more at ${currentOrigin}`); toast({title: "Copied to clipboard!"}); } catch (err) { toast({variant: "destructive", title: "Copy failed"}); }
-                }
-            }} className="flex flex-col items-center text-white hover:text-blue-400 p-1 h-auto">
+             <Button variant="ghost" size="sm" onClick={handleShare} className="flex flex-col items-center text-white hover:text-blue-400 p-1 h-auto">
               <Share2 className="w-6 h-6" />
                <span className="font-medium text-xs mt-0.5">Share</span>
             </Button>
