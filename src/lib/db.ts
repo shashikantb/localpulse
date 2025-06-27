@@ -295,30 +295,38 @@ if (!process.env.POSTGRES_URL) {
   // POST FUNCTIONS
   getPostsDb = async (options?: { limit: number; offset: number }, userRole?: UserRole): Promise<Post[]> => {
     try {
-      const selectClause = `
-        SELECT p.id, p.content, p.latitude, p.longitude, p.createdAt, p.mediaUrl, p.mediaType, p.likeCount, p.notifiedCount, p.viewCount, p.city, p.hashtags,
-               u.id as authorId, u.name as authorName, u.role as authorRole
-        FROM posts p
-        LEFT JOIN users u ON p.authorId = u.id
+      const limit = options?.limit || 10;
+      const offset = options?.offset || 0;
+  
+      // This query uses a Common Table Expression (CTE) for optimization.
+      // 1. It first selects only the IDs of the posts, applying the fast ORDER BY, LIMIT, and OFFSET.
+      // 2. Then, it joins the full post and user details for only those selected post IDs.
+      // This avoids a slow join on the entire posts table before filtering.
+      const queryText = `
+        WITH limited_post_ids AS (
+          SELECT id 
+          FROM posts 
+          ORDER BY createdAt DESC 
+          LIMIT $1 OFFSET $2
+        )
+        SELECT 
+          p.id, p.content, p.latitude, p.longitude, p.createdAt, 
+          p.mediaUrl, p.mediaType, p.likeCount, p.notifiedCount, p.viewCount, 
+          p.city, p.hashtags,
+          u.id as authorId, u.name as authorName, u.role as authorRole
+        FROM 
+          posts p
+        JOIN 
+          limited_post_ids lpi ON p.id = lpi.id
+        LEFT JOIN 
+          users u ON p.authorId = u.id
+        WHERE 
+          (u.status = 'approved' OR p.authorId IS NULL)
+        ORDER BY 
+          p.createdAt DESC;
       `;
-      const whereClause = `WHERE (u.status = 'approved' OR p.authorId IS NULL)`;
       
-      // OPTIMIZATION: Always use the fast, indexed sort. The client will handle role-based sorting.
-      const orderByClause = 'ORDER BY p.createdAt DESC';
-      
-      let queryText = `${selectClause} ${whereClause} ${orderByClause}`;
-      const queryParams: number[] = [];
-
-      if (options?.limit) {
-          queryParams.push(options.limit);
-          queryText += ` LIMIT $${queryParams.length}`;
-      }
-      if (options?.offset) {
-          queryParams.push(options.offset);
-          queryText += ` OFFSET $${queryParams.length}`;
-      }
-      
-      const result: QueryResult<Post> = await pool.query(queryText, queryParams);
+      const result: QueryResult<Post> = await pool.query(queryText, [limit, offset]);
       return result.rows;
     } catch (error) {
       console.error("Error fetching posts from DB:", error);
@@ -532,5 +540,3 @@ export {
   // User functions
   createUserDb, getUserByEmailDb, getUserByIdDb, getPostsByUserIdDb, getPendingUsersDb, updateUserStatusDb, getAllUsersDb
 };
-
-    
