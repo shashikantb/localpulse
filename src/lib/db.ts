@@ -233,7 +233,7 @@ export async function getPostsDb(options: { limit: number; offset: number } = { 
     }
 
     const postsQuery = `
-      SELECT p.*, u.name as authorname, u.role as authorrole
+      SELECT p.*, u.name as authorname, u.role as authorrole, u.profilepictureurl as authorprofilepictureurl
       FROM posts p
       LEFT JOIN users u ON p.authorid = u.id
       WHERE p.id = ANY($1::int[])
@@ -266,7 +266,7 @@ export async function getMediaPostsDb(options: { limit: number; offset: number; 
     }
 
     const postsQuery = `
-      SELECT p.*, u.name as authorname, u.role as authorrole
+      SELECT p.*, u.name as authorname, u.role as authorrole, u.profilepictureurl as authorprofilepictureurl
       FROM posts p
       LEFT JOIN users u ON p.authorid = u.id
       WHERE p.id = ANY($1::int[])
@@ -446,7 +446,7 @@ export async function getPostByIdDb(postId: number, userRole?: UserRole): Promis
   if (!dbPool) return null;
 
   const query = `
-    SELECT p.*, u.name as authorname, u.role as authorrole
+    SELECT p.*, u.name as authorname, u.role as authorrole, u.profilepictureurl as authorprofilepictureurl
     FROM posts p
     LEFT JOIN users u ON p.authorid = u.id
     WHERE p.id = $1;
@@ -558,7 +558,7 @@ export async function getPostsByUserIdDb(userId: number): Promise<Post[]> {
   if (!dbPool) return [];
 
   const query = `
-    SELECT p.*, u.name as authorname, u.role as authorrole
+    SELECT p.*, u.name as authorname, u.role as authorrole, u.profilepictureurl as authorprofilepictureurl
     FROM posts p
     JOIN users u ON p.authorid = u.id
     WHERE p.authorid = $1
@@ -630,5 +630,3 @@ export async function deleteUserDb(userId: number): Promise<void> {
   const query = 'DELETE FROM users WHERE id = $1';
   await dbPool.query(query, [userId]);
 }
-
-    

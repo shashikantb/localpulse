@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader } from '@/components/ui/card';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import type { Post, Comment as CommentType, User } from '@/lib/db-types';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { MapPin, UserCircle, MessageCircle, Send, Map, CornerDownRight, Share2, Rss, ThumbsUp, Tag, ShieldCheck, Building, Eye, BellRing } from 'lucide-react';
@@ -75,7 +75,6 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser })
   const distance = userLocation ? calculateDistance(userLocation.latitude, userLocation.longitude, post.latitude, post.longitude) : null;
   
   const authorName = post.authorname || 'Anonymous Pulsar';
-  const authorRole = post.authorrole;
 
   const [isLikedByClient, setIsLikedByClient] = useState(() => {
     if (sessionUser) return post.isLikedByCurrentUser || false;
@@ -279,10 +278,9 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser })
     <Card ref={cardRef} className="overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-300 ease-out border border-border/60 rounded-xl bg-card/80 backdrop-blur-sm hover:border-primary/50 transform hover:scale-[1.005]">
       <CardHeader className="pb-3 pt-5 px-5 flex flex-row items-start space-x-4 bg-gradient-to-br from-card to-muted/10">
         <Avatar className="h-12 w-12 border-2 border-primary/60 shadow-md">
-          <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20">
-            {authorRole === 'Business' && <Building className="h-6 w-6 text-primary/80" />}
-            {authorRole === 'Gorakshak' && <ShieldCheck className="h-6 w-6 text-primary/80" />}
-            {!authorRole && <UserCircle className="h-7 w-7 text-primary/80" />}
+          <AvatarImage src={post.authorprofilepictureurl ?? undefined} alt={authorName} />
+          <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20 text-primary font-bold text-xl">
+            {authorName ? authorName.charAt(0).toUpperCase() : <UserCircle className="h-7 w-7 text-primary/80" />}
           </AvatarFallback>
         </Avatar>
         <div className="flex-1">

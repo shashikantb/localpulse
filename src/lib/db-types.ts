@@ -51,6 +51,7 @@ export interface Post {
   authorid: number | null; // This will come from the posts table
   authorname: string | null; // This will be joined from the users table
   authorrole: UserRole | null; // This will be joined from the users table
+  authorprofilepictureurl?: string | null; // This will be joined from the users table
   isLikedByCurrentUser?: boolean; // Added to track if the session user liked this post
 }
 
