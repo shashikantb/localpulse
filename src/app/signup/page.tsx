@@ -34,6 +34,7 @@ const SignupPage: FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [signupRole, setSignupRole] = useState<'Business' | 'Gorakshak' | null>(null);
 
   const form = useForm<SignupFormInputs>({
     resolver: zodResolver(signupSchema),
@@ -50,11 +51,19 @@ const SignupPage: FC = () => {
     try {
       const result = await signUp({ ...data, passwordplaintext: data.password });
       if (result.success) {
+        setSignupRole(data.role);
         setIsSuccess(true);
-        toast({
-          title: 'Account Created!',
-          description: 'Your registration is submitted and is now pending admin approval.',
-        });
+        if (data.role === 'Gorakshak') {
+            toast({
+              title: 'Account Created!',
+              description: 'Your account is active and ready to use. You can now log in.',
+            });
+        } else {
+            toast({
+              title: 'Account Created!',
+              description: 'Your registration is submitted and is now pending admin approval.',
+            });
+        }
       } else {
         setError(result.error || 'Failed to create account.');
       }
@@ -75,7 +84,9 @@ const SignupPage: FC = () => {
             </CardHeader>
             <CardContent>
                 <p className="text-muted-foreground">
-                    Your account has been created and is awaiting approval from an administrator. You will be notified once your account is activated.
+                    {signupRole === 'Gorakshak'
+                        ? 'Your account has been created and is ready to use. You can now log in.'
+                        : 'Your account has been created and is awaiting approval from an administrator. You will be notified once your account is activated.'}
                 </p>
             </CardContent>
             <CardFooter className="flex justify-center">

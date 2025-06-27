@@ -44,7 +44,10 @@ export async function signUp(newUser: NewUser): Promise<{ success: boolean; erro
       return { success: false, error: 'An account with this email already exists.' };
     }
 
-    const user = await createUserDb(newUser);
+    // Determine status based on role. Gorakshak users are approved automatically.
+    const status = newUser.role === 'Gorakshak' ? 'approved' : 'pending';
+
+    const user = await createUserDb(newUser, status);
     if (user) {
       return { success: true };
     } else {

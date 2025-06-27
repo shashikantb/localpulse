@@ -22,7 +22,7 @@ let getNewerPostsCountDb: (latestIdKnown: number) => Promise<number>;
 let closeDb: () => Promise<void>;
 
 // New user functions
-let createUserDb: (newUser: NewUser) => Promise<User>;
+let createUserDb: (newUser: NewUser, status?: 'pending' | 'approved') => Promise<User>;
 let getUserByEmailDb: (email: string) => Promise<UserWithPassword | null>;
 let getUserByIdDb: (id: number) => Promise<User | null>;
 let getPostsByUserIdDb: (userId: number) => Promise<Post[]>;
@@ -64,7 +64,7 @@ if (!process.env.POSTGRES_URL) {
   closeDb = async (): Promise<void> => { console.warn("MOCK DB: closeDb called"); return; };
 
   // Mock User functions
-  createUserDb = async (newUser: NewUser): Promise<User> => { await dbNotConfiguredError(); return null as any; };
+  createUserDb = async (newUser: NewUser, status: 'pending' | 'approved' = 'pending'): Promise<User> => { await dbNotConfiguredError(); return null as any; };
   getUserByEmailDb = async (email: string): Promise<UserWithPassword | null> => { await dbNotConfiguredError(); return null; };
   getUserByIdDb = async (id: number): Promise<User | null> => { await dbNotConfiguredError(); return null; };
   getPostsByUserIdDb = async (userId: number): Promise<Post[]> => { console.warn("MOCK DB: getPostsByUserIdDb called for user", userId); return []; };
@@ -206,11 +206,11 @@ if (!process.env.POSTGRES_URL) {
   initializeDatabaseSchema().catch(err => { console.error("Critical: Failed to initialize DB schema on startup.", err); });
   
   // USER FUNCTIONS
-  createUserDb = async (newUser: NewUser): Promise<User> => {
+  createUserDb = async (newUser: NewUser, status: 'pending' | 'approved' = 'pending'): Promise<User> => {
     const passwordHash = await bcrypt.hash(newUser.passwordplaintext, 10);
     const result: QueryResult<User> = await pool.query(
-      'INSERT INTO users (name, email, passwordHash, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role, status, createdAt',
-      [newUser.name, newUser.email.toLowerCase(), passwordHash, newUser.role]
+      'INSERT INTO users (name, email, passwordHash, role, status) VALUES ($1, $2, $3, $4, $5) RETURNING id, name, email, role, status, createdAt',
+      [newUser.name, newUser.email.toLowerCase(), passwordHash, newUser.role, status]
     );
     return result.rows[0];
   }
