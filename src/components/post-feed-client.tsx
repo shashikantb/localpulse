@@ -148,6 +148,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
   useEffect(() => {
     let processedPosts = [...allPosts];
 
+    // 1. Apply user-defined filters (distance, hashtags)
     if (location && !showAnyDistance) {
       processedPosts = processedPosts.filter(p => 
         p.latitude && p.longitude && 
@@ -161,29 +162,53 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
       );
     }
 
-    if (sessionUser?.role === 'Gorakshak') {
-      processedPosts.sort((a, b) => {
-        const roleA = a.authorrole === 'Gorakshak' ? 0 : 1;
-        const roleB = b.authorrole === 'Gorakshak' ? 0 : 1;
-        if (roleA !== roleB) {
-          return roleA - roleB;
-        }
-        return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
-      });
-    } else {
-      if (location) {
+    // 2. Apply role-based sorting logic
+    if (sessionUser?.role === 'Gorakshak' && location) {
         processedPosts.sort((a, b) => {
-          const distA = calculateDistance(location.latitude, location.longitude, a.latitude, a.longitude);
-          const distB = calculateDistance(location.latitude, location.longitude, b.latitude, b.longitude);
-          
-          if (Math.abs(distA - distB) < 0.1) {
-            return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
-          }
-          
-          return distA - distB;
+            const isAGorakshak = a.authorrole === 'Gorakshak';
+            const isBGorakshak = b.authorrole === 'Gorakshak';
+
+            const distA = calculateDistance(location.latitude, location.longitude, a.latitude, a.longitude);
+            const distB = calculateDistance(location.latitude, location.longitude, b.latitude, b.longitude);
+            
+            const NEARBY_THRESHOLD_KM = 20; 
+            const isANearbyGorakshak = isAGorakshak && (distA <= NEARBY_THRESHOLD_KM);
+            const isBNearbyGorakshak = isBGorakshak && (distB <= NEARBY_THRESHOLD_KM);
+
+            // Prioritize nearby Gorakshak posts
+            if (isANearbyGorakshak && !isBNearbyGorakshak) return -1;
+            if (!isANearbyGorakshak && isBNearbyGorakshak) return 1;
+
+            // Prioritize any Gorakshak post over non-Gorakshak posts
+            if (isAGorakshak && !isBGorakshak) return -1;
+            if (!isAGorakshak && isBGorakshak) return 1;
+
+            // If both are Gorakshak (either both nearby or both far), sort by newest first
+            if (isAGorakshak && isBGorakshak) {
+                return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
+            }
+
+            // If both are non-Gorakshak, sort by distance, then time
+            if (!isAGorakshak && !isBGorakshak) {
+                if (Math.abs(distA - distB) < 0.1) {
+                    return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
+                }
+                return distA - distB;
+            }
+            
+            return 0; // Should not be reached
         });
-      }
+    } else if (location) { // Default logic for Business users or anonymous users with location
+        processedPosts.sort((a, b) => {
+            const distA = calculateDistance(location.latitude, location.longitude, a.latitude, a.longitude);
+            const distB = calculateDistance(location.latitude, location.longitude, b.latitude, b.longitude);
+            if (Math.abs(distA - distB) < 0.1) { // If distance is similar, sort by time
+                return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
+            }
+            return distA - distB; // Otherwise, sort by distance
+        });
     }
+    // If no specific role logic and no location, the default DB sort (by time descending) is maintained.
     
     setFilteredAndSortedPosts(processedPosts);
   }, [allPosts, location, distanceFilterKm, showAnyDistance, filterHashtags, sessionUser, calculateDistance]);
