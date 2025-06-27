@@ -65,10 +65,18 @@ async function initializeDbSchema(): Promise<void> {
         passwordhash VARCHAR(255) NOT NULL,
         role VARCHAR(50) NOT NULL CHECK (role IN ('Business', 'Gorakshak', 'Admin', 'Janta')),
         status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
-        createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-        profilepictureurl TEXT
+        createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
+    // Add profilepictureurl column if it doesn't exist
+    const profilePicColRes = await client.query(`
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name='users' AND column_name='profilepictureurl';
+    `);
+    if (profilePicColRes.rowCount === 0) {
+      await client.query('ALTER TABLE users ADD COLUMN profilepictureurl TEXT;');
+    }
     
     // Posts Table
     await client.query(`
@@ -622,3 +630,5 @@ export async function deleteUserDb(userId: number): Promise<void> {
   const query = 'DELETE FROM users WHERE id = $1';
   await dbPool.query(query, [userId]);
 }
+
+    
