@@ -1,6 +1,6 @@
 
 import { Pool, type QueryResult } from 'pg';
-import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole } from './db-types';
+import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields } from './db-types';
 import bcrypt from 'bcryptjs';
 
 // Re-export db-types
@@ -598,6 +598,21 @@ export async function updateUserStatusDb(userId: number, status: 'approved' | 'r
         RETURNING id, name, email, role, status, createdat, profilepictureurl;
     `;
     const result: QueryResult<User> = await dbPool.query(query, [status, userId]);
+    return result.rows[0] || null;
+}
+
+export async function updateUserDb(userId: number, userData: UpdatableUserFields): Promise<User | null> {
+    const dbPool = getDbPool();
+    if (!dbPool) throw new Error("Database not configured.");
+
+    const query = `
+      UPDATE users
+      SET name = $1, email = $2, role = $3, status = $4
+      WHERE id = $5
+      RETURNING id, name, email, role, status, createdat, profilepictureurl;
+    `;
+    const values = [userData.name, userData.email, userData.role, userData.status, userId];
+    const result: QueryResult<User> = await dbPool.query(query, values);
     return result.rows[0] || null;
 }
 

@@ -3,6 +3,7 @@
 
 import type { FC } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -60,9 +61,11 @@ const UserActions: FC<UserActionsProps> = ({ user }) => {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem disabled>
-            <Edit className="mr-2 h-4 w-4" />
-            Edit User
+          <DropdownMenuItem asChild>
+            <Link href={`/admin/users/${user.id}/edit`}>
+              <Edit className="mr-2 h-4 w-4" />
+              <span>Edit User</span>
+            </Link>
           </DropdownMenuItem>
           <AlertDialogTrigger asChild>
             <DropdownMenuItem

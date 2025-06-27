@@ -25,6 +25,15 @@ export type NewUser = {
   passwordplaintext: string;
 };
 
+// For updating a user from the admin panel
+export type UpdatableUserFields = {
+  name: string;
+  email: string;
+  role: UserRole;
+  status: 'pending' | 'approved' | 'rejected';
+};
+
+
 // Define the structure of a Post, now with author details
 export interface Post {
   id: number;
