@@ -280,14 +280,13 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
           <FormLabel htmlFor="media-upload" className="text-sm font-medium text-muted-foreground mb-1 block">
             Attach Media (Optional)
           </FormLabel>
-          <FormControl>
+          
             <>
               <Input id="file-upload" type="file" accept="image/*,video/*" ref={fileInputRef} onChange={handleFileChange} className="hidden" disabled={isButtonDisabled} />
               <Input id="image-capture" type="file" accept="image/*" capture="environment" ref={imageCaptureInputRef} onChange={handleFileChange} className="hidden" disabled={isButtonDisabled} />
               <Input id="video-capture" type="file" accept="video/*" capture="environment" ref={videoCaptureInputRef} onChange={handleFileChange} className="hidden" disabled={isButtonDisabled} />
             </>
-          </FormControl>
-
+          
           {previewUrl && selectedFile ? (
             <div className="w-full text-center p-4 border-2 border-dashed rounded-lg border-primary/50">
               {mediaType === 'image' && (
