@@ -6,6 +6,8 @@ import { ReelsPageSkeleton } from '@/components/reels-page-skeleton';
 import ReelsViewer from '@/components/reels-viewer';
 import { getSession } from '../auth/actions';
 
+export const dynamic = 'force-dynamic';
+
 const REELS_PER_PAGE = 10;
 
 async function ReelsLoader() {
