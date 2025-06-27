@@ -15,6 +15,28 @@ import { AlertDescription, AlertTitle, Alert } from '@/components/ui/alert';
 import { useSwipeable } from 'react-swipeable';
 
 const REELS_PER_PAGE = 10;
+const REELS_CACHE_KEY = 'localpulse-reels-cache';
+const CACHE_VERSION = 'v1.1'; // Increment to invalidate old cache structures
+
+// Helper to get initial reels from cache or server data
+const getInitialCachedReels = (serverInitialPosts: Post[]): Post[] => {
+  if (typeof window === 'undefined') {
+    return serverInitialPosts;
+  }
+  try {
+    const cachedItem = localStorage.getItem(REELS_CACHE_KEY);
+    if (cachedItem) {
+      const cachedData = JSON.parse(cachedItem);
+      if (cachedData.version === CACHE_VERSION && Array.isArray(cachedData.posts)) {
+        return cachedData.posts.length > 0 ? cachedData.posts : serverInitialPosts;
+      }
+    }
+  } catch (error) {
+    console.warn("Failed to read reels cache:", error);
+  }
+  return serverInitialPosts;
+};
+
 
 interface ReelsViewerProps {
   initialPosts: Post[];
@@ -23,20 +45,40 @@ interface ReelsViewerProps {
 const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts }) => {
   const { toast } = useToast();
   const router = useRouter();
-  const [reelPosts, setReelPosts] = useState<Post[]>(initialPosts);
+  const [reelPosts, setReelPosts] = useState<Post[]>(() => getInitialCachedReels(initialPosts));
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false); // Only for loading *more* posts
-  const [currentPage, setCurrentPage] = useState(2); // Start at page 2, since page 1 is preloaded
-  const [hasMore, setHasMore] = useState(initialPosts.length === REELS_PER_PAGE);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
 
-  const fetchReelPosts = useCallback(async (page: number) => {
+  // Effect to save reels to cache
+  useEffect(() => {
+    try {
+      const cacheData = {
+        version: CACHE_VERSION,
+        timestamp: new Date().toISOString(),
+        posts: reelPosts.slice(0, REELS_PER_PAGE * 2), // Cache up to 2 pages of reels
+      };
+      localStorage.setItem(REELS_CACHE_KEY, JSON.stringify(cacheData));
+    } catch (error) {
+      console.warn("Failed to save reels to cache:", error);
+    }
+  }, [reelPosts]);
+
+  const fetchReelPosts = useCallback(async (page: number, isInitialLoad = false) => {
     if (isLoading || !hasMore) return;
-    setIsLoading(true);
+    if (!isInitialLoad) {
+      setIsLoading(true);
+    }
     try {
       const newPosts = await getMediaPosts({ page, limit: REELS_PER_PAGE });
 
       if (newPosts.length > 0) {
-        setReelPosts(prev => {
+         setReelPosts(prev => {
+          if (isInitialLoad) {
+            return newPosts; // Replace cache with fresh data
+          }
+          // Append new posts, avoiding duplicates
           const existingIds = new Set(prev.map(p => p.id));
           const filteredNewPosts = newPosts.filter(p => !existingIds.has(p.id));
           return [...prev, ...filteredNewPosts];
@@ -47,18 +89,29 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts }) => {
         }
       } else {
         setHasMore(false);
+        if (!isInitialLoad && reelPosts.length > 0) {
+            toast({title: "That's all for now!", description: "You've seen all the available reels."});
+        }
       }
     } catch (error) {
       console.error("Error fetching more posts for reels:", error);
       toast({
         variant: "destructive",
         title: "Fetch Error",
-        description: "Could not load more reels. Please try again later.",
+        description: "Could not load more reels.",
       });
     } finally {
-      setIsLoading(false);
+      if (!isInitialLoad) {
+        setIsLoading(false);
+      }
     }
-  }, [toast, isLoading, hasMore]);
+  }, [toast, isLoading, hasMore, reelPosts.length]);
+  
+  // Fetch fresh data on initial load to update cache
+  useEffect(() => {
+    fetchReelPosts(1, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Fetch more posts when user gets close to the end of the current list.
   useEffect(() => {
@@ -98,18 +151,7 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts }) => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [goToNextReel, goToPreviousReel]);
   
-  useEffect(() => {
-      if (initialPosts.length === 0) {
-        toast({
-          variant: "default",
-          title: "No Reels Yet",
-          description: "There are no image or video posts to show in Reels right now.",
-          duration: 5000,
-        });
-      }
-  }, [initialPosts, toast]);
-
-  if (initialPosts.length === 0) {
+  if (initialPosts.length === 0 && reelPosts.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-black text-white p-4 text-center">
         <Alert className="max-w-md bg-gray-900/80 border-gray-700 text-white">
@@ -218,3 +260,5 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts }) => {
 };
 
 export default ReelsViewer;
+
+    

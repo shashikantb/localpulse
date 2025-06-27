@@ -47,6 +47,28 @@ declare global {
 
 const POSTS_PER_PAGE = 5;
 const NEW_POST_POLL_INTERVAL = 30000;
+const CACHE_KEY = 'localpulse-posts-cache';
+const CACHE_VERSION = 'v1.1'; // Increment to invalidate old cache structures
+
+// Helper to get initial posts from cache or server data
+const getInitialCachedPosts = (serverInitialPosts: Post[]): Post[] => {
+  if (typeof window === 'undefined') {
+    return serverInitialPosts;
+  }
+  try {
+    const cachedItem = localStorage.getItem(CACHE_KEY);
+    if (cachedItem) {
+      const cachedData = JSON.parse(cachedItem);
+      if (cachedData.version === CACHE_VERSION && Array.isArray(cachedData.posts)) {
+        return cachedData.posts.length > 0 ? cachedData.posts : serverInitialPosts;
+      }
+    }
+  } catch (error) {
+    console.warn("Failed to read post cache:", error);
+  }
+  return serverInitialPosts;
+};
+
 
 interface PostFeedClientProps {
   initialPosts: Post[];
@@ -55,18 +77,17 @@ interface PostFeedClientProps {
 
 const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) => {
   const { toast } = useToast();
-  const [allPosts, setAllPosts] = useState<Post[]>(initialPosts);
+  const [allPosts, setAllPosts] = useState<Post[]>(() => getInitialCachedPosts(initialPosts));
   const [filteredAndSortedPosts, setFilteredAndSortedPosts] = useState<Post[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [latestPostIdClientKnows, setLatestPostIdClientKnows] = useState<number>(0);
   const [newPulsesAvailable, setNewPulsesAvailable] = useState(false);
   const [newPulsesCount, setNewPulsesCount] = useState(0);
 
-  // This component still needs location for filtering and sorting
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [isLoadingLocation, setIsLoadingLocation] = useState(true);
 
-  const [hasMorePosts, setHasMorePosts] = useState<boolean>(initialPosts.length === POSTS_PER_PAGE);
+  const [hasMorePosts, setHasMorePosts] = useState<boolean>(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   
   const [distanceFilterKm, setDistanceFilterKm] = useState<number>(101); 
@@ -88,6 +109,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
     return distance;
   }, []);
 
+  // Effect to get user location
   useEffect(() => {
     setIsLoadingLocation(true);
     if (navigator.geolocation) {
@@ -110,13 +132,28 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
     }
   }, []);
 
+  // Effect to save posts to cache
+  useEffect(() => {
+    try {
+      const cacheData = {
+        version: CACHE_VERSION,
+        timestamp: new Date().toISOString(),
+        posts: allPosts.slice(0, POSTS_PER_PAGE * 2), // Cache up to 2 pages of posts
+      };
+      localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
+    } catch (error) {
+      console.warn("Failed to save posts to cache:", error);
+    }
+  }, [allPosts]);
 
   const handleNotificationRegistration = async () => {
     // ... (existing notification logic)
   };
 
-  const refreshPosts = useCallback(async () => {
-    setIsLoadingMore(true);
+  const refreshPosts = useCallback(async (isInitialLoad = false) => {
+    if (!isInitialLoad) {
+      setIsLoadingMore(true);
+    }
     try {
       const newInitialPosts = await getPosts({ page: 1, limit: POSTS_PER_PAGE });
       setAllPosts(newInitialPosts);
@@ -124,7 +161,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
       setHasMorePosts(newInitialPosts.length === POSTS_PER_PAGE);
       setNewPulsesAvailable(false);
       setNewPulsesCount(0);
-      if (window) {
+      if (!isInitialLoad && window) {
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     } catch (error) {
@@ -134,9 +171,17 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
         description: "Could not refresh posts.",
       });
     } finally {
-      setIsLoadingMore(false);
+      if (!isInitialLoad) {
+        setIsLoadingMore(false);
+      }
     }
   }, [toast]);
+  
+  // Fetch fresh data on initial load to update cache
+  useEffect(() => {
+    refreshPosts(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
 
   useEffect(() => {
@@ -148,7 +193,45 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
   useEffect(() => {
     let processedPosts = [...allPosts];
 
-    // 1. Apply user-defined filters (distance, hashtags)
+    // Role-based sorting logic
+    if (sessionUser?.role === 'Gorakshak' && location) {
+        processedPosts.sort((a, b) => {
+            const isAGorakshak = a.authorrole === 'Gorakshak';
+            const isBGorakshak = b.authorrole === 'Gorakshak';
+            const distA = calculateDistance(location.latitude, location.longitude, a.latitude, a.longitude);
+            const distB = calculateDistance(location.latitude, location.longitude, b.latitude, b.longitude);
+            const NEARBY_THRESHOLD_KM = 20; 
+            const isANearbyGorakshak = isAGorakshak && (distA <= NEARBY_THRESHOLD_KM);
+            const isBNearbyGorakshak = isBGorakshak && (distB <= NEARBY_THRESHOLD_KM);
+
+            if (isANearbyGorakshak && !isBNearbyGorakshak) return -1;
+            if (!isANearbyGorakshak && isBNearbyGorakshak) return 1;
+            if (isAGorakshak && !isBGorakshak) return -1;
+            if (!isAGorakshak && isBGorakshak) return 1;
+
+            if (isAGorakshak && isBGorakshak) {
+                return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
+            }
+            if (!isAGorakshak && !isBGorakshak) {
+                if (Math.abs(distA - distB) < 0.1) {
+                    return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
+                }
+                return distA - distB;
+            }
+            return 0;
+        });
+    } else if (location) { // Default logic for Business/anonymous users with location
+        processedPosts.sort((a, b) => {
+            const distA = calculateDistance(location.latitude, location.longitude, a.latitude, a.longitude);
+            const distB = calculateDistance(location.latitude, location.longitude, b.latitude, b.longitude);
+            if (Math.abs(distA - distB) < 0.1) {
+                return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
+            }
+            return distA - distB;
+        });
+    }
+    
+    // Apply user-defined filters AFTER sorting
     if (location && !showAnyDistance) {
       processedPosts = processedPosts.filter(p => 
         p.latitude && p.longitude && 
@@ -161,54 +244,6 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
         filterHashtags.some(fh => p.hashtags!.includes(fh))
       );
     }
-
-    // 2. Apply role-based sorting logic
-    if (sessionUser?.role === 'Gorakshak' && location) {
-        processedPosts.sort((a, b) => {
-            const isAGorakshak = a.authorrole === 'Gorakshak';
-            const isBGorakshak = b.authorrole === 'Gorakshak';
-
-            const distA = calculateDistance(location.latitude, location.longitude, a.latitude, a.longitude);
-            const distB = calculateDistance(location.latitude, location.longitude, b.latitude, b.longitude);
-            
-            const NEARBY_THRESHOLD_KM = 20; 
-            const isANearbyGorakshak = isAGorakshak && (distA <= NEARBY_THRESHOLD_KM);
-            const isBNearbyGorakshak = isBGorakshak && (distB <= NEARBY_THRESHOLD_KM);
-
-            // Prioritize nearby Gorakshak posts
-            if (isANearbyGorakshak && !isBNearbyGorakshak) return -1;
-            if (!isANearbyGorakshak && isBNearbyGorakshak) return 1;
-
-            // Prioritize any Gorakshak post over non-Gorakshak posts
-            if (isAGorakshak && !isBGorakshak) return -1;
-            if (!isAGorakshak && isBGorakshak) return 1;
-
-            // If both are Gorakshak (either both nearby or both far), sort by newest first
-            if (isAGorakshak && isBGorakshak) {
-                return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
-            }
-
-            // If both are non-Gorakshak, sort by distance, then time
-            if (!isAGorakshak && !isBGorakshak) {
-                if (Math.abs(distA - distB) < 0.1) {
-                    return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
-                }
-                return distA - distB;
-            }
-            
-            return 0; // Should not be reached
-        });
-    } else if (location) { // Default logic for Business users or anonymous users with location
-        processedPosts.sort((a, b) => {
-            const distA = calculateDistance(location.latitude, location.longitude, a.latitude, a.longitude);
-            const distB = calculateDistance(location.latitude, location.longitude, b.latitude, b.longitude);
-            if (Math.abs(distA - distB) < 0.1) { // If distance is similar, sort by time
-                return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
-            }
-            return distA - distB; // Otherwise, sort by distance
-        });
-    }
-    // If no specific role logic and no location, the default DB sort (by time descending) is maintained.
     
     setFilteredAndSortedPosts(processedPosts);
   }, [allPosts, location, distanceFilterKm, showAnyDistance, filterHashtags, sessionUser, calculateDistance]);
@@ -363,6 +398,18 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
 
   const activeFilterCount = (filterHashtags.length > 0 ? 1 : 0) + (!showAnyDistance ? 1 : 0);
 
+  if (initialPosts.length === 0 && allPosts.length === 0) {
+    return (
+        <Card className="text-center py-16 rounded-xl shadow-xl border border-border/40 bg-card/80 backdrop-blur-sm mt-8">
+            <CardContent className="flex flex-col items-center">
+                <Zap className="mx-auto h-20 w-20 text-muted-foreground/30 mb-6" />
+                <p className="text-2xl text-muted-foreground font-semibold">The air is quiet here...</p>
+                <p className="text-md text-muted-foreground/80 mt-2">No pulses found. Be the first to post!</p>
+            </CardContent>
+        </Card>
+    );
+  }
+
   return (
     <div>
       <div className="flex justify-end items-center sticky top-6 z-30 mb-4 px-1 gap-2">
@@ -405,16 +452,6 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
               )}
           </div>
 
-          {initialPosts.length === 0 && (
-             <Card className="text-center py-16 rounded-xl shadow-xl border border-border/40 bg-card/80 backdrop-blur-sm">
-                <CardContent className="flex flex-col items-center">
-                <Zap className="mx-auto h-20 w-20 text-muted-foreground/30 mb-6" />
-                <p className="text-2xl text-muted-foreground font-semibold">The air is quiet here...</p>
-                <p className="text-md text-muted-foreground/80 mt-2">No pulses found. Be the first to post!</p>
-                </CardContent>
-            </Card>
-          )}
-
           {filteredAndSortedPosts.length > 0 ? (
               <>
               {filteredAndSortedPosts.map((post) => (
@@ -428,7 +465,6 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
               )}
               </>
           ) : (
-           initialPosts.length > 0 && (
             <Card className="text-center py-16 rounded-xl shadow-xl border border-border/40 bg-card/80 backdrop-blur-sm">
                 <CardContent className="flex flex-col items-center">
                 <Zap className="mx-auto h-20 w-20 text-muted-foreground/30 mb-6" />
@@ -436,7 +472,6 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
                 <p className="text-md text-muted-foreground/80 mt-2">No pulses found for your current filters. Try adjusting them!</p>
                 </CardContent>
             </Card>
-           )
           )}
       </div>
     </div>
@@ -444,3 +479,5 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
 };
 
 export default PostFeedClient;
+
+    
