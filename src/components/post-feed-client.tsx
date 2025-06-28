@@ -147,12 +147,41 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
   }, [allPosts]);
 
   const handleNotificationRegistration = async () => {
+    toast({
+        title: "Fetching Token...",
+        description: "Attempting to get your notification token from the app.",
+        duration: 2000,
+    });
+
+    const getTokenWithRetries = (retries = 3, delay = 500): Promise<string | null> => {
+        return new Promise((resolve) => {
+            let attempts = 0;
+            const tryGetToken = () => {
+                if (window.Android && typeof window.Android.getFCMToken === 'function') {
+                    const token = window.Android.getFCMToken();
+                    if (token) {
+                        resolve(token);
+                        return;
+                    }
+                }
+                
+                attempts++;
+                if (attempts < retries) {
+                    setTimeout(tryGetToken, delay);
+                } else {
+                    resolve(null);
+                }
+            };
+            tryGetToken();
+        });
+    };
+
     try {
       if (window.Android && typeof window.Android.getFCMToken === 'function') {
-        const token = window.Android.getFCMToken();
+        const token = await getTokenWithRetries();
         if (token) {
           toast({
-            duration: 15000, // Make it stay longer for copying
+            duration: 15000,
             title: "Your Device Token",
             description: (
               <div className="w-full break-words">
@@ -169,7 +198,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
              setNotificationPermissionStatus('denied');
           }
         } else {
-          toast({ variant: "destructive", title: "Token Error", description: "Could not retrieve notification token from the app." });
+          toast({ variant: "destructive", title: "Token Error", description: "Could not retrieve notification token from the app. Please try again in a moment." });
         }
       } else {
         toast({ title: "Web Notifications", description: "Web push notifications are not yet available. Please use our Android app for real-time updates." });
@@ -179,6 +208,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
         toast({ variant: "destructive", title: "Notification Error", description: "An unexpected error occurred." });
     }
   };
+
 
   const refreshPosts = useCallback(async () => {
     setIsLoadingMore(true);
@@ -529,3 +559,5 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
 };
 
 export default PostFeedClient;
+
+    
