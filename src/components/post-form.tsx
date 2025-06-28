@@ -2,7 +2,7 @@
 'use client';
 
 import type { FC } from 'react';
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, from 'react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -11,16 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogClose,
-} from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger, PopoverAnchor } from '@/components/ui/popover';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -30,15 +21,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuCheckboxItem,
 } from '@/components/ui/dropdown-menu';
-import { Loader2, XCircle, UploadCloud, Film, Image as ImageIcon, Tag, ChevronDown, Camera, UserPlus, Search, UserCheck } from 'lucide-react';
+import { Loader2, XCircle, UploadCloud, Film, Image as ImageIcon, Tag, ChevronDown, Camera, User, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 import { searchUsers } from '@/app/actions';
-import type { User } from '@/lib/db-types';
+import type { User as UserType } from '@/lib/db-types';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from './ui/badge';
+import NextScript from "next/script";
 
 
 const MAX_VIDEO_UPLOAD_LIMIT = 50 * 1024 * 1024; // 50MB
@@ -86,23 +78,25 @@ interface PostFormProps {
 
 export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   const { toast } = useToast();
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [mediaType, setMediaType] = useState<'image' | 'video' | null>(null);
-  const [isReadingFile, setIsReadingFile] = useState(false);
-  const [fileError, setFileError] = useState<string | null>(null);
-  const [showCameraOptions, setShowCameraOptions] = useState(false);
+  const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
+  const [mediaType, setMediaType] = React.useState<'image' | 'video' | null>(null);
+  const [isReadingFile, setIsReadingFile] = React.useState(false);
+  const [fileError, setFileError] = React.useState<string | null>(null);
+  const [showCameraOptions, setShowCameraOptions] = React.useState(false);
 
-  // State for mentions/tagging
-  const [isMentionDialogOpen, setIsMentionDialogOpen] = useState(false);
-  const [mentionSearch, setMentionSearch] = useState('');
-  const [mentionResults, setMentionResults] = useState<User[]>([]);
-  const [taggedUsers, setTaggedUsers] = useState<User[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
+  // --- Start: State for inline mentions ---
+  const [mentionQuery, setMentionQuery] = React.useState<string | null>(null);
+  const [isMentionPopoverOpen, setIsMentionPopoverOpen] = React.useState(false);
+  const [mentionResults, setMentionResults] = React.useState<UserType[]>([]);
+  const [taggedUsers, setTaggedUsers] = React.useState<UserType[]>([]);
+  const [isSearching, setIsSearching] = React.useState(false);
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  // --- End: State for inline mentions ---
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const imageCaptureInputRef = useRef<HTMLInputElement>(null);
-  const videoCaptureInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const imageCaptureInputRef = React.useRef<HTMLInputElement>(null);
+  const videoCaptureInputRef = React.useRef<HTMLInputElement>(null);
 
 
   const form = useForm<FormData>({
@@ -113,13 +107,14 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
     },
   });
 
-   const handleFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+   const handleFileChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       removeMedia();
 
       if (!file) return;
 
       const currentFileType = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : null;
+      setFileError(null);
 
       if (!currentFileType) {
           setFileError('Invalid file type. Please select an image or video.');
@@ -180,35 +175,82 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
       setTaggedUsers([]);
   };
 
+  // --- Start: Inline Mention Logic ---
+
   // Debounced search for user mentions
-  useEffect(() => {
-    if (mentionSearch.length < 2) {
+  React.useEffect(() => {
+    if (mentionQuery === null) {
       setMentionResults([]);
       return;
+    }
+    // Don't search for short queries
+    if(mentionQuery.length < 1) {
+        setMentionResults([]);
+        setIsMentionPopoverOpen(true); // Keep open to show "keep typing"
+        return;
     }
 
     const handler = setTimeout(async () => {
       setIsSearching(true);
-      const results = await searchUsers(mentionSearch);
+      const results = await searchUsers(mentionQuery);
       const existingIds = new Set(taggedUsers.map(u => u.id));
       setMentionResults(results.filter(r => !existingIds.has(r.id)));
       setIsSearching(false);
     }, 300);
 
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [mentionSearch, taggedUsers]);
+    return () => clearTimeout(handler);
+  }, [mentionQuery, taggedUsers]);
 
-  const addTaggedUser = (user: User) => {
+  const addTaggedUser = (user: UserType) => {
     setTaggedUsers(prev => [...prev, user]);
-    setMentionSearch('');
-    setMentionResults([]);
   };
 
   const removeTaggedUser = (userId: number) => {
     setTaggedUsers(prev => prev.filter(u => u.id !== userId));
   };
+  
+  const handleMentionSelect = (user: UserType) => {
+      const currentContent = form.getValues('content');
+      const cursorPosition = textareaRef.current?.selectionStart || currentContent.length;
+      
+      const textBeforeCursor = currentContent.substring(0, cursorPosition);
+      const textAfterCursor = currentContent.substring(cursorPosition);
+
+      // Replace the partial mention (e.g., @joh) with the full username
+      const newTextBefore = textBeforeCursor.replace(/@(\S+)$/, `@${user.name} `);
+
+      form.setValue('content', newTextBefore + textAfterCursor, { shouldDirty: true });
+      addTaggedUser(user);
+      setIsMentionPopoverOpen(false);
+      setMentionQuery(null);
+      
+      // Use timeout to focus and set cursor position after the DOM has updated
+      setTimeout(() => {
+          textareaRef.current?.focus();
+          const newCursorPosition = newTextBefore.length;
+          textareaRef.current?.setSelectionRange(newCursorPosition, newCursorPosition);
+      }, 0);
+  };
+
+  const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>, fieldOnChange: (...event: any[]) => void) => {
+      const text = e.target.value;
+      const cursorPosition = e.target.selectionStart;
+
+      const textBeforeCursor = text.substring(0, cursorPosition);
+      const mentionMatch = textBeforeCursor.match(/(?:^|\s)@(\S*)$/);
+
+      if (mentionMatch) {
+          const query = mentionMatch[1];
+          setMentionQuery(query);
+          setIsMentionPopoverOpen(true);
+      } else {
+          setIsMentionPopoverOpen(false);
+          setMentionQuery(null);
+      }
+      
+      fieldOnChange(text);
+  };
+  // --- End: Inline Mention Logic ---
 
 
   const isButtonDisabled = submitting || isReadingFile;
@@ -221,27 +263,72 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
     <>
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmitForm)} className="space-y-6">
-        <FormField
-          control={form.control}
-          name="content"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel htmlFor="post-content" className="sr-only">What's happening?</FormLabel>
-              <FormControl>
-                <Textarea
-                  id="post-content"
-                  placeholder="Share your local pulse... Mention others using @"
-                  className="resize-none min-h-[100px] text-base shadow-sm focus:ring-2 focus:ring-primary/50 rounded-lg"
-                  rows={4}
-                  {...field}
-                  disabled={isButtonDisabled}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
         
+        <Popover open={isMentionPopoverOpen} onOpenChange={setIsMentionPopoverOpen}>
+          <PopoverAnchor asChild>
+            <FormField
+              control={form.control}
+              name="content"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel htmlFor="post-content" className="sr-only">What's happening?</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      id="post-content"
+                      ref={textareaRef}
+                      placeholder="Share your local pulse... Mention others using @"
+                      className="resize-none min-h-[100px] text-base shadow-sm focus:ring-2 focus:ring-primary/50 rounded-lg"
+                      rows={4}
+                      {...field}
+                      onChange={(e) => handleContentChange(e, field.onChange)}
+                      disabled={isButtonDisabled}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </PopoverAnchor>
+          <PopoverContent className="w-[--radix-popover-trigger-width] p-1" align="start">
+              <ScrollArea className="h-auto max-h-64">
+                {isSearching && <div className="p-2 text-sm text-center text-muted-foreground">Searching...</div>}
+                {!isSearching && mentionQuery && mentionResults.length === 0 && <div className="p-2 text-sm text-center text-muted-foreground">No users found.</div>}
+                {!isSearching && mentionQuery === '' && <div className="p-2 text-sm text-center text-muted-foreground">Keep typing to search for users...</div>}
+                {!isSearching && mentionResults.map(user => (
+                   <button
+                        key={user.id}
+                        type="button"
+                        onClick={() => handleMentionSelect(user)}
+                        className="w-full flex items-center gap-2 p-2 rounded-md text-left hover:bg-muted"
+                    >
+                      <Avatar className="h-8 w-8"><AvatarImage src={user.profilepictureurl || undefined} /><AvatarFallback>{user.name.charAt(0)}</AvatarFallback></Avatar>
+                      <span className="text-sm font-medium">{user.name}</span>
+                   </button>
+                ))}
+              </ScrollArea>
+          </PopoverContent>
+        </Popover>
+
+        {taggedUsers.length > 0 && (
+          <div className="space-y-2">
+            <FormLabel className="text-xs text-muted-foreground">Tagged Users:</FormLabel>
+            <div className="flex flex-wrap gap-2">
+              {taggedUsers.map(user => (
+                <Badge key={user.id} variant="secondary" className="pl-1 pr-2 py-1">
+                  <Avatar className="h-5 w-5 mr-2">
+                    <AvatarImage src={user.profilepictureurl || undefined} />
+                    <AvatarFallback className="text-[10px]">{user.name.charAt(0)}</AvatarFallback>
+                  </Avatar>
+                  {user.name}
+                  <button type="button" onClick={() => removeTaggedUser(user.id)} className="ml-1.5 rounded-full hover:bg-background/70">
+                    <XCircle className="h-3 w-3"/>
+                  </button>
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <FormField
               control={form.control}
@@ -291,74 +378,8 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
                 </FormItem>
               )}
             />
-
-            <Dialog open={isMentionDialogOpen} onOpenChange={setIsMentionDialogOpen}>
-              <DialogTrigger asChild>
-                 <Button variant="outline" className="w-full justify-between" disabled={isButtonDisabled}>
-                  <div className="flex items-center gap-2">
-                    <UserPlus className="w-4 h-4 text-primary" />
-                    <span>Tag People ({taggedUsers.length})</span>
-                  </div>
-                  <ChevronDown className="ml-2 h-4 w-4" />
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[425px]">
-                  <DialogHeader>
-                      <DialogTitle>Tag People</DialogTitle>
-                      <DialogDescription>Search for users and tag them in your post. They will be notified.</DialogDescription>
-                  </DialogHeader>
-                  <div className="relative">
-                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input 
-                          placeholder="Search for a user..."
-                          className="pl-8"
-                          value={mentionSearch}
-                          onChange={(e) => setMentionSearch(e.target.value)}
-                      />
-                  </div>
-                  
-                  <ScrollArea className="h-64 border rounded-md">
-                      <div className="p-2">
-                          {isSearching && <p className="text-sm text-center text-muted-foreground p-4">Searching...</p>}
-                          {!isSearching && mentionResults.length === 0 && mentionSearch.length > 1 && <p className="text-sm text-center text-muted-foreground p-4">No users found.</p>}
-                          
-                          {taggedUsers.length > 0 && (
-                            <>
-                                <h4 className="text-xs font-semibold text-muted-foreground uppercase px-2 mb-1">Tagged</h4>
-                                {taggedUsers.map(user => (
-                                <div key={user.id} className="flex items-center justify-between p-2 rounded-md bg-muted/50">
-                                    <div className="flex items-center gap-2">
-                                        <Avatar className="h-8 w-8"><AvatarImage src={user.profilepictureurl || undefined} /><AvatarFallback>{user.name.charAt(0)}</AvatarFallback></Avatar>
-                                        <span className="text-sm font-medium">{user.name}</span>
-                                    </div>
-                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeTaggedUser(user.id)}><XCircle className="w-4 h-4" /></Button>
-                                </div>
-                                ))}
-                                <hr className="my-2" />
-                            </>
-                          )}
-
-                          {mentionResults.length > 0 && <h4 className="text-xs font-semibold text-muted-foreground uppercase px-2 mb-1">Search Results</h4>}
-                          {mentionResults.map(user => (
-                              <div key={user.id} className="flex items-center justify-between p-2 rounded-md hover:bg-muted/50">
-                                  <div className="flex items-center gap-2">
-                                      <Avatar className="h-8 w-8"><AvatarImage src={user.profilepictureurl || undefined} /><AvatarFallback>{user.name.charAt(0)}</AvatarFallback></Avatar>
-                                      <span className="text-sm font-medium">{user.name}</span>
-                                  </div>
-                                  <Button variant="outline" size="sm" onClick={() => addTaggedUser(user)}>Tag</Button>
-                              </div>
-                          ))}
-                      </div>
-                  </ScrollArea>
-
-                  <DialogFooter>
-                      <DialogClose asChild>
-                          <Button type="button">Done</Button>
-                      </DialogClose>
-                  </DialogFooter>
-              </DialogContent>
-            </Dialog>
-
+            {/* The second button placeholder */}
+             <div />
         </div>
 
         <FormItem>
