@@ -147,7 +147,28 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
   }, [allPosts]);
 
   const handleNotificationRegistration = async () => {
-    // ... (existing notification logic)
+    try {
+      if (window.Android && typeof window.Android.getFCMToken === 'function') {
+        const token = window.Android.getFCMToken();
+        if (token) {
+          const result = await registerDeviceToken(token, location?.latitude, location?.longitude);
+          if (result.success) {
+            toast({ title: "Notifications Enabled", description: "You're all set for real-time updates." });
+            setNotificationPermissionStatus('granted');
+          } else {
+             toast({ variant: "destructive", title: "Notification Error", description: result.error || "Could not register for notifications." });
+             setNotificationPermissionStatus('denied');
+          }
+        } else {
+          toast({ variant: "destructive", title: "Notification Error", description: "Could not retrieve notification token from the app." });
+        }
+      } else {
+        toast({ title: "Web Notifications", description: "Web push notifications are not yet available. Please use our Android app for real-time updates." });
+      }
+    } catch (error) {
+        console.error("Error during notification registration:", error);
+        toast({ variant: "destructive", title: "Notification Error", description: "An unexpected error occurred." });
+    }
   };
 
   const refreshPosts = useCallback(async () => {

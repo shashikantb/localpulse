@@ -193,16 +193,25 @@ async function initializeDbSchema(): Promise<void> {
       ON CONFLICT (stat_key) DO NOTHING;
     `);
 
-    // Device Tokens Table
+    // Device Tokens Table - Updated to include user_id
     await client.query(`
       CREATE TABLE IF NOT EXISTS device_tokens (
         id SERIAL PRIMARY KEY,
         token TEXT UNIQUE NOT NULL,
         latitude REAL,
         longitude REAL,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
         last_updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
     `);
+    const userIdColRes = await client.query(`
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name='device_tokens' AND column_name='user_id';
+    `);
+    if (userIdColRes.rowCount === 0) {
+        await client.query('ALTER TABLE device_tokens ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE CASCADE;');
+    }
+
 
     // --- Indexes for performance ---
     await client.query('CREATE INDEX IF NOT EXISTS idx_posts_createdat ON posts (createdat DESC)');
@@ -218,6 +227,7 @@ async function initializeDbSchema(): Promise<void> {
     await client.query('CREATE INDEX IF NOT EXISTS idx_followers_follower_id ON user_followers (follower_id)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_followers_following_id ON user_followers (following_id)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_post_mentions_post_id ON post_mentions (post_id)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_device_tokens_user_id ON device_tokens (user_id);');
 
 
     await client.query('COMMIT');
@@ -442,19 +452,20 @@ export async function getVisitorCountsDb(): Promise<VisitorCounts> {
   };
 }
 
-export async function addOrUpdateDeviceTokenDb(token: string, latitude?: number, longitude?: number): Promise<void> {
+export async function addOrUpdateDeviceTokenDb(token: string, latitude?: number, longitude?: number, userId?: number): Promise<void> {
   const dbPool = getDbPool();
   if (!dbPool) return;
 
   const query = `
-    INSERT INTO device_tokens (token, latitude, longitude, last_updated)
-    VALUES ($1, $2, $3, NOW())
+    INSERT INTO device_tokens (token, latitude, longitude, user_id, last_updated)
+    VALUES ($1, $2, $3, $4, NOW())
     ON CONFLICT (token) DO UPDATE 
       SET latitude = EXCLUDED.latitude, 
           longitude = EXCLUDED.longitude,
+          user_id = EXCLUDED.user_id,
           last_updated = NOW();
   `;
-  await dbPool.query(query, [token, latitude, longitude]);
+  await dbPool.query(query, [token, latitude, longitude, userId]);
 }
 
 export async function getNearbyDeviceTokensDb(latitude: number, longitude: number, radiusKm: number = 20): Promise<string[]> {
@@ -475,6 +486,19 @@ export async function deleteDeviceTokenDb(token: string): Promise<void> {
   if (!dbPool) return;
   await dbPool.query('DELETE FROM device_tokens WHERE token = $1', [token]);
 }
+
+export async function getDeviceTokensForUsersDb(userIds: number[]): Promise<string[]> {
+  const dbPool = getDbPool();
+  if (!dbPool || userIds.length === 0) return [];
+
+  const query = `
+    SELECT token FROM device_tokens
+    WHERE user_id = ANY($1::int[]) AND token IS NOT NULL;
+  `;
+  const result: QueryResult<{token: string}> = await dbPool.query(query, [userIds]);
+  return result.rows.map(row => row.token);
+}
+
 
 export async function getNewerPostsCountDb(latestIdKnown: number): Promise<number> {
   const dbPool = getDbPool();

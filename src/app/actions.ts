@@ -90,36 +90,57 @@ export async function getMediaPosts(options?: { page: number; limit: number }): 
   }
 }
 
-async function sendNotificationsForNewPost(post: Post) {
+async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[] = []) {
   try {
-    const tokens = await db.getNearbyDeviceTokensDb(post.latitude, post.longitude, 20); // 20km radius
-
-    if (tokens.length === 0) {
-      await db.updateNotifiedCountDb(post.id, 0);
-      return;
-    }
-    
+    let successCount = 0;
+    const failedTokens: string[] = [];
+    const processedTokens = new Set<string>();
     const authorDisplayName = post.authorname || 'an Anonymous Pulsar';
 
-    const message = {
-      notification: {
-        title: `New Pulse from ${authorDisplayName}!`,
-        body: post.content.substring(0, 100) + (post.content.length > 100 ? '...' : ''),
-      },
-      tokens: tokens,
-    };
-    
-    const response = await firebaseAdmin.messaging().sendEachForMulticast(message);
-    
-    await db.updateNotifiedCountDb(post.id, response.successCount);
-
-    if (response.failureCount > 0) {
-      const failedTokens: string[] = [];
-      response.responses.forEach((resp, idx) => {
-        if (!resp.success) {
-          failedTokens.push(tokens[idx]);
+    // 1. Send notifications to mentioned users
+    if (mentionedUserIds.length > 0) {
+        const mentionedTokens = await db.getDeviceTokensForUsersDb(mentionedUserIds);
+        if (mentionedTokens.length > 0) {
+            mentionedTokens.forEach(t => processedTokens.add(t));
+            const message = {
+                notification: {
+                    title: `${authorDisplayName} mentioned you in a pulse!`,
+                    body: post.content.substring(0, 100) + (post.content.length > 100 ? '...' : ''),
+                },
+                tokens: mentionedTokens,
+            };
+            const response = await firebaseAdmin.messaging().sendEachForMulticast(message);
+            successCount += response.successCount;
+            response.responses.forEach((resp, idx) => {
+                if (!resp.success) failedTokens.push(mentionedTokens[idx]);
+            });
         }
-      });
+    }
+
+    // 2. Send notifications to nearby users (who were not already notified via mention)
+    const nearbyTokens = await db.getNearbyDeviceTokensDb(post.latitude, post.longitude, 20); // 20km radius
+    const nearbyOnlyTokens = nearbyTokens.filter(t => !processedTokens.has(t));
+    if (nearbyOnlyTokens.length > 0) {
+        const message = {
+            notification: {
+                title: `New Pulse Nearby from ${authorDisplayName}!`,
+                body: post.content.substring(0, 100) + (post.content.length > 100 ? '...' : ''),
+            },
+            tokens: nearbyOnlyTokens,
+        };
+        const response = await firebaseAdmin.messaging().sendEachForMulticast(message);
+        successCount += response.successCount;
+        response.responses.forEach((resp, idx) => {
+            if (!resp.success) failedTokens.push(nearbyOnlyTokens[idx]);
+        });
+    }
+
+    // 3. Update notification count and clean up failed tokens
+    if (successCount > 0) {
+      await db.updateNotifiedCountDb(post.id, successCount);
+    }
+    
+    if (failedTokens.length > 0) {
       console.error('List of tokens that caused failures:', failedTokens);
       for (const token of failedTokens) {
         await db.deleteDeviceTokenDb(token);
@@ -166,8 +187,8 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
 
     revalidatePath('/');
     
-    // Always send notifications for any new post
-    sendNotificationsForNewPost(finalPost).catch(err => {
+    // Always send notifications for any new post, including to mentioned users
+    sendNotificationsForNewPost(finalPost, postDataForDb.mentionedUserIds).catch(err => {
       console.error("Background notification sending failed:", err);
     });
 
@@ -296,7 +317,8 @@ export async function registerDeviceToken(
     return { success: false, error: 'Device token is required.' };
   }
   try {
-    await db.addOrUpdateDeviceTokenDb(token, latitude, longitude);
+    const { user } = await getSession(); // Get user from session to associate token
+    await db.addOrUpdateDeviceTokenDb(token, latitude, longitude, user?.id);
     return { success: true };
   } catch (error: any) {
     console.error('Server action error registering device token:', error);
