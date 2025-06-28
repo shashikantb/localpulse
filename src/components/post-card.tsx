@@ -76,10 +76,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser })
   
   const authorName = post.authorname || 'Anonymous Pulsar';
 
-  const [isLikedByClient, setIsLikedByClient] = useState(() => {
-    if (sessionUser) return post.isLikedByCurrentUser || false;
-    return getAnonymousLikedPosts().includes(post.id);
-  });
+  const [isLikedByClient, setIsLikedByClient] = useState(false);
   const [displayLikeCount, setDisplayLikeCount] = useState<number>(post.likecount);
   const [isLiking, setIsLiking] = useState<boolean>(false);
   const [comments, setComments] = useState<CommentType[]>([]);
@@ -160,67 +157,42 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser })
 
   const handleLikeClick = async () => {
     if (isLiking) return;
+    setIsLiking(true);
 
-    if (sessionUser) {
-        // --- LOGGED-IN USER: TOGGLE LIKE ---
-        setIsLiking(true);
-        const originallyLiked = isLikedByClient;
-        setIsLikedByClient(!originallyLiked);
-        setDisplayLikeCount(prev => originallyLiked ? prev - 1 : prev + 1);
-
-        try {
+    try {
+        if (sessionUser) {
+            // --- LOGGED-IN USER ---
             const result = await toggleLikePost(post.id);
             if (result.error || !result.post) {
-                // Revert on failure
-                setIsLikedByClient(originallyLiked);
-                setDisplayLikeCount(prev => originallyLiked ? prev + 1 : prev - 1);
                 toast({ variant: 'destructive', title: 'Error', description: result.error || 'Could not update like.' });
             } else {
-                // Sync with server state
+                // Update UI from server's response
                 setDisplayLikeCount(result.post.likecount);
                 setIsLikedByClient(result.post.isLikedByCurrentUser || false);
             }
-        } catch (error: any) {
-            setIsLikedByClient(originallyLiked);
-            setDisplayLikeCount(prev => originallyLiked ? prev + 1 : prev - 1);
-            toast({ variant: 'destructive', title: 'Error', description: 'An unexpected server error occurred.' });
-        } finally {
-            setIsLiking(false);
-        }
-    } else {
-        // --- ANONYMOUS USER: LIKE ONCE ---
-        if (isLikedByClient) {
-            toast({ title: "You've already liked this post." });
-            return;
-        }
-
-        setIsLiking(true);
-        setIsLikedByClient(true);
-        setDisplayLikeCount(prev => prev + 1);
-
-        try {
+        } else {
+            // --- ANONYMOUS USER ---
+            if (getAnonymousLikedPosts().includes(post.id)) {
+                toast({ title: "You've already liked this post." });
+                return;
+            }
             const result = await likePostAnonymously(post.id);
             if (result.error || !result.post) {
-                // Revert on error
-                setIsLikedByClient(false);
-                setDisplayLikeCount(prev => prev - 1);
                 toast({ variant: 'destructive', title: 'Error', description: 'Could not like post.' });
             } else {
-                // Success, so save to localStorage
+                // Success, save to localStorage and update UI from server's response
                 const currentLikes = getAnonymousLikedPosts();
                 window.localStorage.setItem('localpulse-anonymous-likes', JSON.stringify([...currentLikes, post.id]));
-                setDisplayLikeCount(result.post.likecount); // Sync with server
+                setDisplayLikeCount(result.post.likecount);
+                setIsLikedByClient(true);
             }
-        } catch (error) {
-            setIsLikedByClient(false);
-            setDisplayLikeCount(prev => prev - 1);
-            toast({ variant: 'destructive', title: 'Error', description: 'An unexpected server error occurred.' });
-        } finally {
-            setIsLiking(false);
         }
+    } catch (error) {
+        toast({ variant: 'destructive', title: 'Error', description: 'An unexpected server error occurred.' });
+    } finally {
+        setIsLiking(false);
     }
-};
-
+  };
 
   const handleCommentSubmit = async (e: FormEvent) => {
     e.preventDefault();
