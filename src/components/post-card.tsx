@@ -250,43 +250,36 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
     if (!post.content) return null;
 
     if (!post.mentions || post.mentions.length === 0) {
-        return <p className="text-foreground/90 leading-relaxed text-base whitespace-pre-wrap break-words">{post.content}</p>;
+      return <p className="text-foreground/90 leading-relaxed text-base whitespace-pre-wrap break-words">{post.content}</p>;
     }
 
+    // Escape mentions for regex and create a pattern that includes the '@'
     const escapedMentionNames = post.mentions.map(m =>
-        m.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
+      m.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
     );
-
-    const regex = new RegExp(`@(${escapedMentionNames.join('|')})\\b`, 'g');
+    const regex = new RegExp(`(@(?:${escapedMentionNames.join('|')}))\\b`, 'g');
     const parts = post.content.split(regex);
-    
+
     return (
-        <p className="text-foreground/90 leading-relaxed text-base whitespace-pre-wrap break-words">
+      <p className="text-foreground/90 leading-relaxed text-base whitespace-pre-wrap break-words">
         {parts.map((part, index) => {
-            const mention = post.mentions?.find(m => m.name === part);
-            if (mention) {
+          // Find the mention by checking if the part matches "@username"
+          const mention = post.mentions?.find(m => `@${m.name}` === part);
+          if (mention) {
             return (
-                <Link
+              <Link
                 key={`${mention.id}-${index}`}
                 href={`/users/${mention.id}`}
                 className="text-accent font-semibold hover:underline"
                 onClick={(e) => e.stopPropagation()} // Prevent card click-through
-                >
-                @{part}
-                </Link>
+              >
+                {part} 
+              </Link>
             );
-            }
-            // This is a hack to re-add the @ that split() consumes for non-matched names
-            if (index > 0 && post.content.includes(`@${part}`) && !post.mentions?.find(m => m.name === part)) {
-                 if (parts[index-1] && !post.mentions?.find(m => m.name === parts[index-1])) {
-                    // check if the previous part ended with @
-                    if(parts[index-1].endsWith('@')) return part;
-                 }
-                 else return `@${part}`;
-            }
-            return <React.Fragment key={index}>{part}</React.Fragment>;
+          }
+          return <React.Fragment key={index}>{part}</React.Fragment>;
         })}
-        </p>
+      </p>
     );
   };
 
