@@ -52,9 +52,10 @@ interface PostCardProps {
   post: Post;
   userLocation: { latitude: number; longitude: number } | null;
   sessionUser: User | null;
+  isFirst?: boolean;
 }
 
-export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser }) => {
+export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, isFirst = false }) => {
   const { toast } = useToast();
   
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number | null => {
@@ -284,7 +285,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser })
         <div className="px-5 pb-0 pt-2">
           <div className="relative w-full aspect-[16/10] overflow-hidden rounded-lg border-2 border-border/50 shadow-inner bg-muted/50 group">
             {post.mediatype === 'image' && (
-              <Image src={post.mediaurl} alt="Post image" fill style={{ objectFit: "contain" }} sizes="(max-width: 768px) 100vw, 50vw" className="transition-transform duration-300 group-hover:scale-105" data-ai-hint="user generated content" />
+              <Image src={post.mediaurl} alt="Post image" fill style={{ objectFit: "contain" }} sizes="(max-width: 768px) 100vw, 50vw" className="transition-transform duration-300 group-hover:scale-105" data-ai-hint="user generated content" priority={isFirst} />
             )}
             {post.mediatype === 'video' && (
               <video controls src={post.mediaurl} className="w-full h-full object-contain" />

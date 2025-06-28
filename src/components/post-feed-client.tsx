@@ -460,8 +460,8 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
 
           {filteredAndSortedPosts.length > 0 ? (
               <>
-              {filteredAndSortedPosts.map((post) => (
-                  <PostCard key={post.id} post={post} userLocation={location} sessionUser={sessionUser} />
+              {filteredAndSortedPosts.map((post, index) => (
+                  <PostCard key={post.id} post={post} userLocation={location} sessionUser={sessionUser} isFirst={index === 0} />
               ))}
               {hasMorePosts && (
                   <Button onClick={handleLoadMore} variant="outline" className="w-full mt-6 py-3 text-lg shadow-md hover:shadow-lg transition-shadow bg-card hover:bg-muted" disabled={isLoadingMore}>
