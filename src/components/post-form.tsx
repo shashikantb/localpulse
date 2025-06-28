@@ -23,8 +23,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 
-const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
-const VIDEO_OPTIMIZATION_THRESHOLD = 500 * 1024; // 0.5MB
+const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB for videos, images will be compressed
 
 export const HASHTAG_CATEGORIES = [
   {
@@ -71,7 +70,6 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<'image' | 'video' | null>(null);
   const [isReadingFile, setIsReadingFile] = useState(false);
-  const [isOptimizingVideo, setIsOptimizingVideo] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [showCameraOptions, setShowCameraOptions] = useState(false);
 
@@ -94,66 +92,81 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
       setMediaType(null);
       setFileError(null);
       setIsReadingFile(false);
-      setIsOptimizingVideo(false);
-      setShowCameraOptions(false); // Hide camera options after selection
+      setShowCameraOptions(false);
 
-      if (file) {
-          if (file.size > MAX_FILE_SIZE) {
-              setFileError(`File is too large. Max size: ${MAX_FILE_SIZE / 1024 / 1024}MB.`);
-              setSelectedFile(null);
-              if (event.target) event.target.value = '';
-              return;
-          }
+      if (!file) return;
 
-          const currentFileType = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : null;
-
-          if (!currentFileType) {
-              setFileError('Invalid file type. Please select an image or video.');
-              setSelectedFile(null);
-              if (event.target) event.target.value = '';
-              return;
-          }
-
-          setIsReadingFile(true);
-          let  shouldOptimizeThisFile = false;
-
-          if (currentFileType === 'video' && file.size > VIDEO_OPTIMIZATION_THRESHOLD) {
-              shouldOptimizeThisFile = true;
-              setIsOptimizingVideo(true);
-              toast({
-                  title: "Optimizing Video",
-                  description: "Larger videos are being prepared. This might take a moment. Actual size reduction is a planned feature.",
-                  duration: 4000,
-              });
-          }
-
-          const reader = new FileReader();
-          reader.onloadend = () => {
-              setPreviewUrl(reader.result as string);
-              setSelectedFile(file);
-              setMediaType(currentFileType);
-              setIsReadingFile(false);
-
-              if (shouldOptimizeThisFile) {
-                  setIsOptimizingVideo(false);
-                  toast({
-                      title: "Video Ready",
-                      description: "Video is now ready to be included in your post.",
-                      duration: 3000,
-                  });
-              }
-          };
-          reader.onerror = () => {
-              setFileError('Error reading file.');
-              setSelectedFile(null);
-              setPreviewUrl(null);
-              setMediaType(null);
-              setIsReadingFile(false);
-              setIsOptimizingVideo(false);
-              if (event.target) event.target.value = '';
-          };
-          reader.readAsDataURL(file);
+      if (file.size > MAX_FILE_SIZE) {
+          setFileError(`File is too large. Max size: ${MAX_FILE_SIZE / 1024 / 1024}MB.`);
+          if (event.target) event.target.value = '';
+          return;
       }
+
+      const currentFileType = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : null;
+
+      if (!currentFileType) {
+          setFileError('Invalid file type. Please select an image or video.');
+          if (event.target) event.target.value = '';
+          return;
+      }
+
+      setIsReadingFile(true);
+      setSelectedFile(file);
+      setMediaType(currentFileType);
+
+      const reader = new FileReader();
+      reader.onerror = () => {
+          setFileError('Error reading file.');
+          setIsReadingFile(false);
+          if (event.target) event.target.value = '';
+      };
+      
+      if (currentFileType === 'image') {
+        reader.onload = (loadEvent) => {
+            const img = document.createElement('img');
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const MAX_WIDTH = 1920;
+                const MAX_HEIGHT = 1080;
+                let { width, height } = img;
+
+                if (width > height) {
+                    if (width > MAX_WIDTH) {
+                        height *= MAX_WIDTH / width;
+                        width = MAX_WIDTH;
+                    }
+                } else {
+                    if (height > MAX_HEIGHT) {
+                        width *= MAX_HEIGHT / height;
+                        height = MAX_HEIGHT;
+                    }
+                }
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    setFileError('Could not process image.');
+                    setIsReadingFile(false);
+                    return;
+                }
+                ctx.drawImage(img, 0, 0, width, height);
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.85); // Compress to JPEG
+                setPreviewUrl(dataUrl);
+                setIsReadingFile(false);
+            };
+            img.onerror = () => {
+                setFileError('Could not load image to process.');
+                setIsReadingFile(false);
+            };
+            img.src = loadEvent.target?.result as string;
+        };
+      } else { // It's a video
+        reader.onloadend = () => {
+            setPreviewUrl(reader.result as string);
+            setIsReadingFile(false);
+        };
+      }
+      reader.readAsDataURL(file);
    }, [toast]);
 
   const removeMedia = () => {
@@ -162,7 +175,6 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
       setMediaType(null);
       setFileError(null);
       setIsReadingFile(false);
-      setIsOptimizingVideo(false);
       // Reset all file inputs
       if (fileInputRef.current) fileInputRef.current.value = '';
       if (imageCaptureInputRef.current) imageCaptureInputRef.current.value = '';
@@ -170,7 +182,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   };
 
   const handleSubmitForm: SubmitHandler<FormData> = async (data) => {
-      if (submitting || isReadingFile || isOptimizingVideo) return;
+      if (submitting || isReadingFile) return;
 
       if (fileError) {
         toast({
@@ -187,12 +199,10 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
       removeMedia();
   };
 
-  const isButtonDisabled = submitting || isReadingFile || isOptimizingVideo;
+  const isButtonDisabled = submitting || isReadingFile;
 
   let buttonText = 'Share Your Pulse';
-  if (isOptimizingVideo) {
-    buttonText = 'Optimizing Video...';
-  } else if (isReadingFile) {
+  if (isReadingFile) {
     buttonText = 'Processing File...';
   } else if (submitting) {
     buttonText = 'Pulsing...';
@@ -302,7 +312,6 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
               <div className="flex items-center justify-center space-x-2 text-sm text-foreground bg-background/70 p-1 rounded-md">
                 {mediaType === 'image' ? <ImageIcon className="h-4 w-4 text-primary" /> : <Film className="h-4 w-4 text-primary" />}
                 <span className="truncate max-w-[200px]">{selectedFile.name}</span>
-                 <span className="text-xs text-muted-foreground">({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)</span>
                 <Button
                   type="button"
                   variant="ghost"
@@ -346,10 +355,10 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
                   </div>
                 )}
               </div>
-              {(isReadingFile || isOptimizingVideo) && (
+              {isReadingFile && (
                 <div className="flex flex-col items-center text-muted-foreground py-4">
                   <Loader2 className="h-8 w-8 animate-spin mb-2 text-primary" />
-                  <p className="text-sm">{isOptimizingVideo ? 'Optimizing video...' : 'Reading file...'}</p>
+                  <p className="text-sm">Processing file...</p>
                 </div>
               )}
             </div>
@@ -363,7 +372,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
 
 
         <Button type="submit" disabled={isButtonDisabled || !form.formState.isValid} className="w-full text-base py-3 shadow-md hover:shadow-lg transition-shadow bg-accent hover:bg-accent/90 text-accent-foreground rounded-lg">
-          {isButtonDisabled && !(submitting && !isReadingFile && !isOptimizingVideo) ? (
+          {isButtonDisabled && !(submitting && !isReadingFile) ? (
             <Loader2 className="mr-2 h-5 w-5 animate-spin" />
           ) : null}
           {buttonText}
