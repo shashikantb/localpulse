@@ -25,8 +25,7 @@ import { Loader2, XCircle, UploadCloud, Film, Image as ImageIcon, Tag, ChevronDo
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
-import { FFmpeg } from '@ffmpeg/ffmpeg';
-import { fetchFile, toBlobURL } from '@ffmpeg/util';
+// Note: FFmpeg imports are now done dynamically inside handleTrimVideo
 
 const MAX_VIDEO_TRIM_THRESHOLD_SIZE = 25 * 1024 * 1024; // 25MB - When to trigger the trimmer
 const MAX_VIDEO_UPLOAD_LIMIT = 150 * 1024 * 1024; // 150MB - Absolute max upload size
@@ -82,7 +81,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   const [showCameraOptions, setShowCameraOptions] = useState(false);
   
   // State for video trimming
-  const ffmpegRef = useRef(new FFmpeg());
+  const ffmpegRef = useRef<any>(null); // Use a generic ref for the dynamic import
   const [isTrimming, setIsTrimming] = useState(false);
   const [showTrimmer, setShowTrimmer] = useState(false);
   const [videoToTrim, setVideoToTrim] = useState<{file: File, url: string, duration: number} | null>(null);
@@ -238,10 +237,17 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
     toast({ title: "Preparing trimmer...", description: "This may take a moment to load the library." });
 
     try {
-        const ffmpeg = ffmpegRef.current;
-        const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd'
+        const { FFmpeg } = await import('@ffmpeg/ffmpeg');
+        const { fetchFile, toBlobURL } = await import('@ffmpeg/util');
 
-        ffmpeg.on('log', ({ message }) => {
+        if (!ffmpegRef.current) {
+            ffmpegRef.current = new FFmpeg();
+        }
+        const ffmpeg = ffmpegRef.current;
+        
+        const baseURL = 'https://unpkg.com/@ffmpeg/core-st@0.12.6/dist/umd';
+
+        ffmpeg.on('log', ({ message }: { message: string }) => {
           // You can use this to debug ffmpeg's progress
           // console.log(message);
         });
@@ -249,7 +255,6 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
         if (!ffmpeg.loaded) {
             await ffmpeg.load({
               coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-              wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
             });
         }
         
@@ -265,7 +270,6 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
         const trimmedBlob = new Blob([(data as Uint8Array).buffer], { type: 'video/mp4' });
         const trimmedFile = new File([trimmedBlob], "trimmed_video.mp4", { type: 'video/mp4' });
         
-        // Use a FileReader to get a persistent data URL
         const reader = new FileReader();
         reader.onloadend = () => {
             setPreviewUrl(reader.result as string);
@@ -281,7 +285,9 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
     } finally {
         setIsTrimming(false);
         setShowTrimmer(false);
-        URL.revokeObjectURL(videoToTrim.url);
+        if (videoToTrim?.url) {
+          URL.revokeObjectURL(videoToTrim.url);
+        }
         setVideoToTrim(null);
     }
   }
