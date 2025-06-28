@@ -151,17 +151,25 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
       if (window.Android && typeof window.Android.getFCMToken === 'function') {
         const token = window.Android.getFCMToken();
         if (token) {
-          console.log('FCM Device Token for Testing:', token); // <-- I'VE ADDED THIS LINE
+          toast({
+            duration: 15000, // Make it stay longer for copying
+            title: "Your Device Token",
+            description: (
+              <div className="w-full break-words">
+                <p className="mb-2">Use this token for testing push notifications:</p>
+                <code className="text-xs bg-muted p-1 rounded font-mono">{token}</code>
+              </div>
+            ),
+          });
           const result = await registerDeviceToken(token, location?.latitude, location?.longitude);
           if (result.success) {
-            toast({ title: "Notifications Enabled", description: "You're all set for real-time updates." });
             setNotificationPermissionStatus('granted');
           } else {
-             toast({ variant: "destructive", title: "Notification Error", description: result.error || "Could not register for notifications." });
+             toast({ variant: "destructive", title: "Registration Error", description: result.error || "Could not register for notifications." });
              setNotificationPermissionStatus('denied');
           }
         } else {
-          toast({ variant: "destructive", title: "Notification Error", description: "Could not retrieve notification token from the app." });
+          toast({ variant: "destructive", title: "Token Error", description: "Could not retrieve notification token from the app." });
         }
       } else {
         toast({ title: "Web Notifications", description: "Web push notifications are not yet available. Please use our Android app for real-time updates." });
