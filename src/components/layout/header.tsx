@@ -2,8 +2,8 @@
 import type { FC } from 'react';
 import Link from 'next/link';
 import { Rss } from 'lucide-react';
-import { UserNav } from './user-nav';
 import { getSession } from '@/app/auth/actions';
+import HeaderUserNav from './header-user-nav';
 
 const Header: FC = async () => {
   const { user } = await getSession();
@@ -22,7 +22,7 @@ const Header: FC = async () => {
         <div className="flex flex-1 items-center justify-end space-x-2">
           {/* This nav is now hidden on small (mobile) screens and visible on larger screens */}
           <nav className="hidden items-center sm:flex">
-            <UserNav user={user} />
+            <HeaderUserNav user={user} />
           </nav>
         </div>
       </div>

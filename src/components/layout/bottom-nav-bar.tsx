@@ -6,8 +6,16 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, Film } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { UserNav } from './user-nav'; // Import UserNav
 import type { User } from '@/lib/db-types';
+import dynamic from 'next/dynamic';
+import { Skeleton } from '@/components/ui/skeleton';
+
+// Defer loading of the UserNav component to prevent its JavaScript from blocking the initial render.
+const UserNav = dynamic(() => import('./user-nav').then((mod) => mod.UserNav), {
+  ssr: false,
+  loading: () => <Skeleton className="h-12 w-12 rounded-full" />,
+});
+
 
 // The "Privacy" link is removed to make space for the more important user menu.
 const navItems = [
