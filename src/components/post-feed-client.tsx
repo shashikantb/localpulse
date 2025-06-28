@@ -151,6 +151,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
       if (window.Android && typeof window.Android.getFCMToken === 'function') {
         const token = window.Android.getFCMToken();
         if (token) {
+          console.log('FCM Device Token for Testing:', token); // <-- I'VE ADDED THIS LINE
           const result = await registerDeviceToken(token, location?.latitude, location?.longitude);
           if (result.success) {
             toast({ title: "Notifications Enabled", description: "You're all set for real-time updates." });
