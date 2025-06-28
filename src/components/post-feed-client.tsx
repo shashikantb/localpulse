@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { FC } from 'react';
@@ -33,6 +34,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuCheckboxItem,
 } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+
 
 interface AndroidInterface {
   getFCMToken?: () => string | null;
@@ -94,14 +106,8 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
   const [filterHashtags, setFilterHashtags] = useState<string[]>([]);
   
   const [notificationPermissionStatus, setNotificationPermissionStatus] = useState<'default' | 'loading' | 'granted' | 'denied'>('default');
+  const [showTroubleshootingDialog, setShowTroubleshootingDialog] = useState(false);
   
-  const FAILED_TOKEN_TOAST_MESSAGE = {
-    variant: "destructive",
-    title: "Notification Setup Error",
-    description: "Could not get token. This can happen on Xiaomi/Redmi devices due to battery settings. Please check your phone's 'Autostart' and 'Battery Saver' settings for LocalPulse.",
-    duration: 10000
-  } as const;
-
 
   const calculateDistance = useCallback((lat1: number, lon1: number, lat2: number, lon2: number) => {
     if (!lat1 || !lon1 || !lat2 || !lon2) return Infinity;
@@ -160,7 +166,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
       return;
     }
     if (notificationPermissionStatus === 'denied') {
-      toast(FAILED_TOKEN_TOAST_MESSAGE);
+       setShowTroubleshootingDialog(true);
       return;
     }
 
@@ -212,7 +218,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
              setNotificationPermissionStatus('denied');
           }
         } else {
-          toast(FAILED_TOKEN_TOAST_MESSAGE);
+          setShowTroubleshootingDialog(true);
           setNotificationPermissionStatus('denied');
         }
       } else {
@@ -221,7 +227,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
       }
     } catch (error) {
         console.error("Error during notification registration:", error);
-        toast({ variant: "destructive", title: "Notification Error", description: "An unexpected error occurred." });
+        setShowTroubleshootingDialog(true);
         setNotificationPermissionStatus('denied');
     }
   };
@@ -529,6 +535,33 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
 
   return (
     <>
+      <AlertDialog open={showTroubleshootingDialog} onOpenChange={setShowTroubleshootingDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Notification Setup Incomplete</AlertDialogTitle>
+            <AlertDialogDescription>
+              <div className="space-y-3 text-left pt-2">
+                <p>Your device (especially brands like Xiaomi, Oppo, Vivo, and Realme) may be blocking notifications to save battery.</p>
+                <p className="font-semibold">To fix this, please check your phone's settings for the LocalPulse app:</p>
+                <ul className="list-disc list-inside space-y-1.5 text-sm pl-2 bg-muted p-3 rounded-md">
+                  <li><span className="font-bold">Autostart / Auto-launch:</span> Look for this setting and make sure it is enabled for LocalPulse.</li>
+                  <li><span className="font-bold">Battery Saver / Optimization:</span> Find LocalPulse in the list and set it to "No restrictions" or "Don't optimize".</li>
+                  <li><span className="font-bold">App Pinning:</span> In your recent apps screen, find LocalPulse and "pin" or "lock" it to keep it active.</li>
+                </ul>
+                <p className="text-xs pt-1">These settings are often in your phone's main Settings app, under "Battery," "Apps," or "Security."</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Dismiss</AlertDialogCancel>
+            <AlertDialogAction onClick={() => {
+              setShowTroubleshootingDialog(false);
+              handleNotificationRegistration();
+            }}>Try Again</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <div className="flex justify-end items-center sticky top-6 z-30 mb-4 px-1 gap-2 flex-wrap">
           {newPulsesAvailable && (
               <Button variant="outline" size="sm" onClick={handleLoadNewPulses} className="animate-pulse bg-accent/10 hover:bg-accent/20 border-accent/50 text-accent hover:text-accent/90 shadow-md mr-auto">
