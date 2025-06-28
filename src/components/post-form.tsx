@@ -293,8 +293,8 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
             console.log("FFmpeg script loaded successfully.");
             setFfmpegScriptLoaded(true);
         }}
-        onError={() => {
-            console.error("Error: Failed to load the FFmpeg script.");
+        onError={(e) => {
+            console.error("Error: Failed to load the FFmpeg script.", e);
             setFfmpegScriptError(true);
         }}
     />
