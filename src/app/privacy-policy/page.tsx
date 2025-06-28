@@ -2,7 +2,7 @@
 import type { NextPage } from 'next';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ShieldCheck, Bell } from 'lucide-react';
+import { ShieldCheck, Bell, AlertTriangle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const PrivacyPolicyPage: NextPage = () => {
@@ -31,6 +31,24 @@ const PrivacyPolicyPage: NextPage = () => {
                         </AlertTitle>
                         <AlertDescription className="text-foreground/80">
                             LocalPulse collects location data to deliver city-wise news, alerts, and real-time updates relevant to your area — even when the app is closed or not in use. This data is only used to provide core app functionality and is never sold to third parties. You may disable location access anytime from your device settings.
+                        </AlertDescription>
+                    </Alert>
+                </section>
+                
+                <section>
+                    <Alert variant="destructive" className="bg-yellow-500/10 border-yellow-500/30 text-yellow-700 dark:text-yellow-400">
+                        <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                        <AlertTitle className="font-bold text-base text-yellow-800 dark:text-yellow-300">
+                            Troubleshooting Push Notifications
+                        </AlertTitle>
+                        <AlertDescription className="text-yellow-700/90 dark:text-yellow-400/90 space-y-2">
+                           <p>Some phone manufacturers (like **Xiaomi, Oppo, Vivo, OnePlus, Realme, and Huawei**) use aggressive battery-saving features that can prevent apps from receiving push notifications. If you are not receiving notifications, please check the following settings on your device:</p>
+                           <ul className="list-disc list-inside space-y-1 text-sm pl-2">
+                                <li>**Autostart / App Launch:** Find LocalPulse in your phone's settings and enable the "Autostart" or "Auto-launch" permission.</li>
+                                <li>**Battery Optimization:** Find LocalPulse in the battery settings and select "No restrictions" or "Don't optimize".</li>
+                                <li>**App Pinning:** Pin our app in the "Recent Apps" screen to keep it running in the background.</li>
+                           </ul>
+                           <p className="text-xs pt-1">These settings are often found in your phone's main Settings app, under "Battery," "Apps," or "Security." The exact names may vary by manufacturer.</p>
                         </AlertDescription>
                     </Alert>
                 </section>
