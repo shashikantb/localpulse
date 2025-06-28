@@ -1,0 +1,13 @@
+--- a/node_modules/@ffmpeg/util/package.json
++++ b/node_modules/@ffmpeg/util/package.json
+@@ -17,7 +17,9 @@
+   "exports": {
+     ".": {
+       "import": "./dist/esm/index.js",
+       "require": "./dist/cjs/index.js"
+-    }
++    },
++    "./dist/esm/index.js": "./dist/esm/index.js"
+   },
+   "gitHead": "912f27803d162799540b7049435b0b6c205307c4"
+ }

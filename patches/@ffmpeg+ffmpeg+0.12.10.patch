@@ -1,0 +1,14 @@
+--- a/node_modules/@ffmpeg/ffmpeg/package.json
++++ b/node_modules/@ffmpeg/ffmpeg/package.json
+@@ -19,7 +19,9 @@
+   "exports": {
+     ".": {
+       "import": "./dist/esm/index.js",
+       "require": "./dist/cjs/index.js"
+-    }
++    },
++    "./dist/esm/ffmpeg.js": "./dist/esm/ffmpeg.js"
+   },
+   "dependencies": {
+     "@ffmpeg/util": "0.12.1"
+   },
