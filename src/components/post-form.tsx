@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { FC } from 'react';
@@ -7,7 +6,7 @@ import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Image from 'next/image';
-import Script from 'next/script';
+import Script from 'next/script'; // Import Script component
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -83,6 +82,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   const [isReadingFile, setIsReadingFile] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [showCameraOptions, setShowCameraOptions] = useState(false);
+  // State to manage FFmpeg script loading
   const [ffmpegScriptLoaded, setFfmpegScriptLoaded] = useState(false);
   const [ffmpegScriptError, setFfmpegScriptError] = useState(false);
 
@@ -156,6 +156,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
         return;
       }
 
+      // Check if video is large enough to require trimming
       if (currentFileType === 'video' && file.size > MAX_VIDEO_FOR_TRIM) {
           if (ffmpegScriptError) {
               toast({
@@ -168,8 +169,8 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
           const url = URL.createObjectURL(file);
           setVideoToTrim({ file, url });
           setShowTrimmer(true);
-          setVideoDuration(0);
-          setTrimmerError(null);
+          setVideoDuration(0); // Reset duration for new video
+          setTrimmerError(null); // Reset error
           return;
       }
       
@@ -225,26 +226,32 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
     try {
         const ffmpeg = await loadFFmpeg();
 
+        // Convert the file to a format FFmpeg can read
         const arrayBuffer = await videoToTrim.file.arrayBuffer();
         const uint8Array = new Uint8Array(arrayBuffer);
         ffmpeg.FS('writeFile', videoToTrim.file.name, uint8Array);
 
+        // Listen for progress events
         ffmpeg.setProgress(({ ratio } : {ratio: number}) => {
             setTrimProgress(Math.min(100, Math.round(ratio * 100)));
         });
 
+        // Run the FFmpeg command
         const outputFileName = `trimmed-${Date.now()}.mp4`;
         await ffmpeg.run(
             '-ss', trimStartTime.toString(),
             '-i', videoToTrim.file.name,
             '-t', trimDuration.toString(),
+            // Using '-c copy' is faster as it avoids re-encoding
             '-c', 'copy',
             outputFileName
         );
         
+        // Read the trimmed file from FFmpeg's virtual file system
         const data = ffmpeg.FS('readFile', outputFileName);
         const trimmedFile = new File([data.buffer], outputFileName, { type: 'video/mp4' });
 
+        // Update the state with the new trimmed video
         const reader = new FileReader();
         reader.onloadend = () => {
             setPreviewUrl(reader.result as string);
@@ -269,6 +276,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   if (isReadingFile) buttonText = 'Processing File...';
   else if (submitting) buttonText = 'Pulsing...';
 
+  // Determine trim button text based on loading state
   let trimButtonText = 'Trim & Use Video';
   if (isTrimming) trimButtonText = 'Trimming...';
   else if (!ffmpegScriptLoaded) trimButtonText = 'Library Loading...';
@@ -276,10 +284,12 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
 
   return (
     <>
+    {/* Use Next.js Script component for safer, non-blocking loading */}
     <Script
         src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"
-        strategy="lazyOnload"
+        strategy="lazyOnload" // Load after other resources
         onLoad={() => {
+            console.log("FFmpeg script loaded successfully.");
             setFfmpegScriptLoaded(true);
         }}
         onError={() => {
