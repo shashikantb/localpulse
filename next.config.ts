@@ -24,7 +24,7 @@ const nextConfig = {
     ],
   },
   serverActions: {
-    bodySizeLimit: '10mb',
+    bodySizeLimit: '35mb', // Increased limit for larger video files
   },
 };
 

@@ -23,7 +23,9 @@ import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 
-const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB for videos, images will be compressed
+const MAX_VIDEO_SIZE = 25 * 1024 * 1024; // 25MB
+const MAX_IMAGE_SIZE_BEFORE_COMPRESSION = 15 * 1024 * 1024; // 15MB
+
 
 export const HASHTAG_CATEGORIES = [
   {
@@ -96,12 +98,6 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
 
       if (!file) return;
 
-      if (file.size > MAX_FILE_SIZE) {
-          setFileError(`File is too large. Max size: ${MAX_FILE_SIZE / 1024 / 1024}MB.`);
-          if (event.target) event.target.value = '';
-          return;
-      }
-
       const currentFileType = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : null;
 
       if (!currentFileType) {
@@ -109,6 +105,19 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
           if (event.target) event.target.value = '';
           return;
       }
+      
+      if (currentFileType === 'video' && file.size > MAX_VIDEO_SIZE) {
+        setFileError(`Video file is too large. Max size: ${MAX_VIDEO_SIZE / 1024 / 1024}MB.`);
+        if (event.target) event.target.value = '';
+        return;
+      }
+      
+      if (currentFileType === 'image' && file.size > MAX_IMAGE_SIZE_BEFORE_COMPRESSION) {
+          setFileError(`Image file is too large. Max size: ${MAX_IMAGE_SIZE_BEFORE_COMPRESSION / 1024 / 1024}MB.`);
+          if (event.target) event.target.value = '';
+          return;
+      }
+
 
       setIsReadingFile(true);
       setSelectedFile(file);
