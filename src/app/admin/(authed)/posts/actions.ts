@@ -12,6 +12,8 @@ export async function deletePost(postId: number): Promise<{ success: boolean; er
     return { success: true };
   } catch (error: any) {
     console.error('Error deleting post:', error);
-    return { success: false, error: error.message || 'Failed to delete post.' };
+    // Provide more specific error details if available from the database driver
+    const errorMessage = error.detail || error.message || 'Failed to delete post.';
+    return { success: false, error: errorMessage };
   }
 }

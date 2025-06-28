@@ -255,26 +255,14 @@ export async function getPostsDb(options: { limit: number; offset: number } = { 
 
   const client = await dbPool.connect();
   try {
-    const postIdsQuery = `
-      SELECT id FROM posts 
-      ORDER BY createdat DESC 
-      LIMIT $1 OFFSET $2
-    `;
-    const postIdsResult = await client.query(postIdsQuery, [options.limit, options.offset]);
-    const postIds = postIdsResult.rows.map(row => row.id);
-
-    if (postIds.length === 0) {
-      return [];
-    }
-
     const postsQuery = `
       SELECT p.*, u.name as authorname, u.role as authorrole, u.profilepictureurl as authorprofilepictureurl
       FROM posts p
       LEFT JOIN users u ON p.authorid = u.id
-      WHERE p.id = ANY($1::int[])
       ORDER BY p.createdat DESC
+      LIMIT $1 OFFSET $2
     `;
-    const postsResult = await client.query(postsQuery, [postIds]);
+    const postsResult = await client.query(postsQuery, [options.limit, options.offset]);
     return postsResult.rows;
   } finally {
     client.release();
