@@ -249,21 +249,38 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
   }, [allPosts, location, distanceFilterKm, showAnyDistance, filterHashtags, sessionUser, calculateDistance]);
 
 
+  // Polling for new posts, now more bfcache-friendly.
   useEffect(() => {
-    if (isLoadingLocation || document.hidden) return;
+    if (isLoadingLocation) return;
 
-    const intervalId = setInterval(async () => {
-      if (document.hidden) return; 
-      
-      const result = await checkForNewerPosts(latestPostIdClientKnows);
-      if (result.hasNewerPosts) {
-        setNewPulsesAvailable(true);
-        setNewPulsesCount(result.count); 
+    let timeoutId: NodeJS.Timeout;
+
+    const pollForNewPosts = async () => {
+      // Only poll if the tab is visible.
+      // This helps with performance and makes the page more eligible for bfcache.
+      if (!document.hidden) {
+        try {
+          const result = await checkForNewerPosts(latestPostIdClientKnows);
+          if (result.hasNewerPosts) {
+            setNewPulsesAvailable(true);
+            setNewPulsesCount(result.count);
+          }
+        } catch (error) {
+          console.warn("Polling for new posts failed:", error);
+        }
       }
-    }, NEW_POST_POLL_INTERVAL);
+      
+      // Schedule the next poll.
+      timeoutId = setTimeout(pollForNewPosts, NEW_POST_POLL_INTERVAL);
+    };
 
-    return () => clearInterval(intervalId);
+    // Start the polling loop.
+    timeoutId = setTimeout(pollForNewPosts, NEW_POST_POLL_INTERVAL);
+
+    // Cleanup function.
+    return () => clearTimeout(timeoutId);
   }, [isLoadingLocation, latestPostIdClientKnows]);
+
 
   const handleLoadNewPulses = async () => {
     toast({ title: "Refreshing Pulses...", description: "Fetching the latest vibes for you." });
@@ -479,5 +496,3 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
 };
 
 export default PostFeedClient;
-
-    
