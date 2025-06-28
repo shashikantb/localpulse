@@ -418,7 +418,14 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
 
   return (
     <div>
-      <div className="flex justify-end items-center sticky top-6 z-30 mb-4 px-1 gap-2">
+      <div className="flex justify-end items-center sticky top-6 z-30 mb-4 px-1 gap-2 flex-wrap">
+          {newPulsesAvailable && (
+              <Button variant="outline" size="sm" onClick={handleLoadNewPulses} className="animate-pulse bg-accent/10 hover:bg-accent/20 border-accent/50 text-accent hover:text-accent/90 shadow-md mr-auto">
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Load {newPulsesCount} New {newPulsesCount === 1 ? "Pulse" : "Pulses"}
+              </Button>
+          )}
+
           <Button
               variant="outline"
               className="shadow-lg hover:shadow-xl transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary"
@@ -445,19 +452,6 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
       </div>
 
       <div className="space-y-6">
-          <div className="flex justify-between items-center border-b-2 border-primary/30 pb-3 mb-6">
-              <h2 className="text-4xl font-bold text-primary pl-1 flex items-center">
-              <Rss className="w-9 h-9 mr-3 text-accent opacity-90" />
-              Nearby Pulses
-              </h2>
-              {newPulsesAvailable && (
-                  <Button variant="outline" size="sm" onClick={handleLoadNewPulses} className="animate-pulse bg-accent/10 hover:bg-accent/20 border-accent/50 text-accent hover:text-accent/90 shadow-md">
-                      <RefreshCw className="w-4 h-4 mr-2" />
-                      Load {newPulsesCount} New {newPulsesCount === 1 ? "Pulse" : "Pulses"}
-                  </Button>
-              )}
-          </div>
-
           {filteredAndSortedPosts.length > 0 ? (
               <>
               {filteredAndSortedPosts.map((post, index) => (
@@ -485,5 +479,3 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
 };
 
 export default PostFeedClient;
-
-    

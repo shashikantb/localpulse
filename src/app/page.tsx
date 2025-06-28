@@ -7,6 +7,7 @@ import PostComposer from '@/components/post-composer'; // New component for the 
 import type { Post } from '@/lib/db-types';
 import { getSession } from './auth/actions';
 import { PostFeedSkeleton } from '@/components/post-feed-skeleton';
+import { Rss } from 'lucide-react';
 
 const POSTS_PER_PAGE = 5;
 
@@ -38,6 +39,14 @@ const HomePage: FC = async () => {
       <div className="container mx-auto max-w-2xl space-y-8 py-8">
         {/* The PostComposer is rendered immediately, outside of Suspense */}
         <PostComposer sessionUser={user} />
+        
+        {/* Title is rendered instantly on the server, improving LCP */}
+        <div className="border-b-2 border-primary/30 pb-3">
+            <h2 className="text-4xl font-bold text-primary pl-1 flex items-center">
+                <Rss className="w-9 h-9 mr-3 text-accent opacity-90" />
+                Nearby Pulses
+            </h2>
+        </div>
         
         {/* The PostFeed is suspended, showing a skeleton while it loads */}
         <Suspense fallback={<PostFeedSkeleton />}>
