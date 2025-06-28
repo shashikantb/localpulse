@@ -1,4 +1,6 @@
 
+'use client';
+
 import type { FC } from 'react';
 import { useState, useRef, useCallback } from 'react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
@@ -237,8 +239,9 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
     toast({ title: "Preparing trimmer...", description: "This may take a moment to load the library." });
 
     try {
-        const { FFmpeg } = await import('@ffmpeg/ffmpeg');
-        const { fetchFile, toBlobURL } = await import('@ffmpeg/util');
+        // Explicitly import the single-threaded ESM build to avoid worker/bundler issues
+        const { FFmpeg } = await import('@ffmpeg/ffmpeg/dist/esm/ffmpeg.js');
+        const { fetchFile, toBlobURL } = await import('@ffmpeg/util/dist/esm/index.js');
 
         if (!ffmpegRef.current) {
             ffmpegRef.current = new FFmpeg();
@@ -255,6 +258,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
         if (!ffmpeg.loaded) {
             await ffmpeg.load({
               coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+              wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
             });
         }
         
@@ -263,7 +267,8 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
         const { file } = videoToTrim;
         await ffmpeg.writeFile(file.name, await fetchFile(file));
         
-        await ffmpeg.exec(['-i', file.name, '-ss', trimStartTime.toString(), '-t', trimDuration.toString(), '-c', 'copy', 'output.mp4']);
+        // Use -c:v copy for faster trimming without re-encoding video
+        await ffmpeg.exec(['-i', file.name, '-ss', trimStartTime.toString(), '-t', trimDuration.toString(), '-c:v', 'copy', '-c:a', 'aac', 'output.mp4']);
         
         const data = await ffmpeg.readFile('output.mp4');
         
