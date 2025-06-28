@@ -198,7 +198,12 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
              setNotificationPermissionStatus('denied');
           }
         } else {
-          toast({ variant: "destructive", title: "Token Error", description: "Could not retrieve notification token from the app. Please try again in a moment." });
+          toast({ 
+            variant: "destructive", 
+            title: "Notification Setup Error", 
+            description: "Could not get token. This can happen on Xiaomi/Redmi devices due to battery settings. Please check your phone's 'Autostart' and 'Battery Saver' settings for LocalPulse.",
+            duration: 10000 // Keep the message on screen for 10 seconds
+          });
         }
       } else {
         toast({ title: "Web Notifications", description: "Web push notifications are not yet available. Please use our Android app for real-time updates." });
