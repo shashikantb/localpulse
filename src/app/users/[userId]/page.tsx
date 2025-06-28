@@ -1,17 +1,19 @@
 
 import type { FC } from 'react';
 import { notFound } from 'next/navigation';
-import { getUser, getPostsByUserId } from '@/app/actions';
+import { getUserWithFollowInfo, getPostsByUserId } from '@/app/actions';
 import { getSession } from '@/app/auth/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
-import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit } from 'lucide-react';
+import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, UserPlus, UserCheck as UserCheckIcon } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { PostCard } from '@/components/post-card';
 import type { User } from '@/lib/db-types';
 import ProfilePictureUpdater from '@/components/profile-picture-updater';
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import FollowButton from '@/components/follow-button';
+
 
 interface UserProfilePageProps {
   params: {
@@ -26,8 +28,8 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
   }
 
   // Fetch user, posts, and session in parallel
-  const [profileUser, userPosts, { user: sessionUser }] = await Promise.all([
-    getUser(userId),
+  const [{ user: profileUser, stats, isFollowing }, userPosts, { user: sessionUser }] = await Promise.all([
+    getUserWithFollowInfo(userId),
     getPostsByUserId(userId),
     getSession()
   ]);
@@ -79,8 +81,29 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
               )}
             </div>
 
-            <div className="space-y-1 text-center md:text-left">
-              <h1 className="text-3xl font-bold text-foreground">{profileUser.name}</h1>
+            <div className="flex-1 space-y-2 text-center md:text-left">
+              <div className="flex items-center justify-center md:justify-start gap-4">
+                  <h1 className="text-3xl font-bold text-foreground">{profileUser.name}</h1>
+                   {!isOwnProfile && (
+                     <FollowButton targetUserId={profileUser.id} initialIsFollowing={isFollowing} />
+                   )}
+              </div>
+
+               <div className="flex items-center justify-center md:justify-start gap-6 pt-2">
+                  <div className="text-center">
+                    <p className="text-xl font-bold text-foreground">{userPosts.length}</p>
+                    <p className="text-sm text-muted-foreground">Posts</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xl font-bold text-foreground">{stats.followerCount}</p>
+                    <p className="text-sm text-muted-foreground">Followers</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xl font-bold text-foreground">{stats.followingCount}</p>
+                    <p className="text-sm text-muted-foreground">Following</p>
+                  </div>
+              </div>
+              
               <Badge variant={profileUser.role === 'Business' ? 'secondary' : 'default'} className="capitalize">
                 {profileUser.role}
               </Badge>

@@ -106,3 +106,9 @@ export interface DeviceToken {
   longitude: number | null;
   last_updated: string;
 }
+
+// User follow stats structure
+export interface UserFollowStats {
+  followerCount: number;
+  followingCount: number;
+}

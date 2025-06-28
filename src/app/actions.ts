@@ -2,7 +2,7 @@
 'use server';
 
 import * as db from '@/lib/db';
-import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User } from '@/lib/db-types';
+import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 import { admin as firebaseAdmin } from '@/lib/firebase-admin';
 import { getSession } from './auth/actions';
@@ -339,5 +339,57 @@ export async function getPostById(postId: number): Promise<Post | null> {
   } catch (error) {
     console.error(`Server action error fetching post ${postId}:`, error);
     return null;
+  }
+}
+
+
+// --- Follower Actions ---
+
+export async function getUserWithFollowInfo(profileUserId: number): Promise<{ user: User | null; stats: UserFollowStats; isFollowing: boolean }> {
+  const { user: sessionUser } = await getSession();
+  
+  const [profileUser, stats] = await Promise.all([
+    db.getUserByIdDb(profileUserId),
+    db.getFollowerCountsDb(profileUserId),
+  ]);
+
+  if (!profileUser) {
+    return { user: null, stats: { followerCount: 0, followingCount: 0 }, isFollowing: false };
+  }
+
+  let isFollowing = false;
+  if (sessionUser && sessionUser.id !== profileUserId) {
+    isFollowing = await db.checkIfUserIsFollowingDb(sessionUser.id, profileUserId);
+  }
+
+  return { user: profileUser, stats, isFollowing };
+}
+
+export async function toggleFollow(targetUserId: number): Promise<{ success: boolean; isFollowing?: boolean; error?: string; }> {
+  const { user: sessionUser } = await getSession();
+  
+  if (!sessionUser) {
+    return { success: false, error: "You must be logged in to follow users." };
+  }
+  
+  if (sessionUser.id === targetUserId) {
+    return { success: false, error: "You cannot follow yourself." };
+  }
+
+  try {
+    const isCurrentlyFollowing = await db.checkIfUserIsFollowingDb(sessionUser.id, targetUserId);
+
+    if (isCurrentlyFollowing) {
+      await db.unfollowUserDb(sessionUser.id, targetUserId);
+    } else {
+      await db.followUserDb(sessionUser.id, targetUserId);
+    }
+    
+    revalidatePath(`/users/${targetUserId}`);
+    return { success: true, isFollowing: !isCurrentlyFollowing };
+
+  } catch (error: any) {
+    console.error(`Error toggling follow for user ${targetUserId}:`, error);
+    return { success: false, error: "An unexpected server error occurred." };
   }
 }

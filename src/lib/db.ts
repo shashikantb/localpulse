@@ -1,6 +1,6 @@
 
 import { Pool, type QueryResult } from 'pg';
-import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields } from './db-types';
+import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats } from './db-types';
 import bcrypt from 'bcryptjs';
 
 // Re-export db-types
@@ -119,6 +119,16 @@ async function initializeDbSchema(): Promise<void> {
         createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
     `);
+    
+    // User Followers Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_followers (
+        follower_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        following_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (follower_id, following_id)
+      );
+    `);
 
     // Visitor Stats Table - Robust check to prevent transaction errors
     const tableExistsRes = await client.query(`
@@ -194,6 +204,8 @@ async function initializeDbSchema(): Promise<void> {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_posts_media ON posts (createdat DESC) WHERE mediaurl IS NOT NULL`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_users_role_id ON users(role, id)`);
     await client.query('CREATE INDEX IF NOT EXISTS idx_post_likes_user_post ON post_likes (user_id, post_id)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_followers_follower_id ON user_followers (follower_id)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_followers_following_id ON user_followers (following_id)');
 
     await client.query('COMMIT');
     console.log('Database schema initialized successfully.');
@@ -629,4 +641,46 @@ export async function deleteUserDb(userId: number): Promise<void> {
   if (!dbPool) throw new Error("Database not configured.");
   const query = 'DELETE FROM users WHERE id = $1';
   await dbPool.query(query, [userId]);
+}
+
+// --- Follower Functions ---
+
+export async function followUserDb(followerId: number, followingId: number): Promise<void> {
+  const dbPool = getDbPool();
+  if (!dbPool) throw new Error("Database not configured.");
+  const query = 'INSERT INTO user_followers (follower_id, following_id) VALUES ($1, $2) ON CONFLICT DO NOTHING';
+  await dbPool.query(query, [followerId, followingId]);
+}
+
+export async function unfollowUserDb(followerId: number, followingId: number): Promise<void> {
+  const dbPool = getDbPool();
+  if (!dbPool) throw new Error("Database not configured.");
+  const query = 'DELETE FROM user_followers WHERE follower_id = $1 AND following_id = $2';
+  await dbPool.query(query, [followerId, followingId]);
+}
+
+export async function getFollowerCountsDb(userId: number): Promise<UserFollowStats> {
+  const dbPool = getDbPool();
+  if (!dbPool) return { followerCount: 0, followingCount: 0 };
+  
+  const followerQuery = 'SELECT COUNT(*) FROM user_followers WHERE following_id = $1';
+  const followingQuery = 'SELECT COUNT(*) FROM user_followers WHERE follower_id = $1';
+
+  const [followerResult, followingResult] = await Promise.all([
+    dbPool.query(followerQuery, [userId]),
+    dbPool.query(followingQuery, [userId]),
+  ]);
+
+  return {
+    followerCount: parseInt(followerResult.rows[0].count, 10),
+    followingCount: parseInt(followingResult.rows[0].count, 10),
+  };
+}
+
+export async function checkIfUserIsFollowingDb(followerId: number, followingId: number): Promise<boolean> {
+  const dbPool = getDbPool();
+  if (!dbPool) return false;
+  const query = 'SELECT 1 FROM user_followers WHERE follower_id = $1 AND following_id = $2';
+  const result = await dbPool.query(query, [followerId, followingId]);
+  return result.rowCount > 0;
 }
