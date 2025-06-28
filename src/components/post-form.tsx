@@ -20,9 +20,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuCheckboxItem,
 } from '@/components/ui/dropdown-menu';
-import { Loader2, XCircle, UploadCloud, Film, Image as ImageIcon, Tag, ChevronDown, Camera } from 'lucide-react';
+import { Loader2, XCircle, UploadCloud, Film, Image as ImageIcon, Tag, ChevronDown, Camera, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Slider } from '@/components/ui/slider';
@@ -96,6 +96,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   const [trimDuration, setTrimDuration] = useState(30);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [videoDuration, setVideoDuration] = useState(0);
+  const [trimmerError, setTrimmerError] = useState<string | null>(null);
   const ffmpegRef = useRef<any>(null);
 
 
@@ -108,41 +109,54 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   });
 
   const loadFFmpeg = async () => {
-    if (ffmpegRef.current) return ffmpegRef.current;
-    
-    // @ts-ignore
-    if (window.FFmpeg) {
-       // @ts-ignore
-      const { createFFmpeg } = window.FFmpeg;
-      const ffmpeg = createFFmpeg({
-          corePath: `https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js`,
-          log: true,
-      });
-      ffmpegRef.current = ffmpeg;
-      return ffmpeg;
+    if (ffmpegRef.current) {
+        return ffmpegRef.current;
     }
 
     return new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.id = 'ffmpeg-script';
-      script.src = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js';
-      script.onload = () => {
-        // @ts-ignore
-        const { createFFmpeg } = window.FFmpeg;
-        const ffmpeg = createFFmpeg({
-          corePath: `https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js`,
-          log: true,
-        });
-        ffmpegRef.current = ffmpeg;
-        resolve(ffmpeg);
-      };
-      script.onerror = (err) => {
-        console.error("Failed to load FFmpeg script", err);
-        reject(new Error("Failed to load FFmpeg script. Check your internet connection."));
-      };
-      document.body.appendChild(script);
+        if (document.getElementById('ffmpeg-script')) {
+            const checkFFmpeg = () => {
+                // @ts-ignore
+                if (window.FFmpeg) {
+                    // @ts-ignore
+                    const { createFFmpeg } = window.FFmpeg;
+                    ffmpegRef.current = createFFmpeg({
+                        corePath: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js',
+                        log: true,
+                    });
+                    resolve(ffmpegRef.current);
+                } else {
+                    setTimeout(checkFFmpeg, 100);
+                }
+            };
+            checkFFmpeg();
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.id = 'ffmpeg-script';
+        script.src = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js';
+        script.async = true;
+        script.onload = () => {
+            // @ts-ignore
+            if (!window.FFmpeg) {
+                return reject(new Error('FFmpeg script loaded but window.FFmpeg is not defined.'));
+            }
+            // @ts-ignore
+            const { createFFmpeg } = window.FFmpeg;
+            ffmpegRef.current = createFFmpeg({
+                corePath: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js',
+                log: true,
+            });
+            resolve(ffmpegRef.current);
+        };
+        script.onerror = (err) => {
+            console.error("Failed to load FFmpeg script", err);
+            reject(new Error("Could not load video processing library. Please check your internet connection and try again."));
+        };
+        document.body.appendChild(script);
     });
-  };
+};
 
    const handleFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
@@ -170,7 +184,8 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
           const url = URL.createObjectURL(file);
           setVideoToTrim({ file, url });
           setShowTrimmer(true);
-          setVideoDuration(0); // Reset duration for new video
+          setVideoDuration(0);
+          setTrimmerError(null);
           return;
       }
       
@@ -221,6 +236,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
 
     setIsTrimming(true);
     setTrimProgress(0);
+    setTrimmerError(null);
 
     try {
         const ffmpeg = await loadFFmpeg();
@@ -238,8 +254,8 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
 
         const outputFileName = `trimmed-${Date.now()}.mp4`;
         await ffmpeg.run(
-            '-i', videoToTrim.file.name,
             '-ss', trimStartTime.toString(),
+            '-i', videoToTrim.file.name,
             '-t', trimDuration.toString(),
             '-c', 'copy',
             outputFileName
@@ -259,9 +275,9 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
         };
         reader.readAsDataURL(trimmedFile);
 
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error during video trimming:", error);
-        toast({ variant: 'destructive', title: 'Trimming Failed', description: 'Could not trim the video. Please try a different browser or a smaller file.' });
+        setTrimmerError(error.message || 'An unknown error occurred during trimming. Please try a different browser or file.');
         setIsTrimming(false);
     }
   };
@@ -449,14 +465,23 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
                     Your video is large. Please select a clip up to 60 seconds to upload.
                 </DialogDescription>
             </DialogHeader>
+            
+            {trimmerError && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Trimming Error</AlertTitle>
+                <AlertDescription>{trimmerError}</AlertDescription>
+              </Alert>
+            )}
+
             {videoToTrim && (
                 <div className="space-y-4">
                     <video ref={videoRef} src={videoToTrim.url} controls className="w-full rounded-md bg-black" onLoadedMetadata={(e) => setVideoDuration(e.currentTarget.duration)} />
 
-                    {videoDuration > 0 && (
+                    {videoDuration > 0 && !trimmerError && (
                         <div className="space-y-4">
                             <div>
-                                <Label>Start Time: {new Date(trimStartTime * 1000).toISOString().substr(14, 5)}</Label>
+                                <Label>Start Time: {new Date(trimStartTime * 1000).toISOString().substring(14, 19)}</Label>
                                 <Slider
                                     min={0}
                                     max={Math.max(0, videoDuration - trimDuration)}
@@ -488,7 +513,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
             )}
             <DialogFooter>
                 <Button variant="outline" onClick={() => { setShowTrimmer(false); setVideoToTrim(null); }} disabled={isTrimming}>Cancel</Button>
-                <Button onClick={handleTrim} disabled={isTrimming || videoDuration === 0}>
+                <Button onClick={handleTrim} disabled={isTrimming || videoDuration === 0 || !!trimmerError}>
                     {isTrimming ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                     {isTrimming ? 'Trimming...' : 'Trim & Use Video'}
                 </Button>
