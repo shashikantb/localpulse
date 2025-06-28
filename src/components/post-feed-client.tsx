@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { FC } from 'react';
@@ -93,7 +92,16 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
   const [distanceFilterKm, setDistanceFilterKm] = useState<number>(101); 
   const [showAnyDistance, setShowAnyDistance] = useState<boolean>(true);
   const [filterHashtags, setFilterHashtags] = useState<string[]>([]);
-  const [notificationPermissionStatus, setNotificationPermissionStatus] = useState<string>('default');
+  
+  const [notificationPermissionStatus, setNotificationPermissionStatus] = useState<'default' | 'loading' | 'granted' | 'denied'>('default');
+  
+  const FAILED_TOKEN_TOAST_MESSAGE = {
+    variant: "destructive",
+    title: "Notification Setup Error",
+    description: "Could not get token. This can happen on Xiaomi/Redmi devices due to battery settings. Please check your phone's 'Autostart' and 'Battery Saver' settings for LocalPulse.",
+    duration: 10000
+  } as const;
+
 
   const calculateDistance = useCallback((lat1: number, lon1: number, lat2: number, lon2: number) => {
     if (!lat1 || !lon1 || !lat2 || !lon2) return Infinity;
@@ -147,12 +155,17 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
   }, [allPosts]);
 
   const handleNotificationRegistration = async () => {
-    toast({
-        title: "Fetching Token...",
-        description: "Attempting to get your notification token from the app.",
-        duration: 2000,
-    });
+    if (notificationPermissionStatus === 'granted') {
+      toast({ title: "Notifications Enabled", description: "You are already set up to receive notifications." });
+      return;
+    }
+    if (notificationPermissionStatus === 'denied') {
+      toast(FAILED_TOKEN_TOAST_MESSAGE);
+      return;
+    }
 
+    setNotificationPermissionStatus('loading');
+    
     const getTokenWithRetries = (retries = 3, delay = 500): Promise<string | null> => {
         return new Promise((resolve) => {
             let attempts = 0;
@@ -193,24 +206,23 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
           const result = await registerDeviceToken(token, location?.latitude, location?.longitude);
           if (result.success) {
             setNotificationPermissionStatus('granted');
+            toast({ title: "Success!", description: "Notification token registered."});
           } else {
              toast({ variant: "destructive", title: "Registration Error", description: result.error || "Could not register for notifications." });
              setNotificationPermissionStatus('denied');
           }
         } else {
-          toast({ 
-            variant: "destructive", 
-            title: "Notification Setup Error", 
-            description: "Could not get token. This can happen on Xiaomi/Redmi devices due to battery settings. Please check your phone's 'Autostart' and 'Battery Saver' settings for LocalPulse.",
-            duration: 10000 // Keep the message on screen for 10 seconds
-          });
+          toast(FAILED_TOKEN_TOAST_MESSAGE);
+          setNotificationPermissionStatus('denied');
         }
       } else {
         toast({ title: "Web Notifications", description: "Web push notifications are not yet available. Please use our Android app for real-time updates." });
+        setNotificationPermissionStatus('denied');
       }
     } catch (error) {
         console.error("Error during notification registration:", error);
         toast({ variant: "destructive", title: "Notification Error", description: "An unexpected error occurred." });
+        setNotificationPermissionStatus('denied');
     }
   };
 
@@ -488,6 +500,20 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
   );
 
   const activeFilterCount = (filterHashtags.length > 0 ? 1 : 0) + (!showAnyDistance ? 1 : 0);
+  
+  const NotificationButtonContent = () => {
+    switch(notificationPermissionStatus) {
+        case 'loading':
+            return <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> <span className="hidden sm:inline">Checking...</span></>;
+        case 'granted':
+            return <><BellRing className="w-5 h-5 mr-2 text-green-500" /> <span className="hidden sm:inline">Subscribed</span></>;
+        case 'denied':
+            return <><BellOff className="w-5 h-5 mr-2 text-destructive" /> <span className="hidden sm:inline">Setup Failed</span></>;
+        case 'default':
+        default:
+             return <><Bell className="w-5 h-5 mr-2" /> <span className="hidden sm:inline">Notifications</span></>;
+    }
+  };
 
   if (initialPosts.length === 0 && allPosts.length === 0) {
     return (
@@ -515,13 +541,9 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
               variant="outline"
               className="shadow-lg hover:shadow-xl transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary"
               onClick={handleNotificationRegistration}
+              disabled={notificationPermissionStatus === 'loading'}
           >
-              {notificationPermissionStatus === 'granted' ? (
-                  <BellRing className="w-5 h-5 mr-2 text-green-500" />
-              ) : (
-                  <Bell className="w-5 h-5 mr-2" />
-              )}
-              <span className="hidden sm:inline">Notifications</span>
+              <NotificationButtonContent />
           </Button>
           <Sheet>
               <SheetTrigger asChild>
@@ -564,5 +586,3 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
 };
 
 export default PostFeedClient;
-
-    
