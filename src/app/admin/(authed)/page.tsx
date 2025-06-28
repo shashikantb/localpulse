@@ -1,6 +1,8 @@
 
 import type { FC } from 'react';
+import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { BarChart, Users, FileText, Activity } from 'lucide-react';
 
 const AdminDashboardPage: FC = () => {
@@ -60,9 +62,15 @@ const AdminDashboardPage: FC = () => {
             <CardDescription>Frequently accessed admin tasks.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <button className="w-full text-left p-3 bg-muted/50 hover:bg-muted rounded-md transition-colors">Manage Posts</button>
-            <button className="w-full text-left p-3 bg-muted/50 hover:bg-muted rounded-md transition-colors">Manage Users</button>
-            <button className="w-full text-left p-3 bg-muted/50 hover:bg-muted rounded-md transition-colors">View System Logs</button>
+            <Button variant="ghost" asChild className="w-full justify-start p-3 h-auto text-base">
+                <Link href="/admin/posts">Manage Posts</Link>
+            </Button>
+             <Button variant="ghost" asChild className="w-full justify-start p-3 h-auto text-base">
+                <Link href="/admin/users">Manage Users</Link>
+            </Button>
+             <Button variant="ghost" asChild className="w-full justify-start p-3 h-auto text-base" disabled>
+                <Link href="#">View System Logs</Link>
+            </Button>
           </CardContent>
         </Card>
       </section>
