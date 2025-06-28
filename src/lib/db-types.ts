@@ -53,6 +53,7 @@ export interface Post {
   authorrole: UserRole | null; // This will be joined from the users table
   authorprofilepictureurl?: string | null; // This will be joined from the users table
   isLikedByCurrentUser?: boolean; // Added to track if the session user liked this post
+  mentions?: { id: number; name: string; }[];
 }
 
 // For creating a new post from the client, now authorId is optional
@@ -64,6 +65,7 @@ export type NewPost = {
   mediaType?: 'image' | 'video' | null;
   hashtags: string[];
   authorId?: number;
+  mentionedUserIds?: number[];
 };
 
 // For inserting a new post into the DB, authorid is now nullable
@@ -73,6 +75,7 @@ export type DbNewPost = Omit<NewPost, 'mediaUrl' | 'mediaType' | 'authorId'> & {
   city?: string | null;
   hashtags: string[];
   authorid: number | null; 
+  mentionedUserIds?: number[];
 };
 
 

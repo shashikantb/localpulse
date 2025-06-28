@@ -2,7 +2,7 @@
 'use client';
 
 import type { FC } from 'react';
-import { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -12,6 +12,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogClose,
+} from '@/components/ui/dialog';
+import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
@@ -20,10 +30,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuCheckboxItem,
 } from '@/components/ui/dropdown-menu';
-import { Loader2, XCircle, UploadCloud, Film, Image as ImageIcon, Tag, ChevronDown, Camera } from 'lucide-react';
+import { Loader2, XCircle, UploadCloud, Film, Image as ImageIcon, Tag, ChevronDown, Camera, UserPlus, Search, UserCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
+import { searchUsers } from '@/app/actions';
+import type { User } from '@/lib/db-types';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Badge } from './ui/badge';
 
 
 const MAX_VIDEO_UPLOAD_LIMIT = 50 * 1024 * 1024; // 50MB
@@ -65,7 +80,7 @@ const formSchema = z.object({
 type FormData = z.infer<typeof formSchema>;
 
 interface PostFormProps {
-  onSubmit: (content: string, hashtags: string[], mediaUrl?: string, mediaType?: 'image' | 'video') => Promise<void>;
+  onSubmit: (content: string, hashtags: string[], mediaUrl?: string, mediaType?: 'image' | 'video', mentionedUserIds?: number[]) => Promise<void>;
   submitting: boolean;
 }
 
@@ -77,6 +92,13 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   const [isReadingFile, setIsReadingFile] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [showCameraOptions, setShowCameraOptions] = useState(false);
+
+  // State for mentions/tagging
+  const [isMentionDialogOpen, setIsMentionDialogOpen] = useState(false);
+  const [mentionSearch, setMentionSearch] = useState('');
+  const [mentionResults, setMentionResults] = useState<User[]>([]);
+  const [taggedUsers, setTaggedUsers] = useState<User[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageCaptureInputRef = useRef<HTMLInputElement>(null);
@@ -149,11 +171,45 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
         return;
       }
       const hashtagsToSubmit = data.hashtags || [];
-      await onSubmit(data.content, hashtagsToSubmit, previewUrl ?? undefined, mediaType ?? undefined);
+      const mentionedUserIds = taggedUsers.map(u => u.id);
+      
+      await onSubmit(data.content, hashtagsToSubmit, previewUrl ?? undefined, mediaType ?? undefined, mentionedUserIds);
 
       form.reset();
       removeMedia();
+      setTaggedUsers([]);
   };
+
+  // Debounced search for user mentions
+  useEffect(() => {
+    if (mentionSearch.length < 2) {
+      setMentionResults([]);
+      return;
+    }
+
+    const handler = setTimeout(async () => {
+      setIsSearching(true);
+      const results = await searchUsers(mentionSearch);
+      const existingIds = new Set(taggedUsers.map(u => u.id));
+      setMentionResults(results.filter(r => !existingIds.has(r.id)));
+      setIsSearching(false);
+    }, 300);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [mentionSearch, taggedUsers]);
+
+  const addTaggedUser = (user: User) => {
+    setTaggedUsers(prev => [...prev, user]);
+    setMentionSearch('');
+    setMentionResults([]);
+  };
+
+  const removeTaggedUser = (userId: number) => {
+    setTaggedUsers(prev => prev.filter(u => u.id !== userId));
+  };
+
 
   const isButtonDisabled = submitting || isReadingFile;
 
@@ -174,7 +230,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
               <FormControl>
                 <Textarea
                   id="post-content"
-                  placeholder="Share your local pulse..."
+                  placeholder="Share your local pulse... Mention others using @"
                   className="resize-none min-h-[100px] text-base shadow-sm focus:ring-2 focus:ring-primary/50 rounded-lg"
                   rows={4}
                   {...field}
@@ -185,59 +241,125 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
             </FormItem>
           )}
         />
-
-        <FormField
-          control={form.control}
-          name="hashtags"
-          render={({ field }) => (
-            <FormItem>
-              <div className="mb-2">
-                <FormLabel className="text-base font-semibold text-foreground flex items-center">
-                  <Tag className="w-5 h-5 mr-2 text-primary" />
-                  Select Hashtags (Optional)
-                </FormLabel>
-                <p className="text-sm text-muted-foreground">Optionally, choose relevant tags for your pulse.</p>
-              </div>
-              <FormControl>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" className="w-full justify-between" disabled={isButtonDisabled}>
-                      <span>Select Hashtags ({field.value?.length || 0} selected)</span>
-                      <ChevronDown className="ml-2 h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-[calc(var(--radix-dropdown-menu-trigger-width))] max-h-80 overflow-y-auto">
-                    {HASHTAG_CATEGORIES.map((category) => (
-                      <DropdownMenuGroup key={category.name}>
-                        <DropdownMenuLabel>{category.name}</DropdownMenuLabel>
-                        {category.hashtags.map((tag) => (
-                          <DropdownMenuCheckboxItem
-                            key={tag}
-                            checked={field.value?.includes(tag)}
-                            onCheckedChange={(checked) => {
-                              const currentTags = field.value || [];
-                              const newTags = checked
-                                ? [...currentTags, tag]
-                                : currentTags.filter(
-                                    (value) => value !== tag
-                                  );
-                              field.onChange(newTags);
-                            }}
-                            disabled={isButtonDisabled}
-                          >
-                            {tag}
-                          </DropdownMenuCheckboxItem>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <FormField
+              control={form.control}
+              name="hashtags"
+              render={({ field }) => (
+                <FormItem>
+                  <FormControl>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" className="w-full justify-between" disabled={isButtonDisabled}>
+                          <div className="flex items-center gap-2">
+                            <Tag className="w-4 h-4 text-primary" />
+                            <span>Hashtags ({field.value?.length || 0})</span>
+                          </div>
+                          <ChevronDown className="ml-2 h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="w-[calc(var(--radix-dropdown-menu-trigger-width))] max-h-80 overflow-y-auto">
+                        {HASHTAG_CATEGORIES.map((category) => (
+                          <DropdownMenuGroup key={category.name}>
+                            <DropdownMenuLabel>{category.name}</DropdownMenuLabel>
+                            {category.hashtags.map((tag) => (
+                              <DropdownMenuCheckboxItem
+                                key={tag}
+                                checked={field.value?.includes(tag)}
+                                onCheckedChange={(checked) => {
+                                  const currentTags = field.value || [];
+                                  const newTags = checked
+                                    ? [...currentTags, tag]
+                                    : currentTags.filter(
+                                        (value) => value !== tag
+                                      );
+                                  field.onChange(newTags);
+                                }}
+                                disabled={isButtonDisabled}
+                              >
+                                {tag}
+                              </DropdownMenuCheckboxItem>
+                            ))}
+                            {HASHTAG_CATEGORIES.indexOf(category) < HASHTAG_CATEGORIES.length - 1 && <DropdownMenuSeparator />}
+                          </DropdownMenuGroup>
                         ))}
-                        {HASHTAG_CATEGORIES.indexOf(category) < HASHTAG_CATEGORIES.length - 1 && <DropdownMenuSeparator />}
-                      </DropdownMenuGroup>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <Dialog open={isMentionDialogOpen} onOpenChange={setIsMentionDialogOpen}>
+              <DialogTrigger asChild>
+                 <Button variant="outline" className="w-full justify-between" disabled={isButtonDisabled}>
+                  <div className="flex items-center gap-2">
+                    <UserPlus className="w-4 h-4 text-primary" />
+                    <span>Tag People ({taggedUsers.length})</span>
+                  </div>
+                  <ChevronDown className="ml-2 h-4 w-4" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[425px]">
+                  <DialogHeader>
+                      <DialogTitle>Tag People</DialogTitle>
+                      <DialogDescription>Search for users and tag them in your post. They will be notified.</DialogDescription>
+                  </DialogHeader>
+                  <div className="relative">
+                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input 
+                          placeholder="Search for a user..."
+                          className="pl-8"
+                          value={mentionSearch}
+                          onChange={(e) => setMentionSearch(e.target.value)}
+                      />
+                  </div>
+                  
+                  <ScrollArea className="h-64 border rounded-md">
+                      <div className="p-2">
+                          {isSearching && <p className="text-sm text-center text-muted-foreground p-4">Searching...</p>}
+                          {!isSearching && mentionResults.length === 0 && mentionSearch.length > 1 && <p className="text-sm text-center text-muted-foreground p-4">No users found.</p>}
+                          
+                          {taggedUsers.length > 0 && (
+                            <>
+                                <h4 className="text-xs font-semibold text-muted-foreground uppercase px-2 mb-1">Tagged</h4>
+                                {taggedUsers.map(user => (
+                                <div key={user.id} className="flex items-center justify-between p-2 rounded-md bg-muted/50">
+                                    <div className="flex items-center gap-2">
+                                        <Avatar className="h-8 w-8"><AvatarImage src={user.profilepictureurl || undefined} /><AvatarFallback>{user.name.charAt(0)}</AvatarFallback></Avatar>
+                                        <span className="text-sm font-medium">{user.name}</span>
+                                    </div>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeTaggedUser(user.id)}><XCircle className="w-4 h-4" /></Button>
+                                </div>
+                                ))}
+                                <hr className="my-2" />
+                            </>
+                          )}
+
+                          {mentionResults.length > 0 && <h4 className="text-xs font-semibold text-muted-foreground uppercase px-2 mb-1">Search Results</h4>}
+                          {mentionResults.map(user => (
+                              <div key={user.id} className="flex items-center justify-between p-2 rounded-md hover:bg-muted/50">
+                                  <div className="flex items-center gap-2">
+                                      <Avatar className="h-8 w-8"><AvatarImage src={user.profilepictureurl || undefined} /><AvatarFallback>{user.name.charAt(0)}</AvatarFallback></Avatar>
+                                      <span className="text-sm font-medium">{user.name}</span>
+                                  </div>
+                                  <Button variant="outline" size="sm" onClick={() => addTaggedUser(user)}>Tag</Button>
+                              </div>
+                          ))}
+                      </div>
+                  </ScrollArea>
+
+                  <DialogFooter>
+                      <DialogClose asChild>
+                          <Button type="button">Done</Button>
+                      </DialogClose>
+                  </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+        </div>
 
         <FormItem>
           <FormLabel htmlFor="media-upload" className="text-sm font-medium text-muted-foreground mb-1 block">

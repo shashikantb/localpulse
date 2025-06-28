@@ -16,6 +16,17 @@ async function geocodeCoordinates(latitude: number, longitude: number): Promise<
   return "Unknown City";
 }
 
+async function attachMentions(posts: Post[]): Promise<Post[]> {
+  const postIds = posts.map(p => p.id);
+  if (postIds.length > 0) {
+    const mentionsMap = await db.getMentionsForPostsDb(postIds);
+    posts.forEach(post => {
+      post.mentions = mentionsMap.get(post.id) || [];
+    });
+  }
+  return posts;
+}
+
 // Helper to attach like status to posts for a logged-in user
 async function attachLikeStatus(posts: Post[], user: User | null): Promise<Post[]> {
     if (user && posts.length > 0) {
@@ -40,6 +51,7 @@ const mapPostFromDb = (post: Post) => ({
     authorId: post.authorid,
     authorName: post.authorname,
     authorRole: post.authorrole,
+    mentions: post.mentions || [],
 });
 
 
@@ -53,6 +65,7 @@ export async function getPosts(options?: { page: number; limit: number }): Promi
 
     let posts = await db.getPostsDb(dbOptions, user?.role);
     posts = await attachLikeStatus(posts, user);
+    posts = await attachMentions(posts);
     
     return posts.map(mapPostFromDb);
   } catch (error) {
@@ -68,6 +81,7 @@ export async function getMediaPosts(options?: { page: number; limit: number }): 
     
     let posts = await db.getMediaPostsDb(dbOptions);
     posts = await attachLikeStatus(posts, user);
+    posts = await attachMentions(posts);
 
     return posts.map(mapPostFromDb);
   } catch (error) {
@@ -136,6 +150,7 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
       hashtags: newPostData.hashtags || [], 
       city: cityName,
       authorid: user ? user.id : null, // Use logged-in user's ID or null
+      mentionedUserIds: newPostData.mentionedUserIds || [],
     };
 
     const addedPostDb = await db.addPostDb(postDataForDb);
@@ -319,6 +334,7 @@ export async function getPostsByUserId(userId: number): Promise<Post[]> {
     const { user: sessionUser } = await getSession();
     let posts = await db.getPostsByUserIdDb(userId);
     posts = await attachLikeStatus(posts, sessionUser);
+    posts = await attachMentions(posts);
     
     return posts.map(mapPostFromDb);
   } catch (error) {
@@ -333,7 +349,9 @@ export async function getPostById(postId: number): Promise<Post | null> {
     let post = await db.getPostByIdDb(postId, user?.role);
     if (!post) return null;
 
-    const posts = await attachLikeStatus([post], user);
+    let posts = [post];
+    posts = await attachLikeStatus(posts, user);
+    posts = await attachMentions(posts);
 
     return mapPostFromDb(posts[0]);
   } catch (error) {
@@ -391,5 +409,17 @@ export async function toggleFollow(targetUserId: number): Promise<{ success: boo
   } catch (error: any) {
     console.error(`Error toggling follow for user ${targetUserId}:`, error);
     return { success: false, error: "An unexpected server error occurred." };
+  }
+}
+
+// --- Mention Actions ---
+export async function searchUsers(query: string): Promise<User[]> {
+  const { user } = await getSession();
+  if (!query) return [];
+  try {
+    return await db.searchUsersDb(query, user?.id);
+  } catch (error) {
+    console.error("Server action error searching users:", error);
+    return [];
   }
 }

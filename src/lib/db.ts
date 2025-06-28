@@ -130,6 +130,17 @@ async function initializeDbSchema(): Promise<void> {
       );
     `);
 
+    // Post Mentions Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS post_mentions (
+        post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+        mentioned_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (post_id, mentioned_user_id)
+      );
+    `);
+
+
     // Visitor Stats Table - Robust check to prevent transaction errors
     const tableExistsRes = await client.query(`
         SELECT EXISTS (
@@ -206,6 +217,8 @@ async function initializeDbSchema(): Promise<void> {
     await client.query('CREATE INDEX IF NOT EXISTS idx_post_likes_user_post ON post_likes (user_id, post_id)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_followers_follower_id ON user_followers (follower_id)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_followers_following_id ON user_followers (following_id)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_post_mentions_post_id ON post_mentions (post_id)');
+
 
     await client.query('COMMIT');
     console.log('Database schema initialized successfully.');
@@ -295,14 +308,33 @@ export async function addPostDb(newPost: DbNewPost): Promise<Post> {
   const dbPool = getDbPool();
   if (!dbPool) throw new Error("Database not configured. Cannot add post.");
 
-  const query = `
-    INSERT INTO posts(content, latitude, longitude, mediaurl, mediatype, hashtags, city, authorid)
-    VALUES($1, $2, $3, $4, $5, $6, $7, $8)
-    RETURNING *;
-  `;
-  const values = [newPost.content, newPost.latitude, newPost.longitude, newPost.mediaurl, newPost.mediatype, newPost.hashtags, newPost.city, newPost.authorid];
-  const result: QueryResult<Post> = await dbPool.query(query, values);
-  return result.rows[0];
+  const client = await dbPool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const postQuery = `
+      INSERT INTO posts(content, latitude, longitude, mediaurl, mediatype, hashtags, city, authorid)
+      VALUES($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING *;
+    `;
+    const postValues = [newPost.content, newPost.latitude, newPost.longitude, newPost.mediaurl, newPost.mediatype, newPost.hashtags, newPost.city, newPost.authorid];
+    const postResult: QueryResult<Post> = await client.query(postQuery, postValues);
+    const addedPost = postResult.rows[0];
+
+    if (newPost.mentionedUserIds && newPost.mentionedUserIds.length > 0) {
+      const mentionQuery = 'INSERT INTO post_mentions (post_id, mentioned_user_id) SELECT $1, unnest($2::int[])';
+      await client.query(mentionQuery, [addedPost.id, newPost.mentionedUserIds]);
+    }
+    
+    await client.query('COMMIT');
+    return addedPost;
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export async function deletePostDb(postId: number): Promise<void> {
@@ -683,4 +715,45 @@ export async function checkIfUserIsFollowingDb(followerId: number, followingId: 
   const query = 'SELECT 1 FROM user_followers WHERE follower_id = $1 AND following_id = $2';
   const result = await dbPool.query(query, [followerId, followingId]);
   return result.rowCount > 0;
+}
+
+// --- Mention Functions ---
+
+export async function searchUsersDb(query: string, currentUserId?: number): Promise<User[]> {
+  const dbPool = getDbPool();
+  if (!dbPool) return [];
+  
+  const sqlQuery = `
+    SELECT id, name, email, role, status, createdat, profilepictureurl 
+    FROM users 
+    WHERE name ILIKE $1 
+      AND status = 'approved'
+      AND ($2::int IS NULL OR id != $2::int)
+    LIMIT 10;
+  `;
+  const result: QueryResult<User> = await dbPool.query(sqlQuery, [`%${query}%`, currentUserId]);
+  return result.rows;
+}
+
+export async function getMentionsForPostsDb(postIds: number[]): Promise<Map<number, { id: number; name: string }[]>> {
+  const dbPool = getDbPool();
+  if (!dbPool || postIds.length === 0) return new Map();
+
+  const query = `
+    SELECT pm.post_id, u.id, u.name
+    FROM post_mentions pm
+    JOIN users u ON pm.mentioned_user_id = u.id
+    WHERE pm.post_id = ANY($1::int[]);
+  `;
+  const result = await dbPool.query(query, [postIds]);
+
+  const mentionsMap = new Map<number, { id: number; name: string }[]>();
+  for (const row of result.rows) {
+    const { post_id, id, name } = row;
+    if (!mentionsMap.has(post_id)) {
+      mentionsMap.set(post_id, []);
+    }
+    mentionsMap.get(post_id)!.push({ id, name });
+  }
+  return mentionsMap;
 }
