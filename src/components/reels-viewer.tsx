@@ -50,7 +50,7 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts, sessionUser }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false); // Only for loading *more* posts
   const [currentPage, setCurrentPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
+  const [hasMore, setHasMore] = useState(initialPosts.length === REELS_PER_PAGE);
 
   // Effect to save reels to cache
   useEffect(() => {
@@ -66,31 +66,27 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts, sessionUser }) => {
     }
   }, [reelPosts]);
 
-  const fetchReelPosts = useCallback(async (page: number, isInitialLoad = false) => {
+  const fetchMoreReelPosts = useCallback(async (page: number) => {
     if (isLoading || !hasMore) return;
-    if (!isInitialLoad) {
-      setIsLoading(true);
-    }
+    setIsLoading(true);
+
     try {
       const newPosts = await getMediaPosts({ page, limit: REELS_PER_PAGE });
 
       if (newPosts.length > 0) {
          setReelPosts(prev => {
-          if (isInitialLoad) {
-            return newPosts; // Replace cache with fresh data
-          }
           // Append new posts, avoiding duplicates
           const existingIds = new Set(prev.map(p => p.id));
           const filteredNewPosts = newPosts.filter(p => !existingIds.has(p.id));
           return [...prev, ...filteredNewPosts];
         });
-        setCurrentPage(page + 1);
+        setCurrentPage(page);
         if (newPosts.length < REELS_PER_PAGE) {
             setHasMore(false);
         }
       } else {
         setHasMore(false);
-        if (!isInitialLoad && reelPosts.length > 0) {
+        if (reelPosts.length > 0) {
             toast({title: "That's all for now!", description: "You've seen all the available reels."});
         }
       }
@@ -102,24 +98,17 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts, sessionUser }) => {
         description: "Could not load more reels.",
       });
     } finally {
-      if (!isInitialLoad) {
-        setIsLoading(false);
-      }
+      setIsLoading(false);
     }
   }, [toast, isLoading, hasMore, reelPosts.length]);
   
-  // Fetch fresh data on initial load to update cache
-  useEffect(() => {
-    fetchReelPosts(1, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Fetch more posts when user gets close to the end of the current list.
   useEffect(() => {
     if (hasMore && !isLoading && reelPosts.length > 0 && currentIndex >= reelPosts.length - 3) {
-      fetchReelPosts(currentPage);
+      fetchMoreReelPosts(currentPage + 1);
     }
-  }, [currentIndex, reelPosts.length, hasMore, isLoading, currentPage, fetchReelPosts]);
+  }, [currentIndex, reelPosts.length, hasMore, isLoading, currentPage, fetchMoreReelPosts]);
 
   const goToPreviousReel = useCallback(() => {
     setCurrentIndex(prevIndex => (prevIndex > 0 ? prevIndex - 1 : 0));
@@ -262,3 +251,5 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts, sessionUser }) => {
 };
 
 export default ReelsViewer;
+
+    

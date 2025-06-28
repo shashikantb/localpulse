@@ -150,10 +150,8 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
     // ... (existing notification logic)
   };
 
-  const refreshPosts = useCallback(async (isInitialLoad = false) => {
-    if (!isInitialLoad) {
-      setIsLoadingMore(true);
-    }
+  const refreshPosts = useCallback(async () => {
+    setIsLoadingMore(true);
     try {
       const newInitialPosts = await getPosts({ page: 1, limit: POSTS_PER_PAGE });
       setAllPosts(newInitialPosts);
@@ -161,7 +159,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
       setHasMorePosts(newInitialPosts.length === POSTS_PER_PAGE);
       setNewPulsesAvailable(false);
       setNewPulsesCount(0);
-      if (!isInitialLoad && window) {
+      if (window) {
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     } catch (error) {
@@ -171,18 +169,9 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
         description: "Could not refresh posts.",
       });
     } finally {
-      if (!isInitialLoad) {
-        setIsLoadingMore(false);
-      }
+      setIsLoadingMore(false);
     }
   }, [toast]);
-  
-  // Fetch fresh data on initial load to update cache
-  useEffect(() => {
-    refreshPosts(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
 
   useEffect(() => {
     if (allPosts.length > 0) {
@@ -496,3 +485,5 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
 };
 
 export default PostFeedClient;
+
+    
