@@ -18,12 +18,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuCheckboxItem,
 } from '@/components/ui/dropdown-menu';
-import { Loader2, XCircle, UploadCloud, Film, Image as ImageIcon, Tag, ChevronDown, Camera } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Slider } from '@/components/ui/slider';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Loader2, XCircle, UploadCloud, Film, Image as ImageIcon, Tag, ChevronDown, Camera, Scissors } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
+import { FFmpeg } from '@ffmpeg/ffmpeg';
+import { fetchFile, toBlobURL } from '@ffmpeg/util';
 
-const MAX_VIDEO_SIZE = 25 * 1024 * 1024; // 25MB
+const MAX_VIDEO_TRIM_THRESHOLD_SIZE = 25 * 1024 * 1024; // 25MB - When to trigger the trimmer
+const MAX_VIDEO_UPLOAD_LIMIT = 150 * 1024 * 1024; // 150MB - Absolute max upload size
 const MAX_IMAGE_SIZE_BEFORE_COMPRESSION = 15 * 1024 * 1024; // 15MB
 
 
@@ -56,7 +62,7 @@ export const HASHTAG_CATEGORIES = [
 
 const formSchema = z.object({
   content: z.string().min(1, "Post cannot be empty").max(280, "Post cannot exceed 280 characters"),
-  hashtags: z.array(z.string()), // Hashtags are now optional (empty array is valid)
+  hashtags: z.array(z.string()),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -74,6 +80,14 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   const [isReadingFile, setIsReadingFile] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [showCameraOptions, setShowCameraOptions] = useState(false);
+  
+  // State for video trimming
+  const ffmpegRef = useRef(new FFmpeg());
+  const [isTrimming, setIsTrimming] = useState(false);
+  const [showTrimmer, setShowTrimmer] = useState(false);
+  const [videoToTrim, setVideoToTrim] = useState<{file: File, url: string, duration: number} | null>(null);
+  const [trimStartTime, setTrimStartTime] = useState(0);
+  const [trimDuration, setTrimDuration] = useState(30);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageCaptureInputRef = useRef<HTMLInputElement>(null);
@@ -98,6 +112,12 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
 
       if (!file) return;
 
+      if (file.size > MAX_VIDEO_UPLOAD_LIMIT) {
+        setFileError(`File is too large. Max size: ${MAX_VIDEO_UPLOAD_LIMIT / 1024 / 1024}MB.`);
+        if (event.target) event.target.value = '';
+        return;
+      }
+
       const currentFileType = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : null;
 
       if (!currentFileType) {
@@ -106,77 +126,100 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
           return;
       }
       
-      if (currentFileType === 'video' && file.size > MAX_VIDEO_SIZE) {
-        setFileError(`Video file is too large. Max size: ${MAX_VIDEO_SIZE / 1024 / 1024}MB.`);
-        if (event.target) event.target.value = '';
+      setIsReadingFile(true);
+
+      if (currentFileType === 'video' && file.size > MAX_VIDEO_TRIM_THRESHOLD_SIZE) {
+        const videoUrl = URL.createObjectURL(file);
+        const videoElement = document.createElement('video');
+        videoElement.src = videoUrl;
+        videoElement.onloadedmetadata = () => {
+          if (videoElement.duration > 30) { // Only show trimmer if video is long enough
+            setVideoToTrim({ file: file, url: videoUrl, duration: videoElement.duration });
+            setTrimStartTime(0);
+            setTrimDuration(30);
+            setShowTrimmer(true);
+            setIsReadingFile(false);
+          } else {
+            // Video is large in size but too short to trim, so just process it directly
+            processFile(file, currentFileType, event);
+          }
+        };
+        videoElement.onerror = () => {
+            setFileError('Could not read video metadata.');
+            setIsReadingFile(false);
+        }
         return;
       }
       
-      if (currentFileType === 'image' && file.size > MAX_IMAGE_SIZE_BEFORE_COMPRESSION) {
-          setFileError(`Image file is too large. Max size: ${MAX_IMAGE_SIZE_BEFORE_COMPRESSION / 1024 / 1024}MB.`);
-          if (event.target) event.target.value = '';
-          return;
-      }
+      processFile(file, currentFileType, event);
+   }, []);
 
 
-      setIsReadingFile(true);
-      setSelectedFile(file);
-      setMediaType(currentFileType);
+   const processFile = (file: File, type: 'image' | 'video', event: React.ChangeEvent<HTMLInputElement>) => {
+    if (type === 'image' && file.size > MAX_IMAGE_SIZE_BEFORE_COMPRESSION) {
+      setFileError(`Image file is too large. Max size: ${MAX_IMAGE_SIZE_BEFORE_COMPRESSION / 1024 / 1024}MB.`);
+      if (event.target) event.target.value = '';
+      setIsReadingFile(false);
+      return;
+    }
 
-      const reader = new FileReader();
-      reader.onerror = () => {
-          setFileError('Error reading file.');
-          setIsReadingFile(false);
-          if (event.target) event.target.value = '';
+    setSelectedFile(file);
+    setMediaType(type);
+    
+    const reader = new FileReader();
+    reader.onerror = () => {
+        setFileError('Error reading file.');
+        setIsReadingFile(false);
+        if (event.target) event.target.value = '';
+    };
+
+    if (type === 'image') {
+      reader.onload = (loadEvent) => {
+          const img = document.createElement('img');
+          img.onload = () => {
+              const canvas = document.createElement('canvas');
+              const MAX_WIDTH = 1920;
+              const MAX_HEIGHT = 1080;
+              let { width, height } = img;
+
+              if (width > height) {
+                  if (width > MAX_WIDTH) {
+                      height *= MAX_WIDTH / width;
+                      width = MAX_WIDTH;
+                  }
+              } else {
+                  if (height > MAX_HEIGHT) {
+                      width *= MAX_HEIGHT / height;
+                      height = MAX_HEIGHT;
+                  }
+              }
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext('2d');
+              if (!ctx) {
+                  setFileError('Could not process image.');
+                  setIsReadingFile(false);
+                  return;
+              }
+              ctx.drawImage(img, 0, 0, width, height);
+              const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+              setPreviewUrl(dataUrl);
+              setIsReadingFile(false);
+          };
+          img.onerror = () => {
+              setFileError('Could not load image to process.');
+              setIsReadingFile(false);
+          };
+          img.src = loadEvent.target?.result as string;
       };
-      
-      if (currentFileType === 'image') {
-        reader.onload = (loadEvent) => {
-            const img = document.createElement('img');
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const MAX_WIDTH = 1920;
-                const MAX_HEIGHT = 1080;
-                let { width, height } = img;
-
-                if (width > height) {
-                    if (width > MAX_WIDTH) {
-                        height *= MAX_WIDTH / width;
-                        width = MAX_WIDTH;
-                    }
-                } else {
-                    if (height > MAX_HEIGHT) {
-                        width *= MAX_HEIGHT / height;
-                        height = MAX_HEIGHT;
-                    }
-                }
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                if (!ctx) {
-                    setFileError('Could not process image.');
-                    setIsReadingFile(false);
-                    return;
-                }
-                ctx.drawImage(img, 0, 0, width, height);
-                const dataUrl = canvas.toDataURL('image/jpeg', 0.85); // Compress to JPEG
-                setPreviewUrl(dataUrl);
-                setIsReadingFile(false);
-            };
-            img.onerror = () => {
-                setFileError('Could not load image to process.');
-                setIsReadingFile(false);
-            };
-            img.src = loadEvent.target?.result as string;
-        };
-      } else { // It's a video
-        reader.onloadend = () => {
-            setPreviewUrl(reader.result as string);
-            setIsReadingFile(false);
-        };
-      }
-      reader.readAsDataURL(file);
-   }, [toast]);
+    } else { // It's a video
+      reader.onloadend = () => {
+          setPreviewUrl(reader.result as string);
+          setIsReadingFile(false);
+      };
+    }
+    reader.readAsDataURL(file);
+   }
 
   const removeMedia = () => {
       setSelectedFile(null);
@@ -184,21 +227,71 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
       setMediaType(null);
       setFileError(null);
       setIsReadingFile(false);
-      // Reset all file inputs
       if (fileInputRef.current) fileInputRef.current.value = '';
       if (imageCaptureInputRef.current) imageCaptureInputRef.current.value = '';
       if (videoCaptureInputRef.current) videoCaptureInputRef.current.value = '';
   };
+  
+  const handleTrimVideo = async () => {
+    if (!videoToTrim || isTrimming) return;
+    setIsTrimming(true);
+    toast({ title: "Preparing trimmer...", description: "This may take a moment to load the library." });
+
+    try {
+        const ffmpeg = ffmpegRef.current;
+        const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd'
+
+        ffmpeg.on('log', ({ message }) => {
+          // You can use this to debug ffmpeg's progress
+          // console.log(message);
+        });
+
+        if (!ffmpeg.loaded) {
+            await ffmpeg.load({
+              coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+              wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+            });
+        }
+        
+        toast({ title: "Trimming video...", description: "Please wait, this can take some time." });
+
+        const { file } = videoToTrim;
+        await ffmpeg.writeFile(file.name, await fetchFile(file));
+        
+        await ffmpeg.exec(['-i', file.name, '-ss', trimStartTime.toString(), '-t', trimDuration.toString(), '-c', 'copy', 'output.mp4']);
+        
+        const data = await ffmpeg.readFile('output.mp4');
+        
+        const trimmedBlob = new Blob([(data as Uint8Array).buffer], { type: 'video/mp4' });
+        const trimmedFile = new File([trimmedBlob], "trimmed_video.mp4", { type: 'video/mp4' });
+        
+        // Use a FileReader to get a persistent data URL
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            setPreviewUrl(reader.result as string);
+            setSelectedFile(trimmedFile);
+            setMediaType('video');
+            toast({ title: "Video Trimmed!", description: "Your clipped video is ready to be posted." });
+        };
+        reader.readAsDataURL(trimmedFile);
+
+    } catch (err) {
+        console.error(err);
+        toast({ variant: 'destructive', title: "Trim Failed", description: "Could not trim the video. Please try a different file." });
+    } finally {
+        setIsTrimming(false);
+        setShowTrimmer(false);
+        URL.revokeObjectURL(videoToTrim.url);
+        setVideoToTrim(null);
+    }
+  }
+
 
   const handleSubmitForm: SubmitHandler<FormData> = async (data) => {
-      if (submitting || isReadingFile) return;
+      if (submitting || isReadingFile || isTrimming) return;
 
       if (fileError) {
-        toast({
-          variant: 'destructive',
-          title: 'File Error',
-          description: fileError,
-        });
+        toast({ variant: 'destructive', title: 'File Error', description: fileError });
         return;
       }
       const hashtagsToSubmit = data.hashtags || [];
@@ -208,17 +301,16 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
       removeMedia();
   };
 
-  const isButtonDisabled = submitting || isReadingFile;
+  const isButtonDisabled = submitting || isReadingFile || isTrimming;
 
   let buttonText = 'Share Your Pulse';
-  if (isReadingFile) {
-    buttonText = 'Processing File...';
-  } else if (submitting) {
-    buttonText = 'Pulsing...';
-  }
+  if (isReadingFile) buttonText = 'Processing File...';
+  if (isTrimming) buttonText = 'Trimming Video...';
+  else if (submitting) buttonText = 'Pulsing...';
 
 
   return (
+    <>
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmitForm)} className="space-y-6">
         <FormField
@@ -299,7 +391,6 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
           <FormLabel htmlFor="media-upload" className="text-sm font-medium text-muted-foreground mb-1 block">
             Attach Media (Optional)
           </FormLabel>
-          
             <>
               <Input id="file-upload" type="file" accept="image/*,video/*" ref={fileInputRef} onChange={handleFileChange} className="hidden" disabled={isButtonDisabled} />
               <Input id="image-capture" type="file" accept="image/*" capture="environment" ref={imageCaptureInputRef} onChange={handleFileChange} className="hidden" disabled={isButtonDisabled} />
@@ -379,14 +470,66 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
           )}
         </FormItem>
 
-
         <Button type="submit" disabled={isButtonDisabled || !form.formState.isValid} className="w-full text-base py-3 shadow-md hover:shadow-lg transition-shadow bg-accent hover:bg-accent/90 text-accent-foreground rounded-lg">
-          {isButtonDisabled && !(submitting && !isReadingFile) ? (
-            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-          ) : null}
+          {(isReadingFile || isTrimming || submitting) && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
           {buttonText}
         </Button>
       </form>
     </Form>
+
+    <Dialog open={showTrimmer} onOpenChange={setShowTrimmer}>
+        <DialogContent className="sm:max-w-[480px]">
+            <DialogHeader>
+                <DialogTitle className="flex items-center"><Scissors className="mr-2"/>Trim Video</DialogTitle>
+                <DialogDescription>
+                    Your video is large. Trim it to a 30 or 60 second clip for faster uploads.
+                </DialogDescription>
+            </DialogHeader>
+            {videoToTrim && (
+                <div className="space-y-4">
+                    <video key={videoToTrim.url} src={videoToTrim.url} controls className="w-full rounded-md bg-black" />
+                    
+                    <div>
+                        <Label htmlFor="clip-duration">Clip Duration</Label>
+                        <RadioGroup id="clip-duration" defaultValue="30" onValueChange={(val) => setTrimDuration(parseInt(val))} className="flex items-center space-x-4 mt-2">
+                            <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="30" id="d30" />
+                                <Label htmlFor="d30">30 seconds</Label>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="60" id="d60" disabled={videoToTrim.duration < 60} />
+                                <Label htmlFor="d60">60 seconds</Label>
+                            </div>
+                        </RadioGroup>
+                    </div>
+                    
+                    <div>
+                         <Label htmlFor="start-time-slider" className="flex justify-between">
+                            <span>Start Time:</span>
+                            <span>{new Date(trimStartTime * 1000).toISOString().substr(14, 5)}</span>
+                        </Label>
+                        <Slider
+                            id="start-time-slider"
+                            value={[trimStartTime]}
+                            max={videoToTrim.duration > trimDuration ? videoToTrim.duration - trimDuration : 0}
+                            step={1}
+                            onValueChange={(value) => setTrimStartTime(value[0])}
+                            disabled={videoToTrim.duration <= trimDuration}
+                            className="mt-2"
+                        />
+                    </div>
+                </div>
+            )}
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setShowTrimmer(false)}>Cancel</Button>
+                <Button onClick={handleTrimVideo} disabled={isTrimming}>
+                    {isTrimming && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {isTrimming ? 'Trimming...' : 'Trim & Use Video'}
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
+
+    </>
   );
 };
