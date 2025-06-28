@@ -4,11 +4,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { FileText, PlusCircle, Search } from 'lucide-react';
-import { getPosts } from '@/app/actions';
+import { getAdminPosts } from '@/app/actions';
 import PostActions from '@/components/admin/post-actions';
 
 const AdminManagePostsPage: FC = async () => {
-  const posts = await getPosts({ page: 1, limit: 100 }); // Fetch posts for admin view
+  const posts = await getAdminPosts({ page: 1, limit: 100 }); // Fetch posts for admin view
 
   return (
     <div className="space-y-8">

@@ -74,6 +74,27 @@ export async function getPosts(options?: { page: number; limit: number }): Promi
   }
 }
 
+// New function specifically for the admin panel to avoid dynamic server usage errors
+export async function getAdminPosts(options?: { page: number; limit: number }): Promise<Post[]> {
+  try {
+    const dbOptions = options ? {
+        limit: options.limit,
+        offset: (options.page - 1) * options.limit
+    } : undefined;
+
+    // We don't need user role here, admin sees all. No session needed.
+    let posts = await db.getPostsDb(dbOptions);
+    // Admin doesn't need to see "like" status.
+    posts = await attachMentions(posts);
+    
+    return posts.map(mapPostFromDb);
+  } catch (error) {
+    console.error("Server action error fetching admin posts:", error);
+    return [];
+  }
+}
+
+
 export async function getMediaPosts(options?: { page: number; limit: number }): Promise<Post[]> {
   try {
     const { user } = await getSession();
