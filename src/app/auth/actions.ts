@@ -21,7 +21,7 @@ async function encrypt(payload: any) {
   return await new jose.SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime('24h')
+    .setExpirationTime('30d')
     .sign(JWT_SECRET);
 }
 
@@ -78,14 +78,14 @@ export async function login(email: string, password: string): Promise<{ success:
       return { success: false, error: 'Invalid email or password.' };
     }
 
-    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
     const sessionPayload = { userId: user.id };
     const sessionToken = await encrypt(sessionPayload);
+    const maxAgeInSeconds = 30 * 24 * 60 * 60; // 30 days
 
     cookies().set(USER_COOKIE_NAME, sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      expires,
+      maxAge: maxAgeInSeconds,
       sameSite: 'lax',
       path: '/',
     });
