@@ -7,6 +7,7 @@ import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Image from 'next/image';
+import Script from 'next/script';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -82,6 +83,8 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   const [isReadingFile, setIsReadingFile] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [showCameraOptions, setShowCameraOptions] = useState(false);
+  const [ffmpegScriptLoaded, setFfmpegScriptLoaded] = useState(false);
+  const [ffmpegScriptError, setFfmpegScriptError] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageCaptureInputRef = useRef<HTMLInputElement>(null);
@@ -108,55 +111,28 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
     },
   });
 
-  const loadFFmpeg = async () => {
+  const loadFFmpeg = useCallback(async () => {
     if (ffmpegRef.current) {
-        return ffmpegRef.current;
+      return ffmpegRef.current;
     }
-
-    return new Promise((resolve, reject) => {
-        if (document.getElementById('ffmpeg-script')) {
-            const checkFFmpeg = () => {
-                // @ts-ignore
-                if (window.FFmpeg) {
-                    // @ts-ignore
-                    const { createFFmpeg } = window.FFmpeg;
-                    ffmpegRef.current = createFFmpeg({
-                        corePath: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js',
-                        log: true,
-                    });
-                    resolve(ffmpegRef.current);
-                } else {
-                    setTimeout(checkFFmpeg, 100);
-                }
-            };
-            checkFFmpeg();
-            return;
-        }
-
-        const script = document.createElement('script');
-        script.id = 'ffmpeg-script';
-        script.src = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js';
-        script.async = true;
-        script.onload = () => {
-            // @ts-ignore
-            if (!window.FFmpeg) {
-                return reject(new Error('FFmpeg script loaded but window.FFmpeg is not defined.'));
-            }
-            // @ts-ignore
-            const { createFFmpeg } = window.FFmpeg;
-            ffmpegRef.current = createFFmpeg({
-                corePath: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js',
-                log: true,
-            });
-            resolve(ffmpegRef.current);
-        };
-        script.onerror = (err) => {
-            console.error("Failed to load FFmpeg script", err);
-            reject(new Error("Could not load video processing library. Please check your internet connection and try again."));
-        };
-        document.body.appendChild(script);
+    // @ts-ignore
+    if (typeof window === 'undefined' || !window.FFmpeg) {
+      throw new Error('FFmpeg library is not available.');
+    }
+    
+    // @ts-ignore
+    const { createFFmpeg } = window.FFmpeg;
+    const ffmpegInstance = createFFmpeg({
+      corePath: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js',
+      log: true,
     });
-};
+    
+    if (!ffmpegInstance.isLoaded()) {
+      await ffmpegInstance.load();
+    }
+    ffmpegRef.current = ffmpegInstance;
+    return ffmpegRef.current;
+  }, []);
 
    const handleFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
@@ -181,6 +157,14 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
       }
 
       if (currentFileType === 'video' && file.size > MAX_VIDEO_FOR_TRIM) {
+          if (ffmpegScriptError) {
+              toast({
+                  variant: 'destructive',
+                  title: 'Trimmer Unavailable',
+                  description: 'The video processing library failed to load. Please refresh the page or use a smaller video file.',
+              });
+              return;
+          }
           const url = URL.createObjectURL(file);
           setVideoToTrim({ file, url });
           setShowTrimmer(true);
@@ -203,7 +187,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
           setIsReadingFile(false);
       };
       reader.readAsDataURL(file);
-   }, []);
+   }, [ffmpegScriptError, toast]);
 
   const removeMedia = () => {
       setSelectedFile(null);
@@ -240,9 +224,6 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
 
     try {
         const ffmpeg = await loadFFmpeg();
-        if (!ffmpeg.isLoaded()) {
-            await ffmpeg.load();
-        }
 
         const arrayBuffer = await videoToTrim.file.arrayBuffer();
         const uint8Array = new Uint8Array(arrayBuffer);
@@ -288,9 +269,24 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   if (isReadingFile) buttonText = 'Processing File...';
   else if (submitting) buttonText = 'Pulsing...';
 
+  let trimButtonText = 'Trim & Use Video';
+  if (isTrimming) trimButtonText = 'Trimming...';
+  else if (!ffmpegScriptLoaded) trimButtonText = 'Library Loading...';
+
 
   return (
     <>
+    <Script
+        src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"
+        strategy="lazyOnload"
+        onLoad={() => {
+            setFfmpegScriptLoaded(true);
+        }}
+        onError={() => {
+            console.error("Error: Failed to load the FFmpeg script.");
+            setFfmpegScriptError(true);
+        }}
+    />
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmitForm)} className="space-y-6">
         <FormField
@@ -381,7 +377,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
             <div className="w-full text-center p-4 border-2 border-dashed rounded-lg border-primary/50">
               {mediaType === 'image' && (
                 <div className="relative w-full max-w-xs mx-auto aspect-video overflow-hidden rounded-md border shadow-md mb-2 bg-muted">
-                  <Image src={previewUrl} alt="Preview" fill objectFit="cover" data-ai-hint="user uploaded image"/>
+                  <Image src={previewUrl} alt="Preview" fill style={{objectFit: "cover"}} data-ai-hint="user uploaded image"/>
                 </div>
               )}
               {mediaType === 'video' && (
@@ -513,9 +509,9 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
             )}
             <DialogFooter>
                 <Button variant="outline" onClick={() => { setShowTrimmer(false); setVideoToTrim(null); }} disabled={isTrimming}>Cancel</Button>
-                <Button onClick={handleTrim} disabled={isTrimming || videoDuration === 0 || !!trimmerError}>
-                    {isTrimming ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                    {isTrimming ? 'Trimming...' : 'Trim & Use Video'}
+                <Button onClick={handleTrim} disabled={isTrimming || videoDuration === 0 || !!trimmerError || !ffmpegScriptLoaded}>
+                    {(isTrimming || !ffmpegScriptLoaded) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {trimButtonText}
                 </Button>
             </DialogFooter>
         </DialogContent>
