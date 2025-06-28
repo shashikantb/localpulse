@@ -7,7 +7,6 @@ import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Image from 'next/image';
-import Script from 'next/script'; // Import Script component
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -21,18 +20,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuCheckboxItem,
 } from '@/components/ui/dropdown-menu';
-import { Loader2, XCircle, UploadCloud, Film, Image as ImageIcon, Tag, ChevronDown, Camera, AlertCircle } from 'lucide-react';
+import { Loader2, XCircle, UploadCloud, Film, Image as ImageIcon, Tag, ChevronDown, Camera } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Slider } from '@/components/ui/slider';
-import { Progress } from '@/components/ui/progress';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 
-const MAX_VIDEO_UPLOAD_LIMIT = 50 * 1024 * 1024; // 50MB (Hard limit)
-const MAX_VIDEO_FOR_TRIM = 25 * 1024 * 1024; // 25MB (Trigger for trimmer)
+const MAX_VIDEO_UPLOAD_LIMIT = 50 * 1024 * 1024; // 50MB
 const MAX_IMAGE_UPLOAD_LIMIT = 15 * 1024 * 1024; // 15MB
 
 
@@ -83,25 +77,10 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   const [isReadingFile, setIsReadingFile] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [showCameraOptions, setShowCameraOptions] = useState(false);
-  // State to manage FFmpeg script loading
-  const [ffmpegScriptLoaded, setFfmpegScriptLoaded] = useState(false);
-  const [ffmpegScriptError, setFfmpegScriptError] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageCaptureInputRef = useRef<HTMLInputElement>(null);
   const videoCaptureInputRef = useRef<HTMLInputElement>(null);
-
-  // State for video trimmer
-  const [showTrimmer, setShowTrimmer] = useState(false);
-  const [videoToTrim, setVideoToTrim] = useState<{ file: File; url: string } | null>(null);
-  const [isTrimming, setIsTrimming] = useState(false);
-  const [trimProgress, setTrimProgress] = useState(0);
-  const [trimStartTime, setTrimStartTime] = useState(0);
-  const [trimDuration, setTrimDuration] = useState(30);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [videoDuration, setVideoDuration] = useState(0);
-  const [trimmerError, setTrimmerError] = useState<string | null>(null);
-  const ffmpegRef = useRef<any>(null);
 
 
   const form = useForm<FormData>({
@@ -111,29 +90,6 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
       hashtags: [],
     },
   });
-
-  const loadFFmpeg = useCallback(async () => {
-    if (ffmpegRef.current) {
-      return ffmpegRef.current;
-    }
-    // @ts-ignore
-    if (typeof window === 'undefined' || !window.FFmpeg) {
-      throw new Error('FFmpeg library is not available.');
-    }
-    
-    // @ts-ignore
-    const { createFFmpeg } = window.FFmpeg;
-    const ffmpegInstance = createFFmpeg({
-      corePath: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js',
-      log: true,
-    });
-    
-    if (!ffmpegInstance.isLoaded()) {
-      await ffmpegInstance.load();
-    }
-    ffmpegRef.current = ffmpegInstance;
-    return ffmpegRef.current;
-  }, []);
 
    const handleFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
@@ -149,30 +105,12 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
       }
 
       if (currentFileType === 'image' && file.size > MAX_IMAGE_UPLOAD_LIMIT) {
-        setFileError(`Image is too large. Max size: ${MAX_IMAGE_UPLOAD_LIMIT / 1024 / 1024}MB.`);
+        setFileError(`Image is too large. Max size: ${Math.round(MAX_IMAGE_UPLOAD_LIMIT / 1024 / 1024)}MB.`);
         return;
       }
       if (currentFileType === 'video' && file.size > MAX_VIDEO_UPLOAD_LIMIT) {
-        setFileError(`Video is too large. Max size: ${MAX_VIDEO_UPLOAD_LIMIT / 1024 / 1024}MB.`);
+        setFileError(`Video is too large. Max size: ${Math.round(MAX_VIDEO_UPLOAD_LIMIT / 1024 / 1024)}MB.`);
         return;
-      }
-
-      // Check if video is large enough to require trimming
-      if (currentFileType === 'video' && file.size > MAX_VIDEO_FOR_TRIM) {
-          if (ffmpegScriptError) {
-              toast({
-                  variant: 'destructive',
-                  title: 'Trimmer Unavailable',
-                  description: 'The video processing library failed to load. Please refresh the page or use a smaller video file.',
-              });
-              return;
-          }
-          const url = URL.createObjectURL(file);
-          setVideoToTrim({ file, url });
-          setShowTrimmer(true);
-          setVideoDuration(0); // Reset duration for new video
-          setTrimmerError(null); // Reset error
-          return;
       }
       
       setIsReadingFile(true);
@@ -189,7 +127,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
           setIsReadingFile(false);
       };
       reader.readAsDataURL(file);
-   }, [ffmpegScriptError, toast]);
+   }, []);
 
   const removeMedia = () => {
       setSelectedFile(null);
@@ -217,87 +155,14 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
       removeMedia();
   };
 
-  const handleTrim = async () => {
-    if (!videoToTrim || isTrimming) return;
-
-    setIsTrimming(true);
-    setTrimProgress(0);
-    setTrimmerError(null);
-
-    try {
-        const ffmpeg = await loadFFmpeg();
-
-        // Convert the file to a format FFmpeg can read
-        const arrayBuffer = await videoToTrim.file.arrayBuffer();
-        const uint8Array = new Uint8Array(arrayBuffer);
-        ffmpeg.FS('writeFile', videoToTrim.file.name, uint8Array);
-
-        // Listen for progress events
-        ffmpeg.setProgress(({ ratio } : {ratio: number}) => {
-            setTrimProgress(Math.min(100, Math.round(ratio * 100)));
-        });
-
-        // Run the FFmpeg command
-        const outputFileName = `trimmed-${Date.now()}.mp4`;
-        await ffmpeg.run(
-            '-ss', trimStartTime.toString(),
-            '-i', videoToTrim.file.name,
-            '-t', trimDuration.toString(),
-            // Using '-c copy' is faster as it avoids re-encoding
-            '-c', 'copy',
-            outputFileName
-        );
-        
-        // Read the trimmed file from FFmpeg's virtual file system
-        const data = ffmpeg.FS('readFile', outputFileName);
-        const trimmedFile = new File([data.buffer], outputFileName, { type: 'video/mp4' });
-
-        // Update the state with the new trimmed video
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            setPreviewUrl(reader.result as string);
-            setSelectedFile(trimmedFile);
-            setMediaType('video');
-            setShowTrimmer(false);
-            setVideoToTrim(null);
-            setIsTrimming(false);
-        };
-        reader.readAsDataURL(trimmedFile);
-
-    } catch (error: any) {
-        console.error("Error during video trimming:", error);
-        setTrimmerError(error.message || 'An unknown error occurred during trimming. Please try a different browser or file.');
-        setIsTrimming(false);
-    }
-  };
-
   const isButtonDisabled = submitting || isReadingFile;
 
   let buttonText = 'Share Your Pulse';
   if (isReadingFile) buttonText = 'Processing File...';
   else if (submitting) buttonText = 'Pulsing...';
 
-  // Determine trim button text based on loading state
-  let trimButtonText = 'Trim & Use Video';
-  if (isTrimming) trimButtonText = 'Trimming...';
-  else if (!ffmpegScriptLoaded) trimButtonText = 'Library Loading...';
-
-
   return (
     <>
-    {/* Use Next.js Script component for safer, non-blocking loading */}
-    <Script
-        src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"
-        strategy="lazyOnload" // Load after other resources
-        onLoad={() => {
-            console.log("FFmpeg script loaded successfully.");
-            setFfmpegScriptLoaded(true);
-        }}
-        onError={(e) => {
-            console.error("Error: Failed to load the FFmpeg script.", e);
-            setFfmpegScriptError(true);
-        }}
-    />
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmitForm)} className="space-y-6">
         <FormField
@@ -463,70 +328,6 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
         </Button>
       </form>
     </Form>
-
-    <Dialog open={showTrimmer} onOpenChange={(open) => { if (!open) { setShowTrimmer(false); setVideoToTrim(null); }}}>
-        <DialogContent className="max-w-xl">
-            <DialogHeader>
-                <DialogTitle>Trim Your Video</DialogTitle>
-                <DialogDescription>
-                    Your video is large. Please select a clip up to 60 seconds to upload.
-                </DialogDescription>
-            </DialogHeader>
-            
-            {trimmerError && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Trimming Error</AlertTitle>
-                <AlertDescription>{trimmerError}</AlertDescription>
-              </Alert>
-            )}
-
-            {videoToTrim && (
-                <div className="space-y-4">
-                    <video ref={videoRef} src={videoToTrim.url} controls className="w-full rounded-md bg-black" onLoadedMetadata={(e) => setVideoDuration(e.currentTarget.duration)} />
-
-                    {videoDuration > 0 && !trimmerError && (
-                        <div className="space-y-4">
-                            <div>
-                                <Label>Start Time: {new Date(trimStartTime * 1000).toISOString().substring(14, 19)}</Label>
-                                <Slider
-                                    min={0}
-                                    max={Math.max(0, videoDuration - trimDuration)}
-                                    step={1}
-                                    value={[trimStartTime]}
-                                    onValueChange={(val) => {
-                                      setTrimStartTime(val[0]);
-                                      if(videoRef.current) videoRef.current.currentTime = val[0];
-                                    }}
-                                />
-                            </div>
-                            <div>
-                                <Label>Clip Duration</Label>
-                                <RadioGroup defaultValue="30" onValueChange={(val) => setTrimDuration(parseInt(val))} className="flex space-x-4 pt-2">
-                                    <div className="flex items-center space-x-2"><RadioGroupItem value="30" id="r1" /><Label htmlFor="r1">30 seconds</Label></div>
-                                    <div className="flex items-center space-x-2"><RadioGroupItem value="60" id="r2" disabled={videoDuration < 60} /><Label htmlFor="r2">60 seconds</Label></div>
-                                </RadioGroup>
-                            </div>
-                        </div>
-                    )}
-                    {isTrimming && (
-                        <div className="space-y-2 pt-2">
-                            <Label>Trimming Progress: {trimProgress}%</Label>
-                            <Progress value={trimProgress} />
-                            <p className="text-xs text-muted-foreground">This may take a moment. Please keep this tab open.</p>
-                        </div>
-                    )}
-                </div>
-            )}
-            <DialogFooter>
-                <Button variant="outline" onClick={() => { setShowTrimmer(false); setVideoToTrim(null); }} disabled={isTrimming}>Cancel</Button>
-                <Button onClick={handleTrim} disabled={isTrimming || videoDuration === 0 || !!trimmerError || !ffmpegScriptLoaded}>
-                    {(isTrimming || !ffmpegScriptLoaded) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    {trimButtonText}
-                </Button>
-            </DialogFooter>
-        </DialogContent>
-    </Dialog>
     </>
   );
 };
