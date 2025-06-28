@@ -111,6 +111,9 @@ async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[
                     postId: String(post.id)
                 },
                 tokens: mentionedTokens,
+                android: {
+                  priority: 'high' as const,
+                },
             };
             const response = await firebaseAdmin.messaging().sendEachForMulticast(message);
             successCount += response.successCount;
@@ -133,6 +136,9 @@ async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[
                 postId: String(post.id)
             },
             tokens: nearbyOnlyTokens,
+            android: {
+              priority: 'high' as const,
+            },
         };
         const response = await firebaseAdmin.messaging().sendEachForMulticast(message);
         successCount += response.successCount;

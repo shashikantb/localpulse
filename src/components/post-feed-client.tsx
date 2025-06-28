@@ -8,7 +8,7 @@ import { getPosts, registerDeviceToken, checkForNewerPosts } from '@/app/actions
 import { PostCard } from '@/components/post-card';
 import { HASHTAG_CATEGORIES } from '@/components/post-form';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { MapPin, Terminal, Zap, Loader2, Filter, SlidersHorizontal, Rss, Tag, ChevronDown, Bell, BellOff, BellRing, ListPlus, RefreshCw, Lock } from 'lucide-react';
+import { MapPin, Terminal, Zap, Loader2, Filter, SlidersHorizontal, Rss, Tag, ChevronDown, Bell, BellOff, BellRing, ListPlus, RefreshCw, Lock, AlertTriangle } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
@@ -538,26 +538,29 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
       <AlertDialog open={showTroubleshootingDialog} onOpenChange={setShowTroubleshootingDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Notification Setup Incomplete</AlertDialogTitle>
+            <AlertDialogTitle className="flex items-center">
+              <AlertTriangle className="w-5 h-5 mr-2 text-destructive" />
+              Enable Background Notifications
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              <div className="space-y-3 text-left pt-2">
-                <p>Your device (especially brands like Xiaomi, Oppo, Vivo, and Realme) may be blocking notifications to save battery.</p>
-                <p className="font-semibold">To fix this, please check your phone's settings for the LocalPulse app:</p>
-                <ul className="list-disc list-inside space-y-1.5 text-sm pl-2 bg-muted p-3 rounded-md">
-                  <li><span className="font-bold">Autostart / Auto-launch:</span> Look for this setting and make sure it is enabled for LocalPulse.</li>
-                  <li><span className="font-bold">Battery Saver / Optimization:</span> Find LocalPulse in the list and set it to "No restrictions" or "Don't optimize".</li>
-                  <li><span className="font-bold">App Pinning:</span> In your recent apps screen, find LocalPulse and "pin" or "lock" it to keep it active.</li>
-                </ul>
-                <p className="text-xs pt-1">These settings are often in your phone's main Settings app, under "Battery," "Apps," or "Security."</p>
+              <div className="space-y-3 text-left pt-2 text-foreground/80">
+                <p>To receive notifications reliably on your device, please enable these two settings for the LocalPulse app:</p>
+                <ol className="list-decimal list-inside space-y-2 font-medium bg-muted p-3 rounded-md border">
+                    <li><span className="font-semibold">Enable "Autostart"</span> (or "Auto-launch").</li>
+                    <li><span className="font-semibold">Set Battery Saver to "No restrictions"</span>.</li>
+                </ol>
+                <p className="text-xs text-muted-foreground pt-1">
+                    These options are usually found in your phone's Settings app under "Apps" or "Security". Unfortunately, we cannot open this page for you automatically.
+                </p>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Dismiss</AlertDialogCancel>
+            <AlertDialogCancel>I'll check later</AlertDialogCancel>
             <AlertDialogAction onClick={() => {
               setShowTroubleshootingDialog(false);
               handleNotificationRegistration();
-            }}>Try Again</AlertDialogAction>
+            }}>I've checked, Try Again</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
