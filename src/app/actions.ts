@@ -107,6 +107,9 @@ async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[
                     title: `${authorDisplayName} mentioned you in a pulse!`,
                     body: post.content.substring(0, 100) + (post.content.length > 100 ? '...' : ''),
                 },
+                data: {
+                    postId: String(post.id)
+                },
                 tokens: mentionedTokens,
             };
             const response = await firebaseAdmin.messaging().sendEachForMulticast(message);
@@ -125,6 +128,9 @@ async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[
             notification: {
                 title: `New Pulse Nearby from ${authorDisplayName}!`,
                 body: post.content.substring(0, 100) + (post.content.length > 100 ? '...' : ''),
+            },
+            data: {
+                postId: String(post.id)
             },
             tokens: nearbyOnlyTokens,
         };
