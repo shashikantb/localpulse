@@ -1,6 +1,9 @@
 
 const nextConfig = {
   /* config options here */
+  serverActions: {
+    bodySizeLimit: '60mb', // For video uploads if trimming fails
+  },
   typescript: {
     ignoreBuildErrors: true,
   },

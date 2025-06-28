@@ -24,8 +24,14 @@ import { Loader2, XCircle, UploadCloud, Film, Image as ImageIcon, Tag, ChevronDo
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Slider } from '@/components/ui/slider';
+import { Progress } from '@/components/ui/progress';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
-const MAX_VIDEO_UPLOAD_LIMIT = 50 * 1024 * 1024; // 50MB
+
+const MAX_VIDEO_UPLOAD_LIMIT = 50 * 1024 * 1024; // 50MB (Hard limit)
+const MAX_VIDEO_FOR_TRIM = 25 * 1024 * 1024; // 25MB (Trigger for trimmer)
 const MAX_IMAGE_UPLOAD_LIMIT = 15 * 1024 * 1024; // 15MB
 
 
@@ -81,6 +87,18 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   const imageCaptureInputRef = useRef<HTMLInputElement>(null);
   const videoCaptureInputRef = useRef<HTMLInputElement>(null);
 
+  // State for video trimmer
+  const [showTrimmer, setShowTrimmer] = useState(false);
+  const [videoToTrim, setVideoToTrim] = useState<{ file: File; url: string } | null>(null);
+  const [isTrimming, setIsTrimming] = useState(false);
+  const [trimProgress, setTrimProgress] = useState(0);
+  const [trimStartTime, setTrimStartTime] = useState(0);
+  const [trimDuration, setTrimDuration] = useState(30);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const ffmpegRef = useRef<any>(null);
+
+
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -89,14 +107,46 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
     },
   });
 
+  const loadFFmpeg = async () => {
+    if (ffmpegRef.current) return ffmpegRef.current;
+    
+    // @ts-ignore
+    if (window.FFmpeg) {
+       // @ts-ignore
+      const { createFFmpeg } = window.FFmpeg;
+      const ffmpeg = createFFmpeg({
+          corePath: `https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js`,
+          log: true,
+      });
+      ffmpegRef.current = ffmpeg;
+      return ffmpeg;
+    }
+
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.id = 'ffmpeg-script';
+      script.src = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js';
+      script.onload = () => {
+        // @ts-ignore
+        const { createFFmpeg } = window.FFmpeg;
+        const ffmpeg = createFFmpeg({
+          corePath: `https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js`,
+          log: true,
+        });
+        ffmpegRef.current = ffmpeg;
+        resolve(ffmpeg);
+      };
+      script.onerror = (err) => {
+        console.error("Failed to load FFmpeg script", err);
+        reject(new Error("Failed to load FFmpeg script. Check your internet connection."));
+      };
+      document.body.appendChild(script);
+    });
+  };
+
    const handleFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
-      setPreviewUrl(null);
-      setSelectedFile(null);
-      setMediaType(null);
-      setFileError(null);
-      setIsReadingFile(false);
-      setShowCameraOptions(false);
+      removeMedia();
 
       if (!file) return;
 
@@ -104,19 +154,24 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
 
       if (!currentFileType) {
           setFileError('Invalid file type. Please select an image or video.');
-          if (event.target) event.target.value = '';
           return;
       }
 
       if (currentFileType === 'image' && file.size > MAX_IMAGE_UPLOAD_LIMIT) {
         setFileError(`Image is too large. Max size: ${MAX_IMAGE_UPLOAD_LIMIT / 1024 / 1024}MB.`);
-        if (event.target) event.target.value = '';
         return;
       }
       if (currentFileType === 'video' && file.size > MAX_VIDEO_UPLOAD_LIMIT) {
         setFileError(`Video is too large. Max size: ${MAX_VIDEO_UPLOAD_LIMIT / 1024 / 1024}MB.`);
-        if (event.target) event.target.value = '';
         return;
+      }
+
+      if (currentFileType === 'video' && file.size > MAX_VIDEO_FOR_TRIM) {
+          const url = URL.createObjectURL(file);
+          setVideoToTrim({ file, url });
+          setShowTrimmer(true);
+          setVideoDuration(0); // Reset duration for new video
+          return;
       }
       
       setIsReadingFile(true);
@@ -141,6 +196,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
       setMediaType(null);
       setFileError(null);
       setIsReadingFile(false);
+      setShowCameraOptions(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
       if (imageCaptureInputRef.current) imageCaptureInputRef.current.value = '';
       if (videoCaptureInputRef.current) videoCaptureInputRef.current.value = '';
@@ -158,6 +214,56 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
 
       form.reset();
       removeMedia();
+  };
+
+  const handleTrim = async () => {
+    if (!videoToTrim || isTrimming) return;
+
+    setIsTrimming(true);
+    setTrimProgress(0);
+
+    try {
+        const ffmpeg = await loadFFmpeg();
+        if (!ffmpeg.isLoaded()) {
+            await ffmpeg.load();
+        }
+
+        const arrayBuffer = await videoToTrim.file.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+        ffmpeg.FS('writeFile', videoToTrim.file.name, uint8Array);
+
+        ffmpeg.setProgress(({ ratio } : {ratio: number}) => {
+            setTrimProgress(Math.min(100, Math.round(ratio * 100)));
+        });
+
+        const outputFileName = `trimmed-${Date.now()}.mp4`;
+        await ffmpeg.run(
+            '-i', videoToTrim.file.name,
+            '-ss', trimStartTime.toString(),
+            '-t', trimDuration.toString(),
+            '-c', 'copy',
+            outputFileName
+        );
+        
+        const data = ffmpeg.FS('readFile', outputFileName);
+        const trimmedFile = new File([data.buffer], outputFileName, { type: 'video/mp4' });
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            setPreviewUrl(reader.result as string);
+            setSelectedFile(trimmedFile);
+            setMediaType('video');
+            setShowTrimmer(false);
+            setVideoToTrim(null);
+            setIsTrimming(false);
+        };
+        reader.readAsDataURL(trimmedFile);
+
+    } catch (error) {
+        console.error("Error during video trimming:", error);
+        toast({ variant: 'destructive', title: 'Trimming Failed', description: 'Could not trim the video. Please try a different browser or a smaller file.' });
+        setIsTrimming(false);
+    }
   };
 
   const isButtonDisabled = submitting || isReadingFile;
@@ -334,6 +440,61 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
         </Button>
       </form>
     </Form>
+
+    <Dialog open={showTrimmer} onOpenChange={(open) => { if (!open) { setShowTrimmer(false); setVideoToTrim(null); }}}>
+        <DialogContent className="max-w-xl">
+            <DialogHeader>
+                <DialogTitle>Trim Your Video</DialogTitle>
+                <DialogDescription>
+                    Your video is large. Please select a clip up to 60 seconds to upload.
+                </DialogDescription>
+            </DialogHeader>
+            {videoToTrim && (
+                <div className="space-y-4">
+                    <video ref={videoRef} src={videoToTrim.url} controls className="w-full rounded-md bg-black" onLoadedMetadata={(e) => setVideoDuration(e.currentTarget.duration)} />
+
+                    {videoDuration > 0 && (
+                        <div className="space-y-4">
+                            <div>
+                                <Label>Start Time: {new Date(trimStartTime * 1000).toISOString().substr(14, 5)}</Label>
+                                <Slider
+                                    min={0}
+                                    max={Math.max(0, videoDuration - trimDuration)}
+                                    step={1}
+                                    value={[trimStartTime]}
+                                    onValueChange={(val) => {
+                                      setTrimStartTime(val[0]);
+                                      if(videoRef.current) videoRef.current.currentTime = val[0];
+                                    }}
+                                />
+                            </div>
+                            <div>
+                                <Label>Clip Duration</Label>
+                                <RadioGroup defaultValue="30" onValueChange={(val) => setTrimDuration(parseInt(val))} className="flex space-x-4 pt-2">
+                                    <div className="flex items-center space-x-2"><RadioGroupItem value="30" id="r1" /><Label htmlFor="r1">30 seconds</Label></div>
+                                    <div className="flex items-center space-x-2"><RadioGroupItem value="60" id="r2" disabled={videoDuration < 60} /><Label htmlFor="r2">60 seconds</Label></div>
+                                </RadioGroup>
+                            </div>
+                        </div>
+                    )}
+                    {isTrimming && (
+                        <div className="space-y-2 pt-2">
+                            <Label>Trimming Progress: {trimProgress}%</Label>
+                            <Progress value={trimProgress} />
+                            <p className="text-xs text-muted-foreground">This may take a moment. Please keep this tab open.</p>
+                        </div>
+                    )}
+                </div>
+            )}
+            <DialogFooter>
+                <Button variant="outline" onClick={() => { setShowTrimmer(false); setVideoToTrim(null); }} disabled={isTrimming}>Cancel</Button>
+                <Button onClick={handleTrim} disabled={isTrimming || videoDuration === 0}>
+                    {isTrimming ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    {isTrimming ? 'Trimming...' : 'Trim & Use Video'}
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
     </>
   );
 };
