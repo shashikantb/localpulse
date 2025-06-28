@@ -152,13 +152,13 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
 
   const refreshPosts = useCallback(async () => {
     setIsLoadingMore(true);
+    setNewPulsesAvailable(false);
+    setNewPulsesCount(0);
     try {
       const newInitialPosts = await getPosts({ page: 1, limit: POSTS_PER_PAGE });
       setAllPosts(newInitialPosts);
       setCurrentPage(1);
       setHasMorePosts(newInitialPosts.length === POSTS_PER_PAGE);
-      setNewPulsesAvailable(false);
-      setNewPulsesCount(0);
       if (window) {
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
@@ -168,6 +168,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
         title: "Refresh Error",
         description: "Could not refresh posts.",
       });
+      setNewPulsesAvailable(true); // Re-enable button if refresh fails
     } finally {
       setIsLoadingMore(false);
     }
@@ -242,33 +243,52 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
   useEffect(() => {
     if (isLoadingLocation) return;
 
-    let timeoutId: NodeJS.Timeout;
+    let intervalId: NodeJS.Timeout | null = null;
 
     const pollForNewPosts = async () => {
-      // Only poll if the tab is visible.
-      // This helps with performance and makes the page more eligible for bfcache.
-      if (!document.hidden) {
-        try {
-          const result = await checkForNewerPosts(latestPostIdClientKnows);
-          if (result.hasNewerPosts) {
-            setNewPulsesAvailable(true);
-            setNewPulsesCount(result.count);
-          }
-        } catch (error) {
-          console.warn("Polling for new posts failed:", error);
+      try {
+        const result = await checkForNewerPosts(latestPostIdClientKnows);
+        if (result.hasNewerPosts) {
+          setNewPulsesAvailable(true);
+          setNewPulsesCount(result.count);
+          // Once we know there are new posts, we can stop polling.
+          if (intervalId) clearInterval(intervalId);
+          intervalId = null;
         }
+      } catch (error) {
+        console.warn("Polling for new posts failed:", error);
       }
-      
-      // Schedule the next poll.
-      timeoutId = setTimeout(pollForNewPosts, NEW_POST_POLL_INTERVAL);
     };
 
-    // Start the polling loop.
-    timeoutId = setTimeout(pollForNewPosts, NEW_POST_POLL_INTERVAL);
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Tab is hidden, clear the interval to stop polling.
+        if (intervalId) clearInterval(intervalId);
+        intervalId = null;
+      } else {
+        // Tab is visible, start a new interval if one isn't already running.
+        if (!newPulsesAvailable) { // Don't restart polling if we already found new posts
+            pollForNewPosts(); // Poll immediately
+            if (intervalId === null) {
+              intervalId = setInterval(pollForNewPosts, NEW_POST_POLL_INTERVAL);
+            }
+        }
+      }
+    };
 
-    // Cleanup function.
-    return () => clearTimeout(timeoutId);
-  }, [isLoadingLocation, latestPostIdClientKnows]);
+    // Run on initial mount
+    handleVisibilityChange();
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Cleanup function
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [isLoadingLocation, latestPostIdClientKnows, newPulsesAvailable]);
 
 
   const handleLoadNewPulses = async () => {
@@ -406,7 +426,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
 
   if (initialPosts.length === 0 && allPosts.length === 0) {
     return (
-        <Card className="text-center py-16 rounded-xl shadow-xl border border-border/40 bg-card/80 backdrop-blur-sm mt-8">
+        <Card className="text-center py-16 rounded-xl shadow-xl border border-border/40 bg-card/80 backdrop-blur-sm">
             <CardContent className="flex flex-col items-center">
                 <Zap className="mx-auto h-20 w-20 text-muted-foreground/30 mb-6" />
                 <p className="text-2xl text-muted-foreground font-semibold">The air is quiet here...</p>
@@ -417,7 +437,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
   }
 
   return (
-    <div>
+    <>
       <div className="flex justify-end items-center sticky top-6 z-30 mb-4 px-1 gap-2 flex-wrap">
           {newPulsesAvailable && (
               <Button variant="outline" size="sm" onClick={handleLoadNewPulses} className="animate-pulse bg-accent/10 hover:bg-accent/20 border-accent/50 text-accent hover:text-accent/90 shadow-md mr-auto">
@@ -474,7 +494,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
             </Card>
           )}
       </div>
-    </div>
+    </>
   );
 };
 

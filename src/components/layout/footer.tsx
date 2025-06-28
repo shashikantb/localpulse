@@ -2,7 +2,7 @@
 'use client';
 
 import type { FC } from 'react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Users, CalendarDays, Code, Shield } from 'lucide-react';
 import { recordVisitAndGetCounts, getCurrentVisitorCounts } from '@/app/actions';
@@ -12,28 +12,49 @@ const Footer: FC = () => {
   const [visitorCounts, setVisitorCounts] = useState<VisitorCounts | null>(null);
   const [isLoadingCounts, setIsLoadingCounts] = useState(true);
 
+  // Use a ref to track session storage status to avoid stale closures in the event handler.
+  const visitRecordedRef = useRef(typeof window !== 'undefined' && sessionStorage.getItem('sessionVisitRecorded_localpulse') === 'true');
+
   useEffect(() => {
-    const fetchCounts = async () => {
+    const fetchAndSetCounts = async (isRecordingVisit: boolean) => {
+      // Don't do anything if we are already loading or the tab is hidden
+      if (document.hidden) return;
+
       setIsLoadingCounts(true);
       try {
-        const sessionVisitRecorded = sessionStorage.getItem('sessionVisitRecorded_localpulse');
         let counts: VisitorCounts;
-        if (!sessionVisitRecorded) {
+        if (isRecordingVisit && !visitRecordedRef.current) {
           counts = await recordVisitAndGetCounts();
           sessionStorage.setItem('sessionVisitRecorded_localpulse', 'true');
+          visitRecordedRef.current = true;
         } else {
           counts = await getCurrentVisitorCounts();
         }
         setVisitorCounts(counts);
       } catch (error) {
         console.error("Error fetching visitor counts:", error);
-        setVisitorCounts({ totalVisits: 0, dailyVisits: 0 }); 
+        setVisitorCounts({ totalVisits: 0, dailyVisits: 0 });
       } finally {
         setIsLoadingCounts(false);
       }
     };
 
-    fetchCounts();
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        // When tab becomes visible, fetch counts.
+        // The first time this runs in a session, it will record the visit.
+        fetchAndSetCounts(!visitRecordedRef.current);
+      }
+    };
+
+    // Initial check when component mounts
+    handleVisibilityChange();
+
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   return (
