@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { Post, User } from '@/lib/db-types';
 import { getPosts, registerDeviceToken, checkForNewerPosts } from '@/app/actions';
 import { PostCard } from '@/components/post-card';
+import { PostCardSkeleton } from './post-card-skeleton';
 import { HASHTAG_CATEGORIES } from '@/components/post-form';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { MapPin, Terminal, Zap, Loader2, Filter, SlidersHorizontal, Rss, Tag, ChevronDown, Bell, BellOff, BellRing, ListPlus, RefreshCw, Lock, AlertTriangle } from 'lucide-react';
@@ -264,6 +265,12 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
   }, [allPosts]);
 
   useEffect(() => {
+    // Don't try to sort until location is ready.
+    if (isLoadingLocation) {
+        setFilteredAndSortedPosts([]); // Clear posts to ensure skeletons are shown
+        return;
+    }
+
     let processedPosts = [...allPosts];
 
     // Role-based sorting logic
@@ -302,6 +309,8 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
             }
             return distA - distB;
         });
+    } else { // Fallback if no location: sort by newest
+       processedPosts.sort((a, b) => new Date(b.createdat).getTime() - new Date(a.createdat).getTime());
     }
     
     // Apply user-defined filters AFTER sorting
@@ -319,7 +328,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
     }
     
     setFilteredAndSortedPosts(processedPosts);
-  }, [allPosts, location, distanceFilterKm, showAnyDistance, filterHashtags, sessionUser, calculateDistance]);
+  }, [allPosts, location, distanceFilterKm, showAnyDistance, filterHashtags, sessionUser, calculateDistance, isLoadingLocation]);
 
 
   // Polling for new posts, now more bfcache-friendly.
@@ -521,7 +530,9 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
     }
   };
 
-  if (initialPosts.length === 0 && allPosts.length === 0) {
+  const showSkeletons = isLoadingLocation && allPosts.length > 0;
+
+  if (initialPosts.length === 0 && allPosts.length === 0 && !isLoadingLocation) {
     return (
         <Card className="text-center py-16 rounded-xl shadow-xl border border-border/40 bg-card/80 backdrop-blur-sm">
             <CardContent className="flex flex-col items-center">
@@ -595,27 +606,31 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
       </div>
 
       <div className="space-y-6">
-          {filteredAndSortedPosts.length > 0 ? (
-              <>
-              {filteredAndSortedPosts.map((post, index) => (
-                  <PostCard key={post.id} post={post} userLocation={location} sessionUser={sessionUser} isFirst={index === 0} />
-              ))}
-              {hasMorePosts && (
-                  <Button onClick={handleLoadMore} variant="outline" className="w-full mt-6 py-3 text-lg shadow-md hover:shadow-lg transition-shadow bg-card hover:bg-muted" disabled={isLoadingMore}>
-                     {isLoadingMore ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <ListPlus className="mr-2 h-5 w-5" /> }
-                      Load More Pulses
-                  </Button>
-              )}
-              </>
-          ) : (
-            <Card className="text-center py-16 rounded-xl shadow-xl border border-border/40 bg-card/80 backdrop-blur-sm">
-                <CardContent className="flex flex-col items-center">
-                <Zap className="mx-auto h-20 w-20 text-muted-foreground/30 mb-6" />
-                <p className="text-2xl text-muted-foreground font-semibold">The air is quiet here...</p>
-                <p className="text-md text-muted-foreground/80 mt-2">No pulses found for your current filters. Try adjusting them!</p>
-                </CardContent>
-            </Card>
-          )}
+        {showSkeletons ? (
+            <>
+                {[...Array(Math.min(allPosts.length, 3))].map((_, i) => <PostCardSkeleton key={i} />)}
+            </>
+        ) : filteredAndSortedPosts.length > 0 ? (
+            <>
+            {filteredAndSortedPosts.map((post, index) => (
+                <PostCard key={post.id} post={post} userLocation={location} sessionUser={sessionUser} isFirst={index === 0} />
+            ))}
+            {hasMorePosts && (
+                <Button onClick={handleLoadMore} variant="outline" className="w-full mt-6 py-3 text-lg shadow-md hover:shadow-lg transition-shadow bg-card hover:bg-muted" disabled={isLoadingMore}>
+                   {isLoadingMore ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <ListPlus className="mr-2 h-5 w-5" /> }
+                    Load More Pulses
+                </Button>
+            )}
+            </>
+        ) : (
+          <Card className="text-center py-16 rounded-xl shadow-xl border border-border/40 bg-card/80 backdrop-blur-sm">
+              <CardContent className="flex flex-col items-center">
+              <Zap className="mx-auto h-20 w-20 text-muted-foreground/30 mb-6" />
+              <p className="text-2xl text-muted-foreground font-semibold">The air is quiet here...</p>
+              <p className="text-md text-muted-foreground/80 mt-2">No pulses found for your current filters. Try adjusting them!</p>
+              </CardContent>
+          </Card>
+        )}
       </div>
     </>
   );
