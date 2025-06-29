@@ -7,8 +7,6 @@ import { revalidatePath } from 'next/cache';
 import { admin as firebaseAdmin } from '@/lib/firebase-admin';
 import { getSession } from './auth/actions';
 
-const isDataUrl = (url: string | null | undefined): boolean => !!url && url.startsWith('data:');
-
 async function geocodeCoordinates(latitude: number, longitude: number): Promise<string | null> {
   // ... (existing geocode placeholder logic)
   if (latitude > 40.5 && latitude < 40.9 && longitude > -74.3 && longitude < -73.7) return "New York";
@@ -190,9 +188,6 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
 
     let mediaUrlForDb: string | null = null;
     if (newPostData.mediaType) {
-      mediaUrlForDb = 'https://placehold.co/800x450.png';
-    }
-    if (newPostData.mediaData && isDataUrl(newPostData.mediaData)) {
       mediaUrlForDb = 'https://placehold.co/800x450.png';
     }
 
@@ -440,10 +435,7 @@ export async function getUserWithFollowInfo(profileUserId: number): Promise<{ us
     return { user: null, stats: { followerCount: 0, followingCount: 0 }, isFollowing: false };
   }
 
-  // Sanitization is now handled by the DB query, so this check is no longer needed.
-  // if (profileUser) {
-  //   profileUser.profilepictureurl = isDataUrl(profileUser.profilepictureurl) ? 'https://placehold.co/200x200.png' : profileUser.profilepictureurl;
-  // }
+  // Sanitization is now handled by the DB query.
 
   let isFollowing = false;
   if (sessionUser && sessionUser.id !== profileUserId) {

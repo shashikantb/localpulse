@@ -17,8 +17,6 @@ if (!process.env.JWT_SECRET) {
   console.warn('JWT_SECRET environment variable is not set. Using a fallback secret. THIS IS NOT SECURE FOR PRODUCTION.');
 }
 
-const isDataUrl = (url: string | null | undefined): boolean => !!url && url.startsWith('data:');
-
 async function encrypt(payload: any) {
   return await new jose.SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
@@ -116,12 +114,9 @@ export const getSession = cache(async (): Promise<{ user: User | null }> => {
     return { user: null };
   }
 
+  // The getUserByIdDb function now handles sanitization of the profile picture URL.
+  // No need for redundant client-side checks.
   const user = await getUserByIdDb(payload.userId);
-
-  // Sanitize profile picture URL to prevent sending large data URIs to the client.
-  if (user) {
-    user.profilepictureurl = isDataUrl(user.profilepictureurl) ? 'https://placehold.co/200x200.png' : user.profilepictureurl;
-  }
 
   return { user };
 });

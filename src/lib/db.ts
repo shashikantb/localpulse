@@ -258,6 +258,30 @@ if (process.env.NODE_ENV !== 'test') {
 
 // --- Function Implementations ---
 
+// Define a reusable, sanitized column list to prevent fetching large data URIs
+const POST_COLUMNS_SANITIZED = `
+  p.id, p.content, p.latitude, p.longitude, p.createdat, p.likecount, 
+  p.commentcount, p.viewcount, p.notifiedcount, p.city, p.hashtags, 
+  p.authorid, p.mediatype,
+  u.name as authorname, u.role as authorrole,
+  CASE 
+    WHEN p.mediaurl LIKE 'data:%' THEN 'https://placehold.co/800x450.png' 
+    ELSE p.mediaurl 
+  END as mediaurl,
+  CASE 
+    WHEN u.profilepictureurl LIKE 'data:%' THEN 'https://placehold.co/200x200.png' 
+    ELSE u.profilepictureurl 
+  END as authorprofilepictureurl
+`;
+
+const USER_COLUMNS_SANITIZED = `
+  id, email, name, role, status, createdat,
+  CASE 
+    WHEN profilepictureurl LIKE 'data:%' THEN 'https://placehold.co/200x200.png' 
+    ELSE profilepictureurl 
+  END as profilepictureurl
+`;
+
 export async function getPostsDb(options: { limit: number; offset: number } = { limit: 10, offset: 0 }, userRole?: UserRole): Promise<Post[]> {
   const dbPool = getDbPool();
   if (!dbPool) return [];
@@ -265,11 +289,7 @@ export async function getPostsDb(options: { limit: number; offset: number } = { 
   const client = await dbPool.connect();
   try {
     const postsQuery = `
-      SELECT p.id, p.content, p.latitude, p.longitude, p.createdat, p.likecount, p.commentcount, p.viewcount, p.notifiedcount, p.city, p.hashtags, p.authorid,
-             u.name as authorname, u.role as authorrole,
-             CASE WHEN p.mediaurl LIKE 'data:%' THEN 'https://placehold.co/800x450.png' ELSE p.mediaurl END as mediaurl,
-             CASE WHEN p.mediaurl LIKE 'data:%' THEN 'image' ELSE p.mediatype END as mediatype,
-             CASE WHEN u.profilepictureurl LIKE 'data:%' THEN 'https://placehold.co/200x200.png' ELSE u.profilepictureurl END as authorprofilepictureurl
+      SELECT ${POST_COLUMNS_SANITIZED}
       FROM posts p
       LEFT JOIN users u ON p.authorid = u.id
       ORDER BY p.createdat DESC
@@ -289,11 +309,7 @@ export async function getMediaPostsDb(options: { limit: number; offset: number; 
   const client = await dbPool.connect();
   try {
     const postsQuery = `
-      SELECT p.id, p.content, p.latitude, p.longitude, p.createdat, p.likecount, p.commentcount, p.viewcount, p.notifiedcount, p.city, p.hashtags, p.authorid,
-             u.name as authorname, u.role as authorrole,
-             CASE WHEN p.mediaurl LIKE 'data:%' THEN 'https://placehold.co/800x450.png' ELSE p.mediaurl END as mediaurl,
-             CASE WHEN p.mediaurl LIKE 'data:%' THEN 'image' ELSE p.mediatype END as mediatype,
-             CASE WHEN u.profilepictureurl LIKE 'data:%' THEN 'https://placehold.co/200x200.png' ELSE u.profilepictureurl END as authorprofilepictureurl
+      SELECT ${POST_COLUMNS_SANITIZED}
       FROM posts p
       LEFT JOIN users u ON p.authorid = u.id
       WHERE p.mediaurl IS NOT NULL
@@ -521,11 +537,7 @@ export async function getPostByIdDb(postId: number, userRole?: UserRole): Promis
   if (!dbPool) return null;
 
   const query = `
-    SELECT p.id, p.content, p.latitude, p.longitude, p.createdat, p.likecount, p.commentcount, p.viewcount, p.notifiedcount, p.city, p.hashtags, p.authorid,
-           u.name as authorname, u.role as authorrole,
-           CASE WHEN p.mediaurl LIKE 'data:%' THEN 'https://placehold.co/800x450.png' ELSE p.mediaurl END as mediaurl,
-           CASE WHEN p.mediaurl LIKE 'data:%' THEN 'image' ELSE p.mediatype END as mediatype,
-           CASE WHEN u.profilepictureurl LIKE 'data:%' THEN 'https://placehold.co/200x200.png' ELSE u.profilepictureurl END as authorprofilepictureurl
+    SELECT ${POST_COLUMNS_SANITIZED}
     FROM posts p
     LEFT JOIN users u ON p.authorid = u.id
     WHERE p.id = $1;
@@ -620,8 +632,7 @@ export async function getUserByIdDb(id: number): Promise<User | null> {
     if (!dbPool) return null;
 
     const query = `
-      SELECT id, email, name, role, status, createdat, 
-             CASE WHEN profilepictureurl LIKE 'data:%' THEN 'https://placehold.co/200x200.png' ELSE profilepictureurl END as profilepictureurl 
+      SELECT ${USER_COLUMNS_SANITIZED}
       FROM users 
       WHERE id = $1
     `;
@@ -642,11 +653,7 @@ export async function getPostsByUserIdDb(userId: number): Promise<Post[]> {
   if (!dbPool) return [];
 
   const query = `
-    SELECT p.id, p.content, p.latitude, p.longitude, p.createdat, p.likecount, p.commentcount, p.viewcount, p.notifiedcount, p.city, p.hashtags, p.authorid,
-           u.name as authorname, u.role as authorrole,
-           CASE WHEN p.mediaurl LIKE 'data:%' THEN 'https://placehold.co/800x450.png' ELSE p.mediaurl END as mediaurl,
-           CASE WHEN p.mediaurl LIKE 'data:%' THEN 'image' ELSE p.mediatype END as mediatype,
-           CASE WHEN u.profilepictureurl LIKE 'data:%' THEN 'https://placehold.co/200x200.png' ELSE u.profilepictureurl END as authorprofilepictureurl
+    SELECT ${POST_COLUMNS_SANITIZED}
     FROM posts p
     JOIN users u ON p.authorid = u.id
     WHERE p.authorid = $1
