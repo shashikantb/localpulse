@@ -2,6 +2,9 @@
   "name": "localpulse",
   "version": "0.1.0",
   "private": true,
+  "browserslist": [
+    "defaults"
+  ],
   "scripts": {
     "dev": "next dev --turbopack -p 9002",
     "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
