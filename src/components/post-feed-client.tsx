@@ -63,25 +63,6 @@ const POST_CACHE_KEY = 'localpulse-posts-cache';
 const LOCATION_CACHE_KEY = 'localpulse-location-cache';
 const CACHE_VERSION = 'v1.2'; // Increment to invalidate old cache structures
 
-// Helper to get initial posts from cache or server data
-const getInitialCachedPosts = (serverInitialPosts: Post[]): Post[] => {
-  if (typeof window === 'undefined') {
-    return serverInitialPosts;
-  }
-  try {
-    const cachedItem = localStorage.getItem(POST_CACHE_KEY);
-    if (cachedItem) {
-      const cachedData = JSON.parse(cachedItem);
-      if (cachedData.version === CACHE_VERSION && Array.isArray(cachedData.posts)) {
-        return cachedData.posts.length > 0 ? cachedData.posts : serverInitialPosts;
-      }
-    }
-  } catch (error) {
-    console.warn("Failed to read post cache:", error);
-  }
-  return serverInitialPosts;
-};
-
 
 interface PostFeedClientProps {
   initialPosts: Post[];
@@ -90,32 +71,23 @@ interface PostFeedClientProps {
 
 const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) => {
   const { toast } = useToast();
-  const [allPosts, setAllPosts] = useState<Post[]>(() => getInitialCachedPosts(initialPosts));
+  
+  // Initialize state with server-provided props to ensure consistency
+  const [allPosts, setAllPosts] = useState<Post[]>(initialPosts);
+  const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [isLoadingLocation, setIsLoadingLocation] = useState(true);
+
+  // Other state variables
   const [filteredAndSortedPosts, setFilteredAndSortedPosts] = useState<Post[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [latestPostIdClientKnows, setLatestPostIdClientKnows] = useState<number>(0);
   const [newPulsesAvailable, setNewPulsesAvailable] = useState(false);
   const [newPulsesCount, setNewPulsesCount] = useState(0);
-
-  const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      const cachedLocation = sessionStorage.getItem(LOCATION_CACHE_KEY);
-      return cachedLocation ? JSON.parse(cachedLocation) : null;
-    } catch (e) {
-      console.warn("Failed to read location cache:", e);
-      return null;
-    }
-  });
-
-  const [isLoadingLocation, setIsLoadingLocation] = useState(!location);
   const [hasMorePosts, setHasMorePosts] = useState<boolean>(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  
   const [distanceFilterKm, setDistanceFilterKm] = useState<number>(101); 
   const [showAnyDistance, setShowAnyDistance] = useState<boolean>(true);
   const [filterHashtags, setFilterHashtags] = useState<string[]>([]);
-  
   const [notificationPermissionStatus, setNotificationPermissionStatus] = useState<'default' | 'loading' | 'granted' | 'denied'>('default');
   const [showTroubleshootingDialog, setShowTroubleshootingDialog] = useState(false);
   
@@ -134,15 +106,26 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
     return distance;
   }, []);
 
-  // Effect to get user location, now with session caching
+  // Effect to get user location, now safe from hydration errors.
   useEffect(() => {
-    if (location) {
-      setIsLoadingLocation(false);
-      return;
-    }
-
     let isMounted = true;
     
+    // Try to get location from session cache first
+    const cachedLocationJSON = sessionStorage.getItem(LOCATION_CACHE_KEY);
+    if (cachedLocationJSON) {
+        try {
+            const cachedLocation = JSON.parse(cachedLocationJSON);
+            if (isMounted) {
+                setLocation(cachedLocation);
+                setIsLoadingLocation(false);
+            }
+            return; // Exit if we found a cached location
+        } catch (e) {
+            console.warn("Failed to parse cached location:", e);
+        }
+    }
+
+    // If no cached location, get from navigator
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -169,7 +152,26 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
     }
 
     return () => { isMounted = false; };
-  }, [location]);
+  }, []); // Empty dependency array, runs once on mount
+
+
+  // Hydrate posts from localStorage if initialPosts from server is empty
+  useEffect(() => {
+    if (initialPosts.length === 0) {
+        try {
+            const cachedItem = localStorage.getItem(POST_CACHE_KEY);
+            if (cachedItem) {
+                const cachedData = JSON.parse(cachedItem);
+                if (cachedData.version === CACHE_VERSION && Array.isArray(cachedData.posts) && cachedData.posts.length > 0) {
+                    setAllPosts(cachedData.posts);
+                }
+            }
+        } catch (error) {
+            console.warn("Failed to read post cache:", error);
+        }
+    }
+  }, []); // Note: initialPosts is a stable prop, so this runs once on mount.
+
 
   // Effect to save posts to cache
   useEffect(() => {
@@ -550,7 +552,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
     }
   };
 
-  const showSkeletons = isLoadingLocation && !location;
+  const showSkeletons = isLoadingLocation;
 
   if (allPosts.length === 0 && !isLoadingLocation) {
     return (
@@ -609,6 +611,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
               className="shadow-lg hover:shadow-xl transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary"
               onClick={handleNotificationRegistration}
               disabled={notificationPermissionStatus === 'loading'}
+              aria-label="Toggle Notifications"
           >
               <NotificationButtonContent />
           </Button>
@@ -657,5 +660,3 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
 };
 
 export default PostFeedClient;
-
-    
