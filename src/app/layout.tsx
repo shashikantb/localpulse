@@ -7,7 +7,12 @@ import Footer from '@/components/layout/footer';
 import { AppInstallPrompt } from '@/components/app-install-prompt';
 import Header from '@/components/layout/header';
 import { getSession } from './auth/actions';
-import BottomNavBar from '@/components/layout/bottom-nav-bar';
+import dynamic from 'next/dynamic';
+
+const BottomNavBar = dynamic(() => import('@/components/layout/bottom-nav-bar'), {
+  // No loading skeleton needed as it's invisible on desktop and loads after hydration on mobile.
+  loading: () => null, 
+});
 
 const geistSans = Geist({
   variable: '--font-geist-sans',

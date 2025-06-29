@@ -3,7 +3,13 @@ import type { FC } from 'react';
 import Link from 'next/link';
 import { Rss } from 'lucide-react';
 import { getSession } from '@/app/auth/actions';
-import HeaderUserNav from './header-user-nav';
+import dynamic from 'next/dynamic';
+import { Skeleton } from '@/components/ui/skeleton';
+
+// Dynamically import the user nav to code-split it from the main bundle.
+const HeaderUserNav = dynamic(() => import('./header-user-nav'), {
+  loading: () => <Skeleton className="h-10 w-10 rounded-full" />,
+});
 
 const Header: FC = async () => {
   const { user } = await getSession();
