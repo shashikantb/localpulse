@@ -329,47 +329,56 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
     let intervalId: NodeJS.Timeout | null = null;
 
     const pollForNewPosts = async () => {
+      // Don't poll if the page is hidden
+      if (document.hidden) return; 
       try {
         const result = await checkForNewerPosts(latestPostIdClientKnows);
         if (result.hasNewerPosts) {
           setNewPulsesAvailable(true);
           setNewPulsesCount(result.count);
-          // Once we know there are new posts, we can stop polling.
-          if (intervalId) clearInterval(intervalId);
-          intervalId = null;
+          stopPolling(); // Stop once new posts are found
         }
       } catch (error) {
         console.warn("Polling for new posts failed:", error);
       }
     };
+    
+    const startPolling = () => {
+        if (newPulsesAvailable || intervalId) return;
+        pollForNewPosts(); // Poll immediately
+        intervalId = setInterval(pollForNewPosts, NEW_POST_POLL_INTERVAL);
+    };
+    
+    const stopPolling = () => {
+        if (intervalId) {
+            clearInterval(intervalId);
+            intervalId = null;
+        }
+    };
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        // Tab is hidden, clear the interval to stop polling.
-        if (intervalId) clearInterval(intervalId);
-        intervalId = null;
+        stopPolling();
       } else {
-        // Tab is visible, start a new interval if one isn't already running.
-        if (!newPulsesAvailable) { // Don't restart polling if we already found new posts
-            pollForNewPosts(); // Poll immediately
-            if (intervalId === null) {
-              intervalId = setInterval(pollForNewPosts, NEW_POST_POLL_INTERVAL);
-            }
-        }
+        startPolling();
       }
     };
+    
+    const handlePageShow = (event: PageTransitionEvent) => {
+        // When a page is restored from bfcache, restart polling
+        if (event.persisted) {
+            handleVisibilityChange();
+        }
+    };
 
-    // Run on initial mount
-    handleVisibilityChange();
+    handleVisibilityChange(); // Initial start
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pageshow', handlePageShow);
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    // Cleanup function
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
+      stopPolling();
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pageshow', handlePageShow);
     };
   }, [isLoadingLocation, latestPostIdClientKnows, newPulsesAvailable]);
 

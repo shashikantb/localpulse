@@ -12,18 +12,19 @@ const Footer: FC = () => {
   const [visitorCounts, setVisitorCounts] = useState<VisitorCounts | null>(null);
   const [isLoadingCounts, setIsLoadingCounts] = useState(true);
 
-  // Use a ref to track session storage status to avoid stale closures in the event handler.
+  // Use a ref to track session storage status to avoid stale closures in event handlers.
   const visitRecordedRef = useRef(typeof window !== 'undefined' && sessionStorage.getItem('sessionVisitRecorded_localpulse') === 'true');
 
   useEffect(() => {
-    const fetchAndSetCounts = async (isRecordingVisit: boolean) => {
+    const fetchAndSetCounts = async () => {
       // Don't do anything if we are already loading or the tab is hidden
-      if (document.hidden) return;
+      if (isLoadingCounts || document.hidden) return;
 
       setIsLoadingCounts(true);
       try {
         let counts: VisitorCounts;
-        if (isRecordingVisit && !visitRecordedRef.current) {
+        // The logic to only record once per session
+        if (!visitRecordedRef.current) {
           counts = await recordVisitAndGetCounts();
           sessionStorage.setItem('sessionVisitRecorded_localpulse', 'true');
           visitRecordedRef.current = true;
@@ -38,24 +39,35 @@ const Footer: FC = () => {
         setIsLoadingCounts(false);
       }
     };
-
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        // When tab becomes visible, fetch counts.
-        // The first time this runs in a session, it will record the visit.
-        fetchAndSetCounts(!visitRecordedRef.current);
-      }
+    
+    // This handler will run on initial load and when the tab becomes visible again
+    const handleActivity = () => {
+        if (!document.hidden) {
+            fetchAndSetCounts();
+        }
     };
 
-    // Initial check when component mounts
-    handleVisibilityChange();
+    // We also listen to pageshow to handle bfcache restoration
+    const handlePageShow = (event: PageTransitionEvent) => {
+        if (event.persisted) {
+            // Page was restored from bfcache, refetch counts to ensure they're up-to-date
+            setIsLoadingCounts(true); // Force loading state
+            visitRecordedRef.current = sessionStorage.getItem('sessionVisitRecorded_localpulse') === 'true'; // re-sync ref
+            handleActivity();
+        }
+    }
 
-    window.addEventListener('visibilitychange', handleVisibilityChange);
+    handleActivity(); // Initial fetch
+
+    window.addEventListener('visibilitychange', handleActivity);
+    window.addEventListener('pageshow', handlePageShow);
 
     return () => {
-      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('visibilitychange', handleActivity);
+      window.removeEventListener('pageshow', handlePageShow);
     };
-  }, []);
+  }, [isLoadingCounts]);
+
 
   return (
     <footer className="py-6 text-center text-sm text-muted-foreground bg-gradient-to-t from-background to-muted/20 border-t border-border/70 shadow-inner mt-auto hidden sm:block"> {/* Hide footer on small screens */}
