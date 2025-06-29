@@ -13,7 +13,7 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
  
-    --primary: 180 100% 20.1%; /* PRD: Teal (#008080) - Darkened for AA contrast */
+    --primary: 180 100% 15%; /* PRD: Teal (#008080) - Darkened for AA contrast */
     --primary-foreground: 0 0% 100%;
  
     --secondary: 240 4.8% 95.9%;
@@ -30,19 +30,19 @@
 
     --border: 240 5.9% 90%;
     --input: 240 5.9% 90%;
-    --ring: 180 100% 20.1%; /* Adjusted to match new primary */
+    --ring: 180 100% 15%; /* Adjusted to match new primary */
  
     --radius: 0.75rem;
 
     /* Sidebar remains mostly default, adjust if needed */
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 180 100% 20.1%;
+    --sidebar-primary: 180 100% 15%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 0 0% 96.1%;
     --sidebar-accent-foreground: 0 0% 9%;
     --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 180 100% 20.1%;
+    --sidebar-ring: 180 100% 15%;
   }
  
   .dark {
