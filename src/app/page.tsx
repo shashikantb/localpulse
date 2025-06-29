@@ -1,4 +1,3 @@
-
 import type { FC } from 'react';
 import { Suspense } from 'react';
 import { getPosts } from './actions';
@@ -40,16 +39,14 @@ const HomePage: FC = async () => {
         {/* The PostComposer is now dynamically loaded via a client component loader */}
         <PostComposerLoader sessionUser={user} />
         
-        {/* Title is rendered instantly on the server, improving LCP */}
-        <div className="border-b-2 border-primary/30 pb-3">
-            <h2 className="text-4xl font-bold text-primary pl-1 flex items-center">
-                <Rss className="w-9 h-9 mr-3 text-accent opacity-90" />
-                Nearby Pulses
-            </h2>
-        </div>
-        
-        {/* The PostFeed is suspended, showing a skeleton while it loads */}
+        {/* The PostFeed and its title are suspended, showing a skeleton while they load */}
         <Suspense fallback={<PostFeedSkeleton />}>
+          <div className="border-b-2 border-primary/30 pb-3">
+              <h2 className="text-4xl font-bold text-primary pl-1 flex items-center">
+                  <Rss className="w-9 h-9 mr-3 text-accent opacity-90" />
+                  Nearby Pulses
+              </h2>
+          </div>
           <FeedLoader />
         </Suspense>
       </div>
