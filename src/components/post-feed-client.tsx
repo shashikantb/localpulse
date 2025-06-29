@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { Post, User } from '@/lib/db-types';
 import { getPosts, registerDeviceToken, checkForNewerPosts } from '@/app/actions';
 import { PostCard } from '@/components/post-card';
-import { PostCardSkeleton } from './post-card-skeleton';
+import { PostFeedSkeleton } from './post-feed-skeleton';
 import { HASHTAG_CATEGORIES } from '@/components/post-form';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { MapPin, Terminal, Zap, Loader2, Filter, SlidersHorizontal, Rss, Tag, ChevronDown, Bell, BellOff, BellRing, ListPlus, RefreshCw, Lock, AlertTriangle } from 'lucide-react';
@@ -61,7 +61,7 @@ const POSTS_PER_PAGE = 5;
 const NEW_POST_POLL_INTERVAL = 30000;
 const POST_CACHE_KEY = 'localpulse-posts-cache';
 const LOCATION_CACHE_KEY = 'localpulse-location-cache';
-const CACHE_VERSION = 'v1.2'; // Increment to invalidate old cache structures
+const CACHE_VERSION = 'v1.3'; // Increment to invalidate old cache structures
 
 
 interface PostFeedClientProps {
@@ -72,12 +72,9 @@ interface PostFeedClientProps {
 const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) => {
   const { toast } = useToast();
   
-  // Initialize state with server-provided props to ensure consistency
   const [allPosts, setAllPosts] = useState<Post[]>(initialPosts);
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [isLoadingLocation, setIsLoadingLocation] = useState(true);
-
-  // Other state variables
   const [filteredAndSortedPosts, setFilteredAndSortedPosts] = useState<Post[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [latestPostIdClientKnows, setLatestPostIdClientKnows] = useState<number>(0);
@@ -91,7 +88,6 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
   const [notificationPermissionStatus, setNotificationPermissionStatus] = useState<'default' | 'loading' | 'granted' | 'denied'>('default');
   const [showTroubleshootingDialog, setShowTroubleshootingDialog] = useState(false);
   
-
   const calculateDistance = useCallback((lat1: number, lon1: number, lat2: number, lon2: number) => {
     if (!lat1 || !lon1 || !lat2 || !lon2) return Infinity;
     const R = 6371; // Radius of the Earth in km
@@ -106,11 +102,26 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
     return distance;
   }, []);
 
-  // Effect to get user location, now safe from hydration errors.
+  // Effect to get user location & hydrate state from cache, now safe from hydration errors.
   useEffect(() => {
     let isMounted = true;
+
+    // --- Hydrate state after initial render ---
     
-    // Try to get location from session cache first
+    // 1. Posts from localStorage
+    try {
+      const cachedItem = localStorage.getItem(POST_CACHE_KEY);
+      if (cachedItem) {
+        const cachedData = JSON.parse(cachedItem);
+        if (cachedData.version === CACHE_VERSION && Array.isArray(cachedData.posts) && cachedData.posts.length > 0 && isMounted && allPosts.length === 0) {
+          setAllPosts(cachedData.posts);
+        }
+      }
+    } catch (error) {
+      console.warn("Failed to read post cache:", error);
+    }
+
+    // 2. Location from sessionStorage
     const cachedLocationJSON = sessionStorage.getItem(LOCATION_CACHE_KEY);
     if (cachedLocationJSON) {
         try {
@@ -119,71 +130,56 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
                 setLocation(cachedLocation);
                 setIsLoadingLocation(false);
             }
-            return; // Exit if we found a cached location
         } catch (e) {
             console.warn("Failed to parse cached location:", e);
+            if (isMounted) setIsLoadingLocation(false);
         }
-    }
-
-    // If no cached location, get from navigator
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          if (isMounted) {
-            const newLocation = {
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude,
-            };
-            setLocation(newLocation);
-            sessionStorage.setItem(LOCATION_CACHE_KEY, JSON.stringify(newLocation));
-            setIsLoadingLocation(false);
-          }
-        },
-        (error) => {
-          if (isMounted) {
-            console.error("Geolocation error in feed:", error);
-            setIsLoadingLocation(false); // Stop loading even if there's an error
-          }
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-      );
     } else {
-        if (isMounted) setIsLoadingLocation(false);
-    }
-
-    return () => { isMounted = false; };
-  }, []); // Empty dependency array, runs once on mount
-
-
-  // Hydrate posts from localStorage if initialPosts from server is empty
-  useEffect(() => {
-    if (initialPosts.length === 0) {
-        try {
-            const cachedItem = localStorage.getItem(POST_CACHE_KEY);
-            if (cachedItem) {
-                const cachedData = JSON.parse(cachedItem);
-                if (cachedData.version === CACHE_VERSION && Array.isArray(cachedData.posts) && cachedData.posts.length > 0) {
-                    setAllPosts(cachedData.posts);
-                }
+       // 3. If no cached location, get from navigator
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            if (isMounted) {
+              const newLocation = {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+              };
+              setLocation(newLocation);
+              sessionStorage.setItem(LOCATION_CACHE_KEY, JSON.stringify(newLocation));
+              setIsLoadingLocation(false);
             }
-        } catch (error) {
-            console.warn("Failed to read post cache:", error);
-        }
+          },
+          (error) => {
+            if (isMounted) {
+              console.error("Geolocation error in feed:", error);
+              setIsLoadingLocation(false);
+            }
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+      } else {
+          if (isMounted) setIsLoadingLocation(false);
+      }
     }
-  }, [initialPosts]);
+    
+    return () => { isMounted = false; };
+  }, [allPosts.length]); // Re-run if initialPosts changes (e.g. from empty to filled by server)
 
 
   // Effect to save posts to cache
   useEffect(() => {
-    try {
-      const cacheData = {
-        version: CACHE_VERSION,
-        timestamp: new Date().toISOString(),
-        posts: allPosts.slice(0, POSTS_PER_PAGE * 2), // Cache up to 2 pages of posts
-      };
-      localStorage.setItem(POST_CACHE_KEY, JSON.stringify(cacheData));
-    } catch (error) {
-      console.warn("Failed to save posts to cache:", error);
+    // Only save if posts have been loaded
+    if (allPosts.length > 0) {
+      try {
+        const cacheData = {
+          version: CACHE_VERSION,
+          timestamp: new Date().toISOString(),
+          posts: allPosts.slice(0, POSTS_PER_PAGE * 2), // Cache up to 2 pages of posts
+        };
+        localStorage.setItem(POST_CACHE_KEY, JSON.stringify(cacheData));
+      } catch (error) {
+        console.warn("Failed to save posts to cache:", error);
+      }
     }
   }, [allPosts]);
 
@@ -552,7 +548,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
     }
   };
 
-  const showSkeletons = isLoadingLocation;
+  const showSkeletons = isLoadingLocation && allPosts.length === 0;
 
   if (allPosts.length === 0 && !isLoadingLocation) {
     return (
