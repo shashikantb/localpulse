@@ -2,7 +2,7 @@
 'use client';
 
 import type { FC } from 'react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Post, User } from '@/lib/db-types';
 import { getPosts, registerDeviceToken, checkForNewerPosts } from '@/app/actions';
 import { PostCard } from '@/components/post-card';
@@ -61,7 +61,7 @@ const POSTS_PER_PAGE = 5;
 const NEW_POST_POLL_INTERVAL = 30000;
 const POST_CACHE_KEY = 'localpulse-posts-cache';
 const LOCATION_CACHE_KEY = 'localpulse-location-cache';
-const CACHE_VERSION = 'v1.3'; // Increment to invalidate old cache structures
+const CACHE_VERSION = 'v1.4'; // Increment to invalidate old cache structures
 
 
 interface PostFeedClientProps {
@@ -75,6 +75,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
   const [allPosts, setAllPosts] = useState<Post[]>(initialPosts);
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [isLoadingLocation, setIsLoadingLocation] = useState(true);
+  const [showSkeletons, setShowSkeletons] = useState(true); // Start with skeletons
   const [filteredAndSortedPosts, setFilteredAndSortedPosts] = useState<Post[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [latestPostIdClientKnows, setLatestPostIdClientKnows] = useState<number>(0);
@@ -102,7 +103,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
     return distance;
   }, []);
 
-  // Effect to get user location & hydrate state from cache, now safe from hydration errors.
+  // Effect to get user location & hydrate state from cache.
   useEffect(() => {
     // 1. Posts from localStorage
     try {
@@ -126,7 +127,16 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
             setIsLoadingLocation(false);
         } catch (e) {
             console.warn("Failed to parse cached location:", e);
-            setIsLoadingLocation(false);
+            // If cache fails, fall through to fetch location
+            navigator.geolocation.getCurrentPosition(
+              (position) => {
+                const newLocation = { latitude: position.coords.latitude, longitude: position.coords.longitude };
+                setLocation(newLocation);
+                sessionStorage.setItem(LOCATION_CACHE_KEY, JSON.stringify(newLocation));
+                setIsLoadingLocation(false);
+              },
+              () => setIsLoadingLocation(false)
+            );
         }
     } else {
        // 3. If no cached location, get from navigator
@@ -152,6 +162,13 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
       }
     }
   }, [initialPosts.length]); 
+
+  // Once location is determined, hide the main skeleton
+  useEffect(() => {
+    if (!isLoadingLocation) {
+        setShowSkeletons(false);
+    }
+  }, [isLoadingLocation]);
 
 
   // Effect to save posts to cache
@@ -536,23 +553,25 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
              return <><Bell className="w-5 h-5 mr-2" /> <span className="hidden sm:inline">Notifications</span></>;
     }
   };
+  
+  const NoPostsContent = () => {
+    if (showSkeletons) return null; // Don't show this if we are still loading location
 
-  // While waiting for location on the client, render the skeleton to match the server's Suspense fallback.
-  // This prevents layout shift and hydration errors.
-  if (isLoadingLocation) {
-    return <PostFeedSkeleton />;
-  }
-
-  if (allPosts.length === 0) {
+    const hasFilters = activeFilterCount > 0;
+    
     return (
-        <Card className="text-center py-16 rounded-xl shadow-xl border border-border/40 bg-card/80 backdrop-blur-sm">
+       <Card className="text-center py-16 rounded-xl shadow-xl border border-border/40 bg-card/80 backdrop-blur-sm">
             <CardContent className="flex flex-col items-center">
                 <Zap className="mx-auto h-20 w-20 text-muted-foreground/30 mb-6" />
                 <p className="text-2xl text-muted-foreground font-semibold">The air is quiet here...</p>
-                <p className="text-md text-muted-foreground/80 mt-2">No pulses found. Be the first to post!</p>
+                 {hasFilters ? (
+                    <p className="text-md text-muted-foreground/80 mt-2">No pulses found for your current filters. Try adjusting them!</p>
+                ) : (
+                    <p className="text-md text-muted-foreground/80 mt-2">No pulses found nearby. Be the first to post!</p>
+                )}
             </CardContent>
         </Card>
-    );
+    )
   }
 
   return (
@@ -618,7 +637,11 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
       </div>
 
       <div className="space-y-6">
-        {filteredAndSortedPosts.length > 0 ? (
+        {showSkeletons ? (
+            <>
+                <PostFeedSkeleton />
+            </>
+        ) : filteredAndSortedPosts.length > 0 ? (
             <>
             {filteredAndSortedPosts.map((post, index) => (
                 <PostCard key={post.id} post={post} userLocation={location} sessionUser={sessionUser} isFirst={index === 0} />
@@ -631,13 +654,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
             )}
             </>
         ) : (
-          <Card className="text-center py-16 rounded-xl shadow-xl border border-border/40 bg-card/80 backdrop-blur-sm">
-              <CardContent className="flex flex-col items-center">
-              <Zap className="mx-auto h-20 w-20 text-muted-foreground/30 mb-6" />
-              <p className="text-2xl text-muted-foreground font-semibold">The air is quiet here...</p>
-              <p className="text-md text-muted-foreground/80 mt-2">No pulses found for your current filters. Try adjusting them!</p>
-              </CardContent>
-          </Card>
+          <NoPostsContent />
         )}
       </div>
     </>
