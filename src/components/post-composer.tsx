@@ -2,13 +2,13 @@
 'use client';
 
 import type { FC } from 'react';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { NewPost, User } from '@/lib/db-types';
 import { addPost } from '@/app/actions';
 import { PostForm } from '@/components/post-form';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Terminal, Zap, Loader2 } from 'lucide-react';
+import { Terminal, Zap } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 
 interface PostComposerProps {
@@ -19,55 +19,63 @@ const PostComposer: FC<PostComposerProps> = ({ sessionUser }) => {
   const { toast } = useToast();
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
-  const [loadingLocation, setLoadingLocation] = useState(true);
   const [formSubmitting, setFormSubmitting] = useState(false);
 
-  useEffect(() => {
-    setLoadingLocation(true);
-    if (navigator.geolocation) {
+  const getGeoLocation = (): Promise<{ latitude: number; longitude: number }> => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error("Geolocation is not supported by this browser."));
+        return;
+      }
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          setLocation({
+          resolve({
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
           });
-          setLocationError(null);
-          setLoadingLocation(false);
         },
         (error) => {
-          console.error("Geolocation error:", error);
           let errorMessage = `Error getting location: ${error.message}. Please ensure location services are enabled.`;
           if (error.code === error.PERMISSION_DENIED && error.message.includes('Only secure origins are allowed')) {
             errorMessage = `Error getting location: Location access is only available on secure (HTTPS) connections. Functionality might be limited. Enable HTTPS for your site.`;
           }
-          setLocationError(errorMessage);
-          setLoadingLocation(false);
+          reject(new Error(errorMessage));
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
-    } else {
-      setLocationError("Geolocation is not supported by this browser.");
-      setLoadingLocation(false);
-    }
-  }, []);
+    });
+  };
 
   const handleAddPost = async (content: string, hashtags: string[], mediaUrl?: string, mediaType?: 'image' | 'video', mentionedUserIds?: number[]) => {
-    if (!location) {
-      const errMessage = locationError || "Cannot determine location. Please enable location services and refresh.";
-      toast({ variant: "destructive", title: "Location Error", description: errMessage });
-      return;
-    }
     if (!content.trim()) {
       toast({ variant: "destructive", title: "Post Error", description: "Post content cannot be empty." });
       return;
     }
 
     setFormSubmitting(true);
+    setLocationError(null);
+    let currentLocationToPost = location;
+
+    // If we don't have location yet, get it now.
+    // This will trigger the browser permission prompt on the first post submission.
+    if (!currentLocationToPost) {
+        try {
+            toast({ title: "Getting Location", description: "Please allow location access to create a post." });
+            currentLocationToPost = await getGeoLocation();
+            setLocation(currentLocationToPost); // Cache it for next post
+        } catch (error: any) {
+            setLocationError(error.message);
+            toast({ variant: "destructive", title: "Location Error", description: error.message });
+            setFormSubmitting(false);
+            return;
+        }
+    }
+    
     try {
       const postData: NewPost = {
         content,
-        latitude: location.latitude,
-        longitude: location.longitude,
+        latitude: currentLocationToPost.latitude,
+        longitude: currentLocationToPost.longitude,
         mediaUrl: mediaUrl,
         mediaType: mediaType,
         hashtags: hashtags || [],
@@ -109,15 +117,9 @@ const PostComposer: FC<PostComposerProps> = ({ sessionUser }) => {
             <Zap className="w-7 h-7 mr-2 text-accent drop-shadow-sm" />
             Share Your Pulse
           </CardTitle>
-          {loadingLocation && (
-            <p className="text-sm text-muted-foreground flex items-center pt-1">
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Determining your location...
-            </p>
-          )}
         </CardHeader>
         <CardContent className="p-5">
-          <PostForm onSubmit={handleAddPost} submitting={formSubmitting || loadingLocation} />
+          <PostForm onSubmit={handleAddPost} submitting={formSubmitting} />
         </CardContent>
       </Card>
     </>
