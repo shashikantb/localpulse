@@ -79,7 +79,7 @@ const formSchema = z.object({
 type FormData = z.infer<typeof formSchema>;
 
 interface PostFormProps {
-  onSubmit: (content: string, hashtags: string[], mediaUrl?: string, mediaType?: 'image' | 'video', mentionedUserIds?: number[]) => Promise<void>;
+  onSubmit: (content: string, hashtags: string[], mediaType?: 'image' | 'video', mentionedUserIds?: number[]) => Promise<void>;
   submitting: boolean;
 }
 
@@ -253,7 +253,9 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
       const mentionedUserIds = taggedUsers.map(user => user.id);
       const hashtagsToSubmit = data.hashtags || [];
       
-      await onSubmit(data.content, hashtagsToSubmit, previewUrl ?? undefined, mediaType ?? undefined, mentionedUserIds);
+      // Do not pass the previewUrl (data URI) to the server.
+      // Only pass the media type. The server will generate a placeholder.
+      await onSubmit(data.content, hashtagsToSubmit, mediaType ?? undefined, mentionedUserIds);
 
       form.reset();
       removeMedia();

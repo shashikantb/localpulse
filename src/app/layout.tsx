@@ -29,6 +29,7 @@ export default async function RootLayout({
   return (
     <html lang="en" className="h-full">
       <head>
+        <meta charSet="UTF-8" />
         {/* Next.js will populate this head based on metadata and other conventions */}
       </head>
       <body className={`${geistSans.variable} antialiased bg-background text-foreground flex flex-col min-h-screen`}>

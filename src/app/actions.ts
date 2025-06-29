@@ -205,11 +205,18 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
 
     const cityName = await geocodeCoordinates(newPostData.latitude, newPostData.longitude);
 
+    let mediaUrlForDb: string | null = null;
+    if (newPostData.mediaType) {
+      // Use a placeholder to avoid storing large data URIs in the database,
+      // which was causing extreme performance issues.
+      mediaUrlForDb = 'https://placehold.co/800x450.png';
+    }
+
     const postDataForDb: DbNewPost = {
       content: newPostData.content,
       latitude: newPostData.latitude,
       longitude: newPostData.longitude,
-      mediaurl: newPostData.mediaUrl,
+      mediaurl: mediaUrlForDb,
       mediatype: newPostData.mediaType,
       hashtags: newPostData.hashtags || [], 
       city: cityName,

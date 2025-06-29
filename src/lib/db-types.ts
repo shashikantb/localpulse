@@ -57,12 +57,11 @@ export interface Post {
   mentions?: { id: number; name: string; }[];
 }
 
-// For creating a new post from the client, now authorId is optional
+// For creating a new post from the client, now authorId is optional and mediaUrl is removed
 export type NewPost = {
   content: string;
   latitude: number;
   longitude: number;
-  mediaUrl?: string | null;
   mediaType?: 'image' | 'video' | null;
   hashtags: string[];
   authorId?: number;
@@ -70,7 +69,7 @@ export type NewPost = {
 };
 
 // For inserting a new post into the DB, authorid is now nullable
-export type DbNewPost = Omit<NewPost, 'mediaUrl' | 'mediaType' | 'authorId'> & {
+export type DbNewPost = Omit<NewPost, 'mediaType' | 'authorId'> & {
   mediaurl?: string | null;
   mediatype?: 'image' | 'video' | null;
   city?: string | null;
