@@ -51,7 +51,6 @@ const Footer: FC = () => {
     const handlePageShow = (event: PageTransitionEvent) => {
         if (event.persisted) {
             // Page was restored from bfcache, refetch counts to ensure they're up-to-date
-            setIsLoadingCounts(true); // Force loading state
             visitRecordedRef.current = sessionStorage.getItem('sessionVisitRecorded_localpulse') === 'true'; // re-sync ref
             handleActivity();
         }
