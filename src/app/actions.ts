@@ -18,22 +18,29 @@ async function geocodeCoordinates(latitude: number, longitude: number): Promise<
   return "Unknown City";
 }
 
-const mapPostFromDb = (post: Post) => ({
-    ...post,
-    createdAt: post.createdat,
-    likeCount: post.likecount,
-    commentCount: post.commentcount,
-    notifiedCount: post.notifiedcount,
-    viewCount: post.viewcount,
-    // Sanitize URLs to prevent embedding large data URIs in the HTML payload
-    mediaUrl: isDataUrl(post.mediaurl) ? 'https://placehold.co/800x450.png' : post.mediaurl,
-    mediaType: isDataUrl(post.mediaurl) ? 'image' : post.mediatype,
-    authorProfilePictureUrl: isDataUrl(post.authorprofilepictureurl) ? 'https://placehold.co/200x200.png' : post.authorprofilepictureurl,
+const mapPostFromDb = (post: any): Post => ({
+    id: post.id,
+    content: post.content,
+    latitude: post.latitude,
+    longitude: post.longitude,
+    createdat: post.createdat,
+    likecount: post.likecount,
+    commentcount: post.commentcount,
+    notifiedcount: post.notifiedcount,
+    viewcount: post.viewcount,
+    city: post.city,
     hashtags: post.hashtags || [],
-    authorId: post.authorid,
-    authorName: post.authorname,
-    authorRole: post.authorrole,
+    authorid: post.authorid,
+    authorname: post.authorname,
+    authorrole: post.authorrole,
     mentions: post.mentions || [],
+    isLikedByCurrentUser: post.isLikedByCurrentUser,
+
+    // Sanitize URLs to prevent embedding large data URIs in the HTML payload.
+    // This is the critical fix for the enormous payload and LCP issue.
+    mediaurl: isDataUrl(post.mediaurl) ? 'https://placehold.co/800x450.png' : post.mediaurl,
+    mediatype: isDataUrl(post.mediaurl) ? 'image' : post.mediatype,
+    authorprofilepictureurl: isDataUrl(post.authorprofilepictureurl) ? 'https://placehold.co/200x200.png' : post.authorprofilepictureurl,
 });
 
 
@@ -56,7 +63,7 @@ export async function getPosts(options?: { page: number; limit: number }): Promi
             db.getMentionsForPostsDb(postIds)
         ]);
 
-        posts.forEach(post => {
+        posts.forEach((post: any) => {
             post.isLikedByCurrentUser = likedPostIds.has(post.id);
             post.mentions = mentionsMap.get(post.id) || [];
         });
@@ -81,7 +88,7 @@ export async function getAdminPosts(options?: { page: number; limit: number }): 
     
     if (posts.length > 0) {
       const mentionsMap = await db.getMentionsForPostsDb(posts.map(p => p.id));
-      posts.forEach(post => {
+      posts.forEach((post: any) => {
         post.mentions = mentionsMap.get(post.id) || [];
       });
     }
@@ -109,7 +116,7 @@ export async function getMediaPosts(options?: { page: number; limit: number }): 
             db.getMentionsForPostsDb(postIds)
         ]);
         
-        posts.forEach(post => {
+        posts.forEach((post: any) => {
             post.isLikedByCurrentUser = likedPostIds.has(post.id);
             post.mentions = mentionsMap.get(post.id) || [];
         });
@@ -416,7 +423,7 @@ export async function getPostsByUserId(userId: number): Promise<Post[]> {
             db.getMentionsForPostsDb(postIds)
         ]);
 
-        posts.forEach(post => {
+        posts.forEach((post: any) => {
             post.isLikedByCurrentUser = likedPostIds.has(post.id);
             post.mentions = mentionsMap.get(post.id) || [];
         });
@@ -442,8 +449,8 @@ export async function getPostById(postId: number): Promise<Post | null> {
             db.getMentionsForPostsDb(postIds)
         ]);
         
-        post.isLikedByCurrentUser = likedPostIds.has(post.id);
-        post.mentions = mentionsMap.get(post.id) || [];
+        (post as any).isLikedByCurrentUser = likedPostIds.has(post.id);
+        (post as any).mentions = mentionsMap.get(post.id) || [];
     }
 
     return mapPostFromDb(post);
