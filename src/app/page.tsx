@@ -3,11 +3,11 @@ import type { FC } from 'react';
 import { Suspense } from 'react';
 import { getPosts } from './actions';
 import PostFeedClient from '@/components/post-feed-client';
-import PostComposer from '@/components/post-composer'; // New component for the form
 import type { Post } from '@/lib/db-types';
 import { getSession } from './auth/actions';
 import { PostFeedSkeleton } from '@/components/post-feed-skeleton';
 import { Rss } from 'lucide-react';
+import PostComposerLoader from '@/components/post-composer-loader';
 
 const POSTS_PER_PAGE = 5;
 
@@ -37,8 +37,8 @@ const HomePage: FC = async () => {
   return (
     <main className="flex min-h-screen flex-col items-center p-4 sm:p-6 md:p-8 lg:p-16 bg-gradient-to-br from-background to-muted/30">
       <div className="container mx-auto max-w-2xl space-y-8 py-8">
-        {/* The PostComposer is rendered immediately, outside of Suspense */}
-        <PostComposer sessionUser={user} />
+        {/* The PostComposer is now dynamically loaded via a client component loader */}
+        <PostComposerLoader sessionUser={user} />
         
         {/* Title is rendered instantly on the server, improving LCP */}
         <div className="border-b-2 border-primary/30 pb-3">
