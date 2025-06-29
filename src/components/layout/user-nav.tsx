@@ -38,7 +38,7 @@ export const UserNav: FC<UserNavProps> = ({ user }) => {
           Making the button larger (48x48px) to ensure an easy-to-tap
           touch target on mobile devices.
         */}
-        <Button variant="ghost" className="relative h-12 w-12 rounded-full">
+        <Button variant="ghost" className="relative h-12 w-12 rounded-full" aria-label="User menu">
           {user ? (
             <Avatar className="h-10 w-10">
               <AvatarImage src={user.profilepictureurl ?? undefined} alt={user.name} />

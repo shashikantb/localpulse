@@ -587,6 +587,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
               className="shadow-lg hover:shadow-xl transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary"
               onClick={handleNotificationRegistration}
               disabled={notificationPermissionStatus === 'loading'}
+              aria-label="Toggle Notifications"
           >
               <NotificationButtonContent />
           </Button>
