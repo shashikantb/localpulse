@@ -251,5 +251,3 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts, sessionUser }) => {
 };
 
 export default ReelsViewer;
-
-    

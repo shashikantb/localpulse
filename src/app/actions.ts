@@ -7,6 +7,8 @@ import { revalidatePath } from 'next/cache';
 import { admin as firebaseAdmin } from '@/lib/firebase-admin';
 import { getSession } from './auth/actions';
 
+const isDataUrl = (url: string | null | undefined): boolean => !!url && url.startsWith('data:');
+
 async function geocodeCoordinates(latitude: number, longitude: number): Promise<string | null> {
   // ... (existing geocode placeholder logic)
   if (latitude > 40.5 && latitude < 40.9 && longitude > -74.3 && longitude < -73.7) return "New York";
@@ -23,13 +25,14 @@ const mapPostFromDb = (post: Post) => ({
     commentCount: post.commentcount,
     notifiedCount: post.notifiedcount,
     viewCount: post.viewcount,
-    mediaUrl: post.mediaurl,
-    mediaType: post.mediatype,
+    // Sanitize URLs to prevent embedding large data URIs in the HTML payload
+    mediaUrl: isDataUrl(post.mediaurl) ? 'https://placehold.co/800x450.png' : post.mediaurl,
+    mediaType: isDataUrl(post.mediaurl) ? 'image' : post.mediatype,
+    authorProfilePictureUrl: isDataUrl(post.authorprofilepictureurl) ? 'https://placehold.co/200x200.png' : post.authorprofilepictureurl,
     hashtags: post.hashtags || [],
     authorId: post.authorid,
     authorName: post.authorname,
     authorRole: post.authorrole,
-    authorProfilePictureUrl: post.authorprofilepictureurl,
     mentions: post.mentions || [],
 });
 
@@ -463,6 +466,11 @@ export async function getUserWithFollowInfo(profileUserId: number): Promise<{ us
 
   if (!profileUser) {
     return { user: null, stats: { followerCount: 0, followingCount: 0 }, isFollowing: false };
+  }
+
+  // Sanitize profile picture URL before sending to client
+  if (profileUser) {
+    profileUser.profilepictureurl = isDataUrl(profileUser.profilepictureurl) ? 'https://placehold.co/200x200.png' : profileUser.profilepictureurl;
   }
 
   let isFollowing = false;
