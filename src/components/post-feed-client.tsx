@@ -59,9 +59,7 @@ declare global {
 
 const POSTS_PER_PAGE = 5;
 const NEW_POST_POLL_INTERVAL = 30000;
-const POST_CACHE_KEY = 'localpulse-posts-cache';
 const LOCATION_CACHE_KEY = 'localpulse-location-cache';
-const CACHE_VERSION = 'v1.4'; // Increment to invalidate old cache structures
 
 
 interface PostFeedClientProps {
@@ -74,8 +72,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
   
   const [allPosts, setAllPosts] = useState<Post[]>(initialPosts);
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [isLoadingLocation, setIsLoadingLocation] = useState(true);
-  const [showSkeletons, setShowSkeletons] = useState(true); // Start with skeletons
+  const [isLoading, setIsLoading] = useState(true);
   const [filteredAndSortedPosts, setFilteredAndSortedPosts] = useState<Post[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [latestPostIdClientKnows, setLatestPostIdClientKnows] = useState<number>(0);
@@ -103,90 +100,56 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
     return distance;
   }, []);
 
-  // Effect to get user location & hydrate state from cache.
+  // Consolidated effect to get user location & initial posts.
   useEffect(() => {
-    // 1. Posts from localStorage
-    try {
-      const cachedItem = localStorage.getItem(POST_CACHE_KEY);
-      if (cachedItem) {
-        const cachedData = JSON.parse(cachedItem);
-        if (cachedData.version === CACHE_VERSION && Array.isArray(cachedData.posts) && cachedData.posts.length > 0 && initialPosts.length === 0) {
-          setAllPosts(cachedData.posts);
+    const loadInitialData = async () => {
+      // Promise to get posts, either from initial props or by fetching.
+      const fetchPostsPromise = initialPosts.length > 0
+        ? Promise.resolve(initialPosts)
+        : getPosts({ page: 1, limit: POSTS_PER_PAGE });
+      
+      // Promise to get location, using cache first.
+      const fetchLocationPromise = new Promise<{ latitude: number, longitude: number } | null>(resolve => {
+        const cachedLocationJSON = sessionStorage.getItem(LOCATION_CACHE_KEY);
+        if (cachedLocationJSON) {
+          try {
+            resolve(JSON.parse(cachedLocationJSON));
+            return;
+          } catch (e) { console.warn("Failed to parse cached location:", e); }
         }
-      }
-    } catch (error) {
-      console.warn("Failed to read post cache:", error);
-    }
-
-    // 2. Location from sessionStorage
-    const cachedLocationJSON = sessionStorage.getItem(LOCATION_CACHE_KEY);
-    if (cachedLocationJSON) {
-        try {
-            const cachedLocation = JSON.parse(cachedLocationJSON);
-            setLocation(cachedLocation);
-            setIsLoadingLocation(false);
-        } catch (e) {
-            console.warn("Failed to parse cached location:", e);
-            // If cache fails, fall through to fetch location
-            navigator.geolocation.getCurrentPosition(
-              (position) => {
-                const newLocation = { latitude: position.coords.latitude, longitude: position.coords.longitude };
-                setLocation(newLocation);
-                sessionStorage.setItem(LOCATION_CACHE_KEY, JSON.stringify(newLocation));
-                setIsLoadingLocation(false);
-              },
-              () => setIsLoadingLocation(false)
-            );
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              const newLocation = { latitude: position.coords.latitude, longitude: position.coords.longitude };
+              sessionStorage.setItem(LOCATION_CACHE_KEY, JSON.stringify(newLocation));
+              resolve(newLocation);
+            },
+            () => resolve(null), // Don't block on error
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+          );
+        } else {
+          resolve(null);
         }
-    } else {
-       // 3. If no cached location, get from navigator
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            const newLocation = {
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude,
-            };
-            setLocation(newLocation);
-            sessionStorage.setItem(LOCATION_CACHE_KEY, JSON.stringify(newLocation));
-            setIsLoadingLocation(false);
-          },
-          (error) => {
-            console.error("Geolocation error in feed:", error);
-            setIsLoadingLocation(false);
-          },
-          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-        );
-      } else {
-          setIsLoadingLocation(false);
-      }
-    }
-  }, [initialPosts.length]); 
-
-  // Once location is determined, hide the main skeleton
-  useEffect(() => {
-    if (!isLoadingLocation) {
-        setShowSkeletons(false);
-    }
-  }, [isLoadingLocation]);
-
-
-  // Effect to save posts to cache
-  useEffect(() => {
-    // Only save if posts have been loaded
-    if (allPosts.length > 0) {
+      });
+      
       try {
-        const cacheData = {
-          version: CACHE_VERSION,
-          timestamp: new Date().toISOString(),
-          posts: allPosts.slice(0, POSTS_PER_PAGE * 2), // Cache up to 2 pages of posts
-        };
-        localStorage.setItem(POST_CACHE_KEY, JSON.stringify(cacheData));
+        const [posts, loc] = await Promise.all([fetchPostsPromise, fetchLocationPromise]);
+        setAllPosts(posts);
+        setLocation(loc);
+        if (posts.length < POSTS_PER_PAGE) {
+          setHasMorePosts(false);
+        }
       } catch (error) {
-        console.warn("Failed to save posts to cache:", error);
+        console.error("Failed to load initial data:", error);
+        toast({ variant: 'destructive', title: 'Error', description: 'Could not load feed.' });
+      } finally {
+        setIsLoading(false);
       }
-    }
-  }, [allPosts]);
+    };
+    
+    loadInitialData();
+  }, [initialPosts, toast]); // This effect should run once on mount.
+
 
   const handleNotificationRegistration = async () => {
     if (notificationPermissionStatus === 'granted') {
@@ -292,8 +255,8 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
   }, [allPosts]);
 
   useEffect(() => {
-    // Do not run sorting/filtering until location is determined.
-    if (isLoadingLocation) {
+    // Do not run sorting/filtering until data is loaded.
+    if (isLoading) {
         return;
     }
 
@@ -354,7 +317,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
     }
     
     setFilteredAndSortedPosts(processedPosts);
-  }, [allPosts, location, distanceFilterKm, showAnyDistance, filterHashtags, sessionUser, calculateDistance, isLoadingLocation]);
+  }, [allPosts, location, distanceFilterKm, showAnyDistance, filterHashtags, sessionUser, calculateDistance, isLoading]);
 
 
   // Polling for new posts, now more bfcache-friendly.
@@ -555,7 +518,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
   };
   
   const NoPostsContent = () => {
-    if (showSkeletons) return null; // Don't show this if we are still loading location
+    if (isLoading) return null; // Don't show this if we are still loading
 
     const hasFilters = activeFilterCount > 0;
     
@@ -572,6 +535,10 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
             </CardContent>
         </Card>
     )
+  }
+
+  if (isLoading) {
+    return <PostFeedSkeleton />;
   }
 
   return (
@@ -637,11 +604,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
       </div>
 
       <div className="space-y-6">
-        {showSkeletons ? (
-            <>
-                <PostFeedSkeleton />
-            </>
-        ) : filteredAndSortedPosts.length > 0 ? (
+        {filteredAndSortedPosts.length > 0 ? (
             <>
             {filteredAndSortedPosts.map((post, index) => (
                 <PostCard key={post.id} post={post} userLocation={location} sessionUser={sessionUser} isFirst={index === 0} />

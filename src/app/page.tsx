@@ -1,7 +1,6 @@
 
 import type { FC } from 'react';
 import { Suspense } from 'react';
-import { getPosts } from './actions';
 import PostFeedClient from '@/components/post-feed-client';
 import type { Post } from '@/lib/db-types';
 import { getSession } from './auth/actions';
@@ -12,22 +11,12 @@ import PostComposerLoader, { PostComposerSkeleton } from '@/components/post-comp
 const POSTS_PER_PAGE = 5;
 
 // This async component will be wrapped in Suspense.
-// It fetches the data, and its rendering is deferred until the data is ready.
+// It now only fetches the user session.
 async function FeedLoader() {
   const { user } = await getSession();
-  let initialPosts: Post[] = [];
-
-  try {
-    initialPosts = await getPosts({ page: 1, limit: POSTS_PER_PAGE });
-  } catch (error) {
-    console.error("Error fetching initial posts for server component:", error);
-    // In case of an error, we'll render the component with an empty array.
-    // The component itself can then show an error message.
-    initialPosts = [];
-  }
-  
-  // PostFeedClient is now just the feed, not the form.
-  return <PostFeedClient initialPosts={initialPosts} sessionUser={user} />;
+  // By passing an empty array, we force the client to fetch the initial data.
+  // This makes the initial server-rendered page much smaller and faster.
+  return <PostFeedClient initialPosts={[]} sessionUser={user} />;
 }
 
 // This new component fetches the session data for the composer inside a Suspense boundary.
