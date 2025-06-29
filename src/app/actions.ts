@@ -208,7 +208,6 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
   try {
     const { user } = await getSession(); // user can be null
 
-    // If authorId is provided, it must match the logged-in user.
     if (newPostData.authorId && (!user || user.id !== newPostData.authorId)) {
         return { error: 'Authentication mismatch. You can only post for yourself.' };
     }
@@ -216,9 +215,13 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
     const cityName = await geocodeCoordinates(newPostData.latitude, newPostData.longitude);
 
     let mediaUrlForDb: string | null = null;
+    // This logic is now deprecated in favor of checking mediaData, but is kept for safety.
     if (newPostData.mediaType) {
-      // Use a placeholder to avoid storing large data URIs in the database,
-      // which was causing extreme performance issues.
+      mediaUrlForDb = 'https://placehold.co/800x450.png';
+    }
+    // The presence of mediaData (a data URI) indicates a file was uploaded.
+    // This is more robust and is the primary check.
+    if (newPostData.mediaData && isDataUrl(newPostData.mediaData)) {
       mediaUrlForDb = 'https://placehold.co/800x450.png';
     }
 
@@ -230,16 +233,15 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
       mediatype: newPostData.mediaType,
       hashtags: newPostData.hashtags || [], 
       city: cityName,
-      authorid: user ? user.id : null, // Use logged-in user's ID or null
+      authorid: user ? user.id : null,
       mentionedUserIds: newPostData.mentionedUserIds || [],
     };
 
     const addedPostDb = await db.addPostDb(postDataForDb);
     
-    // Fetch the full post details, including joined author info
-    const allPosts = await db.getPostsDb(undefined, user?.role);
-    const finalPost = allPosts.find(p => p.id === addedPostDb.id);
-
+    // Efficiently fetch just the newly created post with all its author details.
+    // This avoids refetching all posts and prevents potential bugs with unsanitized data.
+    const finalPost = await db.getPostByIdDb(addedPostDb.id);
 
     if (!finalPost) {
         return { error: 'Failed to retrieve post after creation.' };
