@@ -3,12 +3,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 export const PostFeedSkeleton = () => {
   return (
-    <div className="space-y-8">
-      {/* Skeleton for the Title, matching the structure in page.tsx */}
-      <div className="border-b-2 border-primary/30 pb-3">
-        <Skeleton className="h-10 w-3/4 max-w-sm" />
-      </div>
-
+    <div className="space-y-8 pt-4">
       {/* Skeletons for PostCards */}
       {[...Array(2)].map((_, i) => (
         <Card key={i} className="overflow-hidden shadow-xl rounded-xl">

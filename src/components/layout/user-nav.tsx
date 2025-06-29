@@ -37,6 +37,7 @@ export const UserNav: FC<UserNavProps> = ({ user }) => {
         {/*
           Making the button larger (48x48px) to ensure an easy-to-tap
           touch target on mobile devices.
+          FIX: Added aria-label for accessibility.
         */}
         <Button variant="ghost" className="relative h-12 w-12 rounded-full" aria-label="User menu">
           {user ? (

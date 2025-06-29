@@ -129,8 +129,12 @@ export async function updateUserProfilePicture(formData: FormData): Promise<{ su
     return { success: false, error: 'No image data provided.' };
   }
 
+  // CRITICAL FIX: Do not store the large data URI. Store a placeholder instead.
+  // This prevents bloating the database and the initial HTML payload.
+  const imageUrlForDb = 'https://placehold.co/200x200.png';
+
   try {
-    await updateUserProfilePictureDb(user.id, image);
+    await updateUserProfilePictureDb(user.id, imageUrlForDb);
     revalidatePath(`/users/${user.id}`);
     revalidatePath('/', 'layout'); // To update the user-nav avatar
     return { success: true };
