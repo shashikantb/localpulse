@@ -60,7 +60,28 @@ declare global {
 
 const POSTS_PER_PAGE = 5;
 const NEW_POST_POLL_INTERVAL = 30000;
-const LOCATION_CACHE_KEY = 'localpulse-location-cache';
+const POSTS_CACHE_KEY = 'localpulse-posts-cache';
+const CACHE_VERSION = 'v1.1'; // Increment to invalidate old cache structures
+
+
+// Helper to get initial posts from cache or server data
+const getInitialCachedPosts = (serverInitialPosts: Post[]): Post[] => {
+  if (typeof window === 'undefined') {
+    return serverInitialPosts;
+  }
+  try {
+    const cachedItem = localStorage.getItem(POSTS_CACHE_KEY);
+    if (cachedItem) {
+      const cachedData = JSON.parse(cachedItem);
+      if (cachedData.version === CACHE_VERSION && Array.isArray(cachedData.posts)) {
+        return cachedData.posts.length > 0 ? cachedData.posts : serverInitialPosts;
+      }
+    }
+  } catch (error) {
+    console.warn("Failed to read posts cache:", error);
+  }
+  return serverInitialPosts;
+};
 
 
 interface PostFeedClientProps {
@@ -70,10 +91,10 @@ interface PostFeedClientProps {
 const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
   const { toast } = useToast();
   
-  const [allPosts, setAllPosts] = useState<Post[]>(initialPosts);
+  const [allPosts, setAllPosts] = useState<Post[]>(() => getInitialCachedPosts(initialPosts));
   const [sessionUser, setSessionUser] = useState<User | null>(null);
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(allPosts.length === 0);
   const [filteredAndSortedPosts, setFilteredAndSortedPosts] = useState<Post[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [latestPostIdClientKnows, setLatestPostIdClientKnows] = useState<number>(0);
@@ -101,31 +122,33 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
     return distance;
   }, []);
 
+  // Effect to save posts to cache
+  useEffect(() => {
+    try {
+      const cacheData = {
+        version: CACHE_VERSION,
+        timestamp: new Date().toISOString(),
+        posts: allPosts.slice(0, POSTS_PER_PAGE * 2), // Cache up to 2 pages of posts
+      };
+      localStorage.setItem(POSTS_CACHE_KEY, JSON.stringify(cacheData));
+    } catch (error) {
+      console.warn("Failed to save posts to cache:", error);
+    }
+  }, [allPosts]);
+
+
   // Consolidated effect to get user session, location & initial posts.
   useEffect(() => {
     const loadInitialData = async () => {
-      // Promise to get posts
-      const fetchPostsPromise = initialPosts.length > 0
-        ? Promise.resolve(initialPosts)
-        : getPosts({ page: 1, limit: POSTS_PER_PAGE });
-      
       // Promise to get session
       const fetchSessionPromise = getSession();
 
       // Promise to get location
       const fetchLocationPromise = new Promise<{ latitude: number, longitude: number } | null>(resolve => {
-        const cachedLocationJSON = sessionStorage.getItem(LOCATION_CACHE_KEY);
-        if (cachedLocationJSON) {
-          try {
-            resolve(JSON.parse(cachedLocationJSON));
-            return;
-          } catch (e) { console.warn("Failed to parse cached location:", e); }
-        }
         if (navigator.geolocation) {
           navigator.geolocation.getCurrentPosition(
             (position) => {
               const newLocation = { latitude: position.coords.latitude, longitude: position.coords.longitude };
-              sessionStorage.setItem(LOCATION_CACHE_KEY, JSON.stringify(newLocation));
               resolve(newLocation);
             },
             () => resolve(null), // Don't block on error
@@ -135,18 +158,29 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
           resolve(null);
         }
       });
+
+      // Promise to get posts if cache was empty
+      const fetchPostsPromise = allPosts.length === 0
+        ? getPosts({ page: 1, limit: POSTS_PER_PAGE })
+        : Promise.resolve(allPosts);
       
       try {
         // Fetch everything in parallel
-        const [posts, session, loc] = await Promise.all([fetchPostsPromise, fetchSessionPromise, fetchLocationPromise]);
+        const [session, loc, posts] = await Promise.all([fetchSessionPromise, fetchLocationPromise, fetchPostsPromise]);
         
-        setAllPosts(posts);
         setSessionUser(session.user);
         setLocation(loc);
 
-        if (posts.length < POSTS_PER_PAGE) {
-          setHasMorePosts(false);
+        // Only update posts if we fetched them (i.e., cache was empty)
+        if (allPosts.length === 0 && posts.length > 0) {
+            setAllPosts(posts);
+            if (posts.length < POSTS_PER_PAGE) {
+              setHasMorePosts(false);
+            }
+        } else if (allPosts.length > 0 && allPosts.length < POSTS_PER_PAGE) {
+            setHasMorePosts(false);
         }
+
       } catch (error) {
         console.error("Failed to load initial data:", error);
         toast({ variant: 'destructive', title: 'Error', description: 'Could not load feed.' });
@@ -156,7 +190,9 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
     };
     
     loadInitialData();
-  }, [initialPosts, toast]); // This effect should run once on mount.
+  // We only want this effect to run once on mount. `allPosts.length` is used to decide if we need to fetch.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
 
   const handleNotificationRegistration = async () => {
@@ -633,3 +669,5 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
 };
 
 export default PostFeedClient;
+
+    
