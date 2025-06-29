@@ -4,6 +4,7 @@
 import type { User } from '@/lib/db-types';
 import dynamic from 'next/dynamic';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 // Dynamically import UserNav with SSR disabled. This is the correct pattern
 // for using ssr:false, as it's now inside a Client Component.
@@ -17,7 +18,18 @@ interface HeaderUserNavProps {
 }
 
 export default function HeaderUserNav({ user }: HeaderUserNavProps) {
-  // This client component wrapper allows the parent (Header) to remain a Server Component
-  // while still dynamically loading the UserNav without server-side rendering.
+  const isMobile = useIsMobile();
+
+  // During SSR or before the hook determines the screen size, render a skeleton.
+  if (isMobile === undefined) {
+    return <Skeleton className="h-10 w-10 rounded-full" />;
+  }
+
+  // If it's mobile, don't render the header navigation.
+  if (isMobile) {
+    return null;
+  }
+
+  // Otherwise, render the user navigation for desktop.
   return <UserNav user={user} />;
 }

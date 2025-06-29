@@ -9,6 +9,8 @@ import { cn } from '@/lib/utils';
 import type { User } from '@/lib/db-types';
 import dynamic from 'next/dynamic';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useIsMobile } from '@/hooks/use-mobile';
+
 
 // Defer loading of the UserNav component to prevent its JavaScript from blocking the initial render.
 const UserNav = dynamic(() => import('./user-nav').then((mod) => mod.UserNav), {
@@ -29,6 +31,12 @@ interface BottomNavBarProps {
 
 const BottomNavBar: FC<BottomNavBarProps> = ({ user }) => {
   const pathname = usePathname();
+  const isMobile = useIsMobile();
+
+  // During SSR or if not on a mobile device, render nothing.
+  if (isMobile === undefined || !isMobile) {
+    return null;
+  }
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-around border-t border-border/40 bg-background/95 shadow-[0_-2px_10px_-3px_rgba(0,0,0,0.1)] backdrop-blur-md sm:hidden">

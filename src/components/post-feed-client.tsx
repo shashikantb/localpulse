@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { FC } from 'react';
@@ -107,26 +108,6 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
   const [notificationPermissionStatus, setNotificationPermissionStatus] = useState<'default' | 'loading' | 'granted' | 'denied'>('default');
   const [showTroubleshootingDialog, setShowTroubleshootingDialog] = useState(false);
   
-  const getGeoLocation = (): Promise<{ latitude: number; longitude: number }> => {
-    return new Promise((resolve, reject) => {
-      if (!navigator.geolocation) {
-        reject(new Error("Geolocation is not supported by this browser."));
-        return;
-      }
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          resolve({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          });
-        },
-        (error) => {
-          reject(error);
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-      );
-    });
-  };
 
   const calculateDistance = useCallback((lat1: number, lon1: number, lat2: number, lon2: number) => {
     if (!lat1 || !lon1 || !lat2 || !lon2) return Infinity;
@@ -142,20 +123,28 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
     return distance;
   }, []);
 
+  // Effect to get user location
   useEffect(() => {
     setIsLoadingLocation(true);
-    getGeoLocation()
-      .then(loc => {
-        setLocation(loc);
-        setIsLoadingLocation(false);
-        toast({ title: "Location Found!", description: "You can now sort by distance." });
-      })
-      .catch((error: Error) => {
-        console.warn("Geolocation error in feed:", error.message);
-        setIsLoadingLocation(false);
-      });
-  }, [toast]);
-
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setLocation({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          });
+          setIsLoadingLocation(false);
+        },
+        (error) => {
+          console.error("Geolocation error in feed:", error);
+          setIsLoadingLocation(false);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    } else {
+      setIsLoadingLocation(false);
+    }
+  }, []);
 
   // Effect to save posts to cache
   useEffect(() => {
@@ -340,56 +329,47 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
     let intervalId: NodeJS.Timeout | null = null;
 
     const pollForNewPosts = async () => {
-      // Don't poll if the page is hidden
-      if (document.hidden) return; 
       try {
         const result = await checkForNewerPosts(latestPostIdClientKnows);
         if (result.hasNewerPosts) {
           setNewPulsesAvailable(true);
           setNewPulsesCount(result.count);
-          stopPolling(); // Stop once new posts are found
+          // Once we know there are new posts, we can stop polling.
+          if (intervalId) clearInterval(intervalId);
+          intervalId = null;
         }
       } catch (error) {
         console.warn("Polling for new posts failed:", error);
       }
     };
-    
-    const startPolling = () => {
-        if (newPulsesAvailable || intervalId) return;
-        pollForNewPosts(); // Poll immediately
-        intervalId = setInterval(pollForNewPosts, NEW_POST_POLL_INTERVAL);
-    };
-    
-    const stopPolling = () => {
-        if (intervalId) {
-            clearInterval(intervalId);
-            intervalId = null;
-        }
-    };
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        stopPolling();
+        // Tab is hidden, clear the interval to stop polling.
+        if (intervalId) clearInterval(intervalId);
+        intervalId = null;
       } else {
-        startPolling();
+        // Tab is visible, start a new interval if one isn't already running.
+        if (!newPulsesAvailable) { // Don't restart polling if we already found new posts
+            pollForNewPosts(); // Poll immediately
+            if (intervalId === null) {
+              intervalId = setInterval(pollForNewPosts, NEW_POST_POLL_INTERVAL);
+            }
+        }
       }
     };
-    
-    const handlePageShow = (event: PageTransitionEvent) => {
-        // When a page is restored from bfcache, restart polling
-        if (event.persisted) {
-            handleVisibilityChange();
-        }
-    };
 
-    handleVisibilityChange(); // Initial start
-    window.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('pageshow', handlePageShow);
+    // Run on initial mount
+    handleVisibilityChange();
 
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Cleanup function
     return () => {
-      stopPolling();
-      window.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('pageshow', handlePageShow);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
     };
   }, [isLoadingLocation, latestPostIdClientKnows, newPulsesAvailable]);
 
@@ -449,7 +429,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
       <SheetHeader>
         <SheetTitle className="flex items-center"><Filter className="w-5 h-5 mr-2 text-accent" /> Filter Pulses</SheetTitle>
         <SheetDescription>
-          Adjust filters to find relevant pulses. Enable location for distance-based sorting.
+          Adjust filters to find relevant pulses. Your current location is used for distance.
         </SheetDescription>
       </SheetHeader>
       <ScrollArea className="h-[calc(100vh-16rem)] pr-3">
@@ -471,12 +451,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
               disabled={!location || isLoadingMore}
               aria-label="Distance filter"
             />
-            {isLoadingLocation && (
-              <p className="text-xs text-muted-foreground text-center pt-1">Getting location...</p>
-            )}
-            {!location && !isLoadingLocation && (
-              <p className="text-xs text-muted-foreground text-center pt-1">Enable location services to filter by distance.</p>
-            )}
+            {!location && <p className="text-xs text-destructive mt-1">Enable location services to use distance filter.</p>}
           </div>
 
           <div className="space-y-3">
@@ -603,7 +578,6 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
               className="shadow-lg hover:shadow-xl transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary"
               onClick={handleNotificationRegistration}
               disabled={notificationPermissionStatus === 'loading'}
-              aria-label="Toggle Notifications"
           >
               <NotificationButtonContent />
           </Button>
