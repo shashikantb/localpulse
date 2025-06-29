@@ -40,7 +40,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from './ui/badge';
 
-const MAX_VIDEO_UPLOAD_LIMIT = 5 * 1024 * 1024; // 5MB
+const MAX_VIDEO_UPLOAD_LIMIT = 50 * 1024 * 1024; // 50MB
 const MAX_IMAGE_UPLOAD_LIMIT = 10 * 1024 * 1024; // 10MB (before client-side compression)
 
 
@@ -507,5 +507,3 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
     </Form>
   );
 };
-
-    
