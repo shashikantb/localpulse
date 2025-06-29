@@ -4,10 +4,10 @@ import { Geist } from 'next/font/google';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 import Footer from '@/components/layout/footer';
-import BottomNavBar from '@/components/layout/bottom-nav-bar';
 import { AppInstallPrompt } from '@/components/app-install-prompt';
 import Header from '@/components/layout/header';
 import { getSession } from './auth/actions';
+import BottomNavBar from '@/components/layout/bottom-nav-bar';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -38,7 +38,7 @@ export default async function RootLayout({
           {children}
         </div>
         <Footer />
-        <BottomNavBar user={user} /> {/* Pass user session to BottomNavBar */}
+        <BottomNavBar user={user} />
         <AppInstallPrompt />
         <Toaster />
       </body>
