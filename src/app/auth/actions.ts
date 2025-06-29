@@ -81,11 +81,13 @@ export async function login(email: string, password: string): Promise<{ success:
     const sessionPayload = { userId: user.id };
     const sessionToken = await encrypt(sessionPayload);
     const maxAgeInSeconds = 30 * 24 * 60 * 60; // 30 days
+    const expires = new Date(Date.now() + maxAgeInSeconds * 1000);
 
     cookies().set(USER_COOKIE_NAME, sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       maxAge: maxAgeInSeconds,
+      expires: expires,
       sameSite: 'lax',
       path: '/',
     });
