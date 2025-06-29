@@ -18,31 +18,7 @@ async function geocodeCoordinates(latitude: number, longitude: number): Promise<
   return "Unknown City";
 }
 
-const mapPostFromDb = (post: any): Post => ({
-    id: post.id,
-    content: post.content,
-    latitude: post.latitude,
-    longitude: post.longitude,
-    createdat: post.createdat,
-    likecount: post.likecount,
-    commentcount: post.commentcount,
-    notifiedcount: post.notifiedcount,
-    viewcount: post.viewcount,
-    city: post.city,
-    hashtags: post.hashtags || [],
-    authorid: post.authorid,
-    authorname: post.authorname,
-    authorrole: post.authorrole,
-    mentions: post.mentions || [],
-    isLikedByCurrentUser: post.isLikedByCurrentUser,
-
-    // Sanitize URLs to prevent embedding large data URIs in the HTML payload.
-    // This is the critical fix for the enormous payload and LCP issue.
-    mediaurl: isDataUrl(post.mediaurl) ? 'https://placehold.co/800x450.png' : post.mediaurl,
-    mediatype: isDataUrl(post.mediaurl) ? 'image' : post.mediatype,
-    authorprofilepictureurl: isDataUrl(post.authorprofilepictureurl) ? 'https://placehold.co/200x200.png' : post.authorprofilepictureurl,
-});
-
+// The mapPostFromDb function is no longer needed as sanitization happens at the DB query level.
 
 export async function getPosts(options?: { page: number; limit: number }): Promise<Post[]> {
   try {
@@ -57,7 +33,6 @@ export async function getPosts(options?: { page: number; limit: number }): Promi
     if (posts.length > 0) {
         const postIds = posts.map(p => p.id);
         
-        // Fetch likes and mentions in parallel to reduce sequential database calls
         const [likedPostIds, mentionsMap] = await Promise.all([
             user ? db.getLikedPostIdsForUserDb(user.id, postIds) : Promise.resolve(new Set<number>()),
             db.getMentionsForPostsDb(postIds)
@@ -69,14 +44,13 @@ export async function getPosts(options?: { page: number; limit: number }): Promi
         });
     }
     
-    return posts.map(mapPostFromDb);
+    return posts;
   } catch (error) {
     console.error("Server action error fetching posts:", error);
     return [];
   }
 }
 
-// New function specifically for the admin panel to avoid dynamic server usage errors
 export async function getAdminPosts(options?: { page: number; limit: number }): Promise<Post[]> {
   try {
     const dbOptions = options ? {
@@ -93,7 +67,7 @@ export async function getAdminPosts(options?: { page: number; limit: number }): 
       });
     }
     
-    return posts.map(mapPostFromDb);
+    return posts;
   } catch (error) {
     console.error("Server action error fetching admin posts:", error);
     return [];
@@ -122,7 +96,7 @@ export async function getMediaPosts(options?: { page: number; limit: number }): 
         });
     }
 
-    return posts.map(mapPostFromDb);
+    return posts;
   } catch (error) {
     console.error("Server action error fetching media posts:", error);
     return [];
@@ -215,12 +189,9 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
     const cityName = await geocodeCoordinates(newPostData.latitude, newPostData.longitude);
 
     let mediaUrlForDb: string | null = null;
-    // This logic is now deprecated in favor of checking mediaData, but is kept for safety.
     if (newPostData.mediaType) {
       mediaUrlForDb = 'https://placehold.co/800x450.png';
     }
-    // The presence of mediaData (a data URI) indicates a file was uploaded.
-    // This is more robust and is the primary check.
     if (newPostData.mediaData && isDataUrl(newPostData.mediaData)) {
       mediaUrlForDb = 'https://placehold.co/800x450.png';
     }
@@ -239,8 +210,6 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
 
     const addedPostDb = await db.addPostDb(postDataForDb);
     
-    // Efficiently fetch just the newly created post with all its author details.
-    // This avoids refetching all posts and prevents potential bugs with unsanitized data.
     const finalPost = await db.getPostByIdDb(addedPostDb.id);
 
     if (!finalPost) {
@@ -249,12 +218,11 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
 
     revalidatePath('/');
     
-    // Always send notifications for any new post, including to mentioned users
     sendNotificationsForNewPost(finalPost, postDataForDb.mentionedUserIds).catch(err => {
       console.error("Background notification sending failed:", err);
     });
 
-    return { post: mapPostFromDb(finalPost) };
+    return { post: finalPost };
   } catch (error: any) {
     console.error("Server action error adding post:", error);
     return { error: error.message || 'Failed to add post due to an unknown server error.' };
@@ -283,10 +251,8 @@ export async function toggleLikePost(postId: number): Promise<{ post?: Post; err
     if (updatedPost) {
       revalidatePath('/'); 
       revalidatePath(`/posts/${postId}`);
-      // Manually set the isLikedByCurrentUser flag for the response
-      const finalPost = mapPostFromDb(updatedPost);
-      finalPost.isLikedByCurrentUser = !hasLiked;
-      return { post: finalPost };
+      updatedPost.isLikedByCurrentUser = !hasLiked;
+      return { post: updatedPost };
     }
     return { error: 'Post not found or failed to update.' };
   } catch (error: any) {
@@ -303,7 +269,7 @@ export async function likePostAnonymously(postId: number): Promise<{ post?: Post
     if (updatedPost) {
       revalidatePath('/'); 
       revalidatePath(`/posts/${postId}`);
-      return { post: mapPostFromDb(updatedPost) };
+      return { post: updatedPost };
     }
     return { error: 'Post not found or failed to update.' };
   } catch (error: any) {
@@ -343,13 +309,11 @@ export async function recordPostView(postId: number): Promise<{ success: boolean
     await db.incrementPostViewCountDb(postId);
     return { success: true };
   } catch (error) {
-    // Log but don't surface to the user, it's a background task.
     console.error(`Server action error recording view for post ${postId}:`, error);
     return { success: false };
   }
 }
 
-// ... (other existing functions like recordVisitAndGetCounts, registerDeviceToken, etc.)
 export async function recordVisitAndGetCounts(): Promise<VisitorCounts> {
   try {
     const counts = await db.incrementAndGetVisitorCountsDb();
@@ -402,7 +366,6 @@ export async function checkForNewerPosts(latestPostIdClientKnows: number): Promi
   }
 }
 
-// New actions for user profile pages
 export async function getUser(userId: number): Promise<User | null> {
     try {
         const user = await db.getUserByIdDb(userId);
@@ -431,7 +394,7 @@ export async function getPostsByUserId(userId: number): Promise<Post[]> {
         });
     }
     
-    return posts.map(mapPostFromDb);
+    return posts;
   } catch (error) {
     console.error(`Server action error fetching posts for user ${userId}:`, error);
     return [];
@@ -455,7 +418,7 @@ export async function getPostById(postId: number): Promise<Post | null> {
         (post as any).mentions = mentionsMap.get(post.id) || [];
     }
 
-    return mapPostFromDb(post);
+    return post;
   } catch (error) {
     console.error(`Server action error fetching post ${postId}:`, error);
     return null;
@@ -477,10 +440,10 @@ export async function getUserWithFollowInfo(profileUserId: number): Promise<{ us
     return { user: null, stats: { followerCount: 0, followingCount: 0 }, isFollowing: false };
   }
 
-  // Sanitize profile picture URL before sending to client
-  if (profileUser) {
-    profileUser.profilepictureurl = isDataUrl(profileUser.profilepictureurl) ? 'https://placehold.co/200x200.png' : profileUser.profilepictureurl;
-  }
+  // Sanitization is now handled by the DB query, so this check is no longer needed.
+  // if (profileUser) {
+  //   profileUser.profilepictureurl = isDataUrl(profileUser.profilepictureurl) ? 'https://placehold.co/200x200.png' : profileUser.profilepictureurl;
+  // }
 
   let isFollowing = false;
   if (sessionUser && sessionUser.id !== profileUserId) {
