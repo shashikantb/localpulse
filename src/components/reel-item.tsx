@@ -1,39 +1,25 @@
 
 'use client';
-import React, { type FC, FormEvent } from 'react'; // Import React
+import React, { type FC } from 'react'; // Import React
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Image from 'next/image';
+import dynamic from 'next/dynamic';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import type { Post, Comment as CommentType, User } from '@/lib/db-types';
 import { formatDistanceToNowStrict } from 'date-fns';
-import { UserCircle, MessageCircle, Send, Share2, ThumbsUp, PlayCircle, VolumeX, Volume2 } from 'lucide-react';
+import { UserCircle, MessageCircle, Share2, ThumbsUp, PlayCircle, VolumeX, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { toggleLikePost, addComment, getComments, likePostAnonymously } from '@/app/actions';
+import { toggleLikePost, likePostAnonymously } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { ReelCommentsSkeleton } from './reel-comments-skeleton';
 
-const CommentCard: FC<{ comment: CommentType }> = ({ comment }) => {
-  return (
-    <div className="flex space-x-2 py-2 pl-1 border-l-2 border-primary/20 hover:border-primary/50 transition-colors duration-200 bg-transparent hover:bg-white/5 rounded-r-md">
-      <Avatar className="h-7 w-7 border border-white/30 flex-shrink-0 mt-0.5 shadow-sm">
-        <AvatarFallback className="bg-gray-700 text-xs font-semibold text-white/80">
-          {comment.author.substring(0, 1).toUpperCase()}
-        </AvatarFallback>
-      </Avatar>
-      <div className="flex-1 space-y-0.5">
-        <div className="flex items-baseline justify-between">
-          <h4 className="text-xs font-semibold text-white/90">{comment.author}</h4>
-          <p className="text-[10px] text-gray-400">
-            {formatDistanceToNowStrict(new Date(comment.createdat), { addSuffix: true })}
-          </p>
-        </div>
-        <p className="text-xs text-white/80 whitespace-pre-wrap break-words">{comment.content}</p>
-      </div>
-    </div>
-  );
-};
+const ReelComments = dynamic(() => import('./reel-comments'), {
+    loading: () => <ReelCommentsSkeleton />,
+    ssr: false,
+});
+
 
 const getAnonymousLikedPosts = (): number[] => {
     if (typeof window === "undefined") return [];
@@ -59,10 +45,7 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
   const [isLikedByClient, setIsLikedByClient] = useState(false);
   const [displayLikeCount, setDisplayLikeCount] = useState<number>(post.likecount);
   const [isLiking, setIsLiking] = useState<boolean>(false);
-  const [comments, setComments] = useState<CommentType[]>([]);
-  const [newComment, setNewComment] = useState('');
-  const [isLoadingComments, setIsLoadingComments] = useState(false);
-  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [displayCommentCount, setDisplayCommentCount] = useState<number>(post.commentcount);
   const [showComments, setShowComments] = useState(false);
   const [currentOrigin, setCurrentOrigin] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -75,17 +58,19 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
     }
   }, []);
   
+  // This effect resets the state of the component when the post prop changes.
   useEffect(() => {
     setDisplayLikeCount(post.likecount);
+    setDisplayCommentCount(post.commentcount);
     if (sessionUser) {
         setIsLikedByClient(post.isLikedByCurrentUser || false);
     } else {
         setIsLikedByClient(getAnonymousLikedPosts().includes(post.id));
     }
-    setComments([]);
+    // Reset interaction states for the new reel
     setShowComments(false);
     setIsInternallyMuted(true);
-  }, [post.id, post.likecount, post.isLikedByCurrentUser, sessionUser]);
+  }, [post.id, post.likecount, post.commentcount, post.isLikedByCurrentUser, sessionUser]);
 
 
   useEffect(() => {
@@ -116,26 +101,6 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
       videoElement.pause();
     }
   }, [isActive, post.mediatype, isInternallyMuted]);
-
-
-  const fetchPostComments = useCallback(async () => {
-    if (!showComments || comments.length > 0) return; // Don't refetch if already fetched
-    setIsLoadingComments(true);
-    try {
-      const fetchedComments = await getComments(post.id);
-      setComments(fetchedComments);
-    } catch (error) {
-      toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch comments.' });
-    } finally {
-      setIsLoadingComments(false);
-    }
-  }, [post.id, showComments, toast, comments.length]);
-
-  useEffect(() => {
-    if(showComments && comments.length === 0 && !isLoadingComments) { // Only fetch if not already loading and no comments
-        fetchPostComments();
-    }
-  }, [fetchPostComments, showComments, comments.length, isLoadingComments]);
 
   const handleLikeClick = async () => {
     if (isLiking) return;
@@ -173,26 +138,6 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
         toast({ variant: 'destructive', title: 'Error', description: 'An unexpected server error occurred.' });
     } finally {
         setIsLiking(false);
-    }
-  };
-
-
-  const handleCommentSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!newComment.trim()) {
-      toast({ variant: 'destructive', title: 'Error', description: 'Comment cannot be empty.' });
-      return;
-    }
-    setIsSubmittingComment(true);
-    try {
-      const author = sessionUser?.name || 'ReelViewer';
-      const added = await addComment({ postId: post.id, content: newComment.trim(), author });
-      setComments(prev => [added, ...prev]);
-      setNewComment('');
-    } catch (error) {
-      toast({ variant: 'destructive', title: 'Error', description: 'Could not post comment.' });
-    } finally {
-      setIsSubmittingComment(false);
     }
   };
 
@@ -234,7 +179,10 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
       }
     }
   };
-
+  
+  const handleCommentPosted = (newComment: CommentType) => {
+    setDisplayCommentCount(prev => prev + 1);
+  };
 
   return (
     <div className="h-full w-full flex flex-col items-center justify-center bg-black relative text-white">
@@ -305,9 +253,9 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
               <ThumbsUp className={cn("w-6 h-6", isLikedByClient ? "text-pink-500 fill-pink-500" : "")} />
               <span className="font-medium text-xs mt-0.5">{displayLikeCount}</span>
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => { setShowComments(prev => !prev); }} className="flex flex-col items-center text-white hover:text-cyan-400 p-1 h-auto">
+            <Button variant="ghost" size="sm" onClick={() => { setShowComments(true); }} className="flex flex-col items-center text-white hover:text-cyan-400 p-1 h-auto">
               <MessageCircle className="w-6 h-6" />
-              <span className="font-medium text-xs mt-0.5">{comments.length > 0 ? `${comments.length}` : '0'}</span>
+              <span className="font-medium text-xs mt-0.5">{displayCommentCount}</span>
             </Button>
              <Button variant="ghost" size="sm" onClick={handleShare} className="flex flex-col items-center text-white hover:text-blue-400 p-1 h-auto">
               <Share2 className="w-6 h-6" />
@@ -317,34 +265,13 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
       </div>
 
       {showComments && (
-        <div className="absolute bottom-16 left-0 right-0 p-3 bg-black/80 backdrop-blur-md rounded-t-lg max-h-[40%] overflow-y-auto z-20">
-          <div className="flex justify-between items-center mb-2">
-            <h4 className="text-sm font-semibold text-gray-200">Comments ({comments.length})</h4>
-            <Button variant="ghost" size="sm" onClick={() => setShowComments(false)} className="text-gray-400 hover:text-white p-1">&times;</Button>
-          </div>
-          <form onSubmit={handleCommentSubmit} className="space-y-2 mb-3">
-            <div className="flex items-center space-x-2">
-              <Textarea
-                placeholder="Add a comment..."
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                rows={1}
-                className="text-xs flex-grow min-h-[30px] bg-gray-800/70 border-gray-700 text-white placeholder-gray-400 rounded-md focus:ring-1 focus:ring-primary"
-                disabled={isSubmittingComment}
-              />
-              <Button type="submit" size="icon" variant="ghost" disabled={isSubmittingComment || !newComment.trim()} className="h-8 w-8 self-center text-primary hover:bg-primary/20">
-                <Send className="w-4 h-4" />
-              </Button>
-            </div>
-          </form>
-          {isLoadingComments && <p className="text-xs text-center text-gray-400 py-2">Loading comments...</p>}
-          {!isLoadingComments && comments.length === 0 && <p className="text-xs text-center text-gray-400 py-2 italic">No comments yet. Be the first!</p>}
-          {!isLoadingComments && comments.length > 0 && (
-            <div className="space-y-1.5">
-              {comments.map(comment => <CommentCard key={comment.id} comment={comment} />)}
-            </div>
-          )}
-        </div>
+        <ReelComments
+            postId={post.id}
+            sessionUser={sessionUser}
+            onClose={() => setShowComments(false)}
+            onCommentPosted={handleCommentPosted}
+            initialCommentCount={post.commentcount}
+        />
       )}
     </div>
   );
