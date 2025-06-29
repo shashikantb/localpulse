@@ -6,7 +6,6 @@ import { Toaster } from '@/components/ui/toaster';
 import Footer from '@/components/layout/footer';
 import { AppInstallPrompt } from '@/components/app-install-prompt';
 import Header from '@/components/layout/header';
-import { getSession } from './auth/actions';
 import dynamic from 'next/dynamic';
 
 const BottomNavBar = dynamic(() => import('@/components/layout/bottom-nav-bar'), {
@@ -29,7 +28,8 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const { user } = await getSession();
+  // This component is now static and does not fetch the session.
+  // This allows Next.js to cache the page shell, improving performance.
 
   return (
     <html lang="en" className="h-full">
@@ -43,7 +43,7 @@ export default async function RootLayout({
           {children}
         </div>
         <Footer />
-        <BottomNavBar user={user} />
+        <BottomNavBar />
         <AppInstallPrompt />
         <Toaster />
       </body>

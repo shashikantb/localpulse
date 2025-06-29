@@ -2,6 +2,7 @@
 'use client';
 
 import type { FC } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, Film } from 'lucide-react';
@@ -10,6 +11,7 @@ import type { User } from '@/lib/db-types';
 import dynamic from 'next/dynamic';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { getSession } from '@/app/auth/actions';
 
 
 // Defer loading of the UserNav component to prevent its JavaScript from blocking the initial render.
@@ -25,13 +27,21 @@ const navItems = [
   { href: '/reels', label: 'Reels', icon: Film },
 ];
 
-interface BottomNavBarProps {
-  user: User | null;
-}
 
-const BottomNavBar: FC<BottomNavBarProps> = ({ user }) => {
+const BottomNavBar: FC = () => {
   const pathname = usePathname();
   const isMobile = useIsMobile();
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch session on the client side
+  useEffect(() => {
+    getSession().then(session => {
+        setUser(session.user);
+        setLoading(false);
+    });
+  }, []);
+
 
   // During SSR or if not on a mobile device, render nothing.
   if (isMobile === undefined || !isMobile) {
@@ -59,7 +69,7 @@ const BottomNavBar: FC<BottomNavBarProps> = ({ user }) => {
       })}
       {/* Add the UserNav component directly into the bottom bar */}
       <div className="flex h-full items-center justify-center px-2">
-         <UserNav user={user} />
+         {loading ? <Skeleton className="h-12 w-12 rounded-full" /> : <UserNav user={user} />}
       </div>
     </nav>
   );
