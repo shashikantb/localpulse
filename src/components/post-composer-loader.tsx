@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Zap } from 'lucide-react';
 import type { User } from '@/lib/db-types';
 
-const PostComposerSkeleton = () => (
+export const PostComposerSkeleton = () => (
   <Card className="overflow-hidden shadow-2xl border border-primary/30 rounded-xl bg-card/90 backdrop-blur-md">
     <CardHeader className="bg-gradient-to-br from-primary/10 to-accent/5 p-5">
       <div className="flex items-center">
