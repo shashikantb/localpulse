@@ -59,8 +59,9 @@ declare global {
 
 const POSTS_PER_PAGE = 5;
 const NEW_POST_POLL_INTERVAL = 30000;
-const CACHE_KEY = 'localpulse-posts-cache';
-const CACHE_VERSION = 'v1.1'; // Increment to invalidate old cache structures
+const POST_CACHE_KEY = 'localpulse-posts-cache';
+const LOCATION_CACHE_KEY = 'localpulse-location-cache';
+const CACHE_VERSION = 'v1.2'; // Increment to invalidate old cache structures
 
 // Helper to get initial posts from cache or server data
 const getInitialCachedPosts = (serverInitialPosts: Post[]): Post[] => {
@@ -68,7 +69,7 @@ const getInitialCachedPosts = (serverInitialPosts: Post[]): Post[] => {
     return serverInitialPosts;
   }
   try {
-    const cachedItem = localStorage.getItem(CACHE_KEY);
+    const cachedItem = localStorage.getItem(POST_CACHE_KEY);
     if (cachedItem) {
       const cachedData = JSON.parse(cachedItem);
       if (cachedData.version === CACHE_VERSION && Array.isArray(cachedData.posts)) {
@@ -96,9 +97,18 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
   const [newPulsesAvailable, setNewPulsesAvailable] = useState(false);
   const [newPulsesCount, setNewPulsesCount] = useState(0);
 
-  const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [isLoadingLocation, setIsLoadingLocation] = useState(true);
+  const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const cachedLocation = sessionStorage.getItem(LOCATION_CACHE_KEY);
+      return cachedLocation ? JSON.parse(cachedLocation) : null;
+    } catch (e) {
+      console.warn("Failed to read location cache:", e);
+      return null;
+    }
+  });
 
+  const [isLoadingLocation, setIsLoadingLocation] = useState(!location);
   const [hasMorePosts, setHasMorePosts] = useState<boolean>(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   
@@ -124,28 +134,42 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
     return distance;
   }, []);
 
-  // Effect to get user location
+  // Effect to get user location, now with session caching
   useEffect(() => {
-    setIsLoadingLocation(true);
+    if (location) {
+      setIsLoadingLocation(false);
+      return;
+    }
+
+    let isMounted = true;
+    
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          setLocation({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          });
-          setIsLoadingLocation(false);
+          if (isMounted) {
+            const newLocation = {
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+            };
+            setLocation(newLocation);
+            sessionStorage.setItem(LOCATION_CACHE_KEY, JSON.stringify(newLocation));
+            setIsLoadingLocation(false);
+          }
         },
         (error) => {
-          console.error("Geolocation error in feed:", error);
-          setIsLoadingLocation(false);
+          if (isMounted) {
+            console.error("Geolocation error in feed:", error);
+            setIsLoadingLocation(false); // Stop loading even if there's an error
+          }
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     } else {
-      setIsLoadingLocation(false);
+        if (isMounted) setIsLoadingLocation(false);
     }
-  }, []);
+
+    return () => { isMounted = false; };
+  }, [location]);
 
   // Effect to save posts to cache
   useEffect(() => {
@@ -155,7 +179,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
         timestamp: new Date().toISOString(),
         posts: allPosts.slice(0, POSTS_PER_PAGE * 2), // Cache up to 2 pages of posts
       };
-      localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
+      localStorage.setItem(POST_CACHE_KEY, JSON.stringify(cacheData));
     } catch (error) {
       console.warn("Failed to save posts to cache:", error);
     }
@@ -265,9 +289,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
   }, [allPosts]);
 
   useEffect(() => {
-    // Don't try to sort until location is ready.
     if (isLoadingLocation) {
-        setFilteredAndSortedPosts([]); // Clear posts to ensure skeletons are shown
         return;
     }
 
@@ -333,8 +355,6 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
 
   // Polling for new posts, now more bfcache-friendly.
   useEffect(() => {
-    if (isLoadingLocation) return;
-
     let intervalId: NodeJS.Timeout | null = null;
 
     const pollForNewPosts = async () => {
@@ -380,7 +400,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
         clearInterval(intervalId);
       }
     };
-  }, [isLoadingLocation, latestPostIdClientKnows, newPulsesAvailable]);
+  }, [latestPostIdClientKnows, newPulsesAvailable]);
 
 
   const handleLoadNewPulses = async () => {
@@ -530,9 +550,9 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
     }
   };
 
-  const showSkeletons = isLoadingLocation && allPosts.length > 0;
+  const showSkeletons = isLoadingLocation && !location;
 
-  if (initialPosts.length === 0 && allPosts.length === 0 && !isLoadingLocation) {
+  if (allPosts.length === 0 && !isLoadingLocation) {
     return (
         <Card className="text-center py-16 rounded-xl shadow-xl border border-border/40 bg-card/80 backdrop-blur-sm">
             <CardContent className="flex flex-col items-center">
@@ -608,7 +628,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
       <div className="space-y-6">
         {showSkeletons ? (
             <>
-                {[...Array(Math.min(allPosts.length, 3))].map((_, i) => <PostCardSkeleton key={i} />)}
+                {[...Array(3)].map((_, i) => <PostCardSkeleton key={i} />)}
             </>
         ) : filteredAndSortedPosts.length > 0 ? (
             <>
@@ -637,3 +657,5 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
 };
 
 export default PostFeedClient;
+
+    
