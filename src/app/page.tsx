@@ -1,23 +1,10 @@
 
 import type { FC } from 'react';
 import { Suspense } from 'react';
-import PostFeedClient from '@/components/post-feed-client';
-import type { Post } from '@/lib/db-types';
 import { getSession } from './auth/actions';
-import { PostFeedSkeleton } from '@/components/post-feed-skeleton';
 import { Rss } from 'lucide-react';
 import PostComposerLoader, { PostComposerSkeleton } from '@/components/post-composer-loader';
-
-const POSTS_PER_PAGE = 5;
-
-// This async component will be wrapped in Suspense.
-// It now only fetches the user session.
-async function FeedLoader() {
-  const { user } = await getSession();
-  // By passing an empty array, we force the client to fetch the initial data.
-  // This makes the initial server-rendered page much smaller and faster.
-  return <PostFeedClient initialPosts={[]} sessionUser={user} />;
-}
+import PostFeedLoader from '@/components/post-feed-loader';
 
 // This new component fetches the session data for the composer inside a Suspense boundary.
 async function PostComposerWithSession() {
@@ -43,10 +30,8 @@ const HomePage: FC = () => { // This component is now static, no longer async
             </h2>
         </div>
 
-        {/* The PostFeed remains in its Suspense boundary */}
-        <Suspense fallback={<PostFeedSkeleton />}>
-          <FeedLoader />
-        </Suspense>
+        {/* Use the new client component loader which handles the dynamic import correctly */}
+        <PostFeedLoader />
       </div>
     </main>
   );

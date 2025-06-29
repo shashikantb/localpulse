@@ -5,6 +5,7 @@ import type { FC } from 'react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Post, User } from '@/lib/db-types';
 import { getPosts, registerDeviceToken, checkForNewerPosts } from '@/app/actions';
+import { getSession } from '@/app/auth/actions';
 import { PostCard } from '@/components/post-card';
 import { PostFeedSkeleton } from './post-feed-skeleton';
 import { HASHTAG_CATEGORIES } from '@/components/post-form';
@@ -64,13 +65,13 @@ const LOCATION_CACHE_KEY = 'localpulse-location-cache';
 
 interface PostFeedClientProps {
   initialPosts: Post[];
-  sessionUser: User | null;
 }
 
-const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) => {
+const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
   const { toast } = useToast();
   
   const [allPosts, setAllPosts] = useState<Post[]>(initialPosts);
+  const [sessionUser, setSessionUser] = useState<User | null>(null);
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [filteredAndSortedPosts, setFilteredAndSortedPosts] = useState<Post[]>([]);
@@ -100,15 +101,18 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
     return distance;
   }, []);
 
-  // Consolidated effect to get user location & initial posts.
+  // Consolidated effect to get user session, location & initial posts.
   useEffect(() => {
     const loadInitialData = async () => {
-      // Promise to get posts, either from initial props or by fetching.
+      // Promise to get posts
       const fetchPostsPromise = initialPosts.length > 0
         ? Promise.resolve(initialPosts)
         : getPosts({ page: 1, limit: POSTS_PER_PAGE });
       
-      // Promise to get location, using cache first.
+      // Promise to get session
+      const fetchSessionPromise = getSession();
+
+      // Promise to get location
       const fetchLocationPromise = new Promise<{ latitude: number, longitude: number } | null>(resolve => {
         const cachedLocationJSON = sessionStorage.getItem(LOCATION_CACHE_KEY);
         if (cachedLocationJSON) {
@@ -133,9 +137,13 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
       });
       
       try {
-        const [posts, loc] = await Promise.all([fetchPostsPromise, fetchLocationPromise]);
+        // Fetch everything in parallel
+        const [posts, session, loc] = await Promise.all([fetchPostsPromise, fetchSessionPromise, fetchLocationPromise]);
+        
         setAllPosts(posts);
+        setSessionUser(session.user);
         setLocation(loc);
+
         if (posts.length < POSTS_PER_PAGE) {
           setHasMorePosts(false);
         }
