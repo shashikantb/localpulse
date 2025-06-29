@@ -15,7 +15,7 @@ async function PostComposerWithSession() {
 
 const HomePage: FC = () => { // This component is now static, no longer async
   return (
-    <main className="flex min-h-screen flex-col items-center p-4 sm:p-6 md:p-8 lg:p-16 bg-gradient-to-br from-background to-muted/30">
+    <main className="flex min-h-svh flex-col items-center p-4 sm:p-6 md:p-8 lg:p-16 bg-gradient-to-br from-background to-muted/30">
       <div className="container mx-auto max-w-2xl space-y-8 py-8">
         
         {/* The PostComposer is now wrapped in its own Suspense boundary */}

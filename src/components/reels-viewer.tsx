@@ -143,7 +143,7 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts, sessionUser }) => {
   
   if (initialPosts.length === 0 && reelPosts.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-black text-white p-4 text-center">
+      <div className="flex flex-col items-center justify-center min-h-svh bg-black text-white p-4 text-center">
         <Alert className="max-w-md bg-gray-900/80 border-gray-700 text-white">
           <Film className="h-5 w-5 text-primary" />
           <AlertTitle className="text-xl font-semibold mb-2">No Reels to Show</AlertTitle>
@@ -162,7 +162,7 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts, sessionUser }) => {
   }
 
   return (
-    <div {...swipeHandlers} className="h-screen w-screen overflow-hidden flex flex-col bg-black touch-none">
+    <div {...swipeHandlers} className="h-svh w-screen overflow-hidden flex flex-col bg-black touch-none">
       <div className="absolute top-4 left-4 z-30">
         <Button
           onClick={() => router.push('/')}

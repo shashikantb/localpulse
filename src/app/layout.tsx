@@ -37,7 +37,7 @@ export default async function RootLayout({
         <meta charSet="UTF-8" />
         {/* Next.js will populate this head based on metadata and other conventions */}
       </head>
-      <body className={`${geistSans.variable} antialiased bg-background text-foreground flex flex-col min-h-screen`}>
+      <body className={`${geistSans.variable} antialiased bg-background text-foreground flex flex-col min-h-svh`}>
         <Header />
         <div className="flex-grow pb-16 sm:pb-0"> {/* Add padding-bottom for mobile, remove for sm and up */}
           {children}

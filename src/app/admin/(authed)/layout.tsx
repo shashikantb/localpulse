@@ -20,7 +20,7 @@ const AuthedAdminLayout: FC<AdminLayoutProps> = async ({ children }) => {
   }
 
   return (
-    <div className="flex min-h-screen bg-muted/40">
+    <div className="flex min-h-svh bg-muted/40">
       <AdminNav />
       <main className="flex-1 p-6 lg:p-8 overflow-auto">
         {children}

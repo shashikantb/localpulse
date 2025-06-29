@@ -7,7 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const PrivacyPolicyPage: NextPage = () => {
   return (
-    <main className="flex min-h-screen flex-col items-center p-4 sm:p-6 md:p-8 lg:p-16 bg-gradient-to-br from-background to-muted/30">
+    <main className="flex min-h-svh flex-col items-center p-4 sm:p-6 md:p-8 lg:p-16 bg-gradient-to-br from-background to-muted/30">
       <div className="container mx-auto max-w-3xl space-y-8 py-8">
         <Card className="shadow-xl border border-border/60 rounded-xl bg-card/80 backdrop-blur-sm">
           <CardHeader className="pb-4 pt-6 px-6 bg-gradient-to-br from-card to-muted/10 rounded-t-xl">
@@ -44,9 +44,9 @@ const PrivacyPolicyPage: NextPage = () => {
                         <AlertDescription className="text-yellow-700/90 dark:text-yellow-400/90 space-y-2">
                            <p>Some phone manufacturers (like **Xiaomi, Oppo, Vivo, OnePlus, Realme, and Huawei**) use aggressive battery-saving features that can prevent apps from receiving push notifications. If you are not receiving notifications, please check the following settings on your device:</p>
                            <ul className="list-disc list-inside space-y-1 text-sm pl-2">
-                                <li>**Autostart / App Launch:** Find LocalPulse in your phone's settings and enable the "Autostart" or "Auto-launch" permission.</li>
-                                <li>**Battery Optimization:** Find LocalPulse in the battery settings and select "No restrictions" or "Don't optimize".</li>
-                                <li>**App Pinning:** Pin our app in the "Recent Apps" screen to keep it running in the background.</li>
+                               <li>**Autostart / App Launch:** Find LocalPulse in your phone's settings and enable the "Autostart" or "Auto-launch" permission.</li>
+                               <li>**Battery Optimization:** Find LocalPulse in the battery settings and select "No restrictions" or "Don't optimize".</li>
+                               <li>**App Pinning:** Pin our app in the "Recent Apps" screen to keep it running in the background.</li>
                            </ul>
                            <p className="text-xs pt-1">These settings are often found in your phone's main Settings app, under "Battery," "Apps," or "Security." The exact names may vary by manufacturer.</p>
                         </AlertDescription>
