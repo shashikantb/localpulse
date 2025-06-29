@@ -89,6 +89,7 @@ async function initializeDbSchema(): Promise<void> {
         mediaurl TEXT,
         mediatype VARCHAR(10) CHECK (mediatype IN ('image', 'video')),
         likecount INTEGER DEFAULT 0,
+        commentcount INTEGER DEFAULT 0,
         viewcount INTEGER DEFAULT 0,
         notifiedcount INTEGER DEFAULT 0,
         city VARCHAR(255),
@@ -96,6 +97,14 @@ async function initializeDbSchema(): Promise<void> {
         authorid INTEGER REFERENCES users(id) ON DELETE SET NULL
       );
     `);
+     // Add commentcount column if it doesn't exist (for backwards compatibility)
+    const commentCountColRes = await client.query(`
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name='posts' AND column_name='commentcount';
+    `);
+    if (commentCountColRes.rowCount === 0) {
+        await client.query('ALTER TABLE posts ADD COLUMN commentcount INTEGER DEFAULT 0;');
+    }
     
     // Post Likes Table
     await client.query(`
@@ -275,27 +284,15 @@ export async function getMediaPostsDb(options: { limit: number; offset: number; 
 
   const client = await dbPool.connect();
   try {
-    const postIdsQuery = `
-      SELECT id FROM posts 
-      WHERE mediaurl IS NOT NULL 
-      ORDER BY createdat DESC 
-      LIMIT $1 OFFSET $2
-    `;
-    const postIdsResult = await client.query(postIdsQuery, [options.limit, options.offset]);
-    const postIds = postIdsResult.rows.map(row => row.id);
-
-    if (postIds.length === 0) {
-      return [];
-    }
-
     const postsQuery = `
       SELECT p.*, u.name as authorname, u.role as authorrole, u.profilepictureurl as authorprofilepictureurl
       FROM posts p
       LEFT JOIN users u ON p.authorid = u.id
-      WHERE p.id = ANY($1::int[])
+      WHERE p.mediaurl IS NOT NULL
       ORDER BY p.createdat DESC
+      LIMIT $1 OFFSET $2
     `;
-    const postsResult = await client.query(postsQuery, [postIds]);
+    const postsResult = await client.query(postsQuery, [options.limit, options.offset]);
     return postsResult.rows;
   } finally {
     client.release();
@@ -361,14 +358,28 @@ export async function addCommentDb(commentData: NewComment): Promise<Comment> {
   const dbPool = getDbPool();
   if (!dbPool) throw new Error("Database not configured. Cannot add comment.");
   
-  const query = `
-    INSERT INTO comments(postid, author, content)
-    VALUES($1, $2, $3)
-    RETURNING *;
-  `;
-  const values = [commentData.postId, commentData.author, commentData.content];
-  const result: QueryResult<Comment> = await dbPool.query(query, values);
-  return result.rows[0];
+  const client = await dbPool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const commentQuery = `
+      INSERT INTO comments(postid, author, content)
+      VALUES($1, $2, $3)
+      RETURNING *;
+    `;
+    const values = [commentData.postId, commentData.author, commentData.content];
+    const result: QueryResult<Comment> = await client.query(commentQuery, values);
+    
+    await client.query('UPDATE posts SET commentcount = commentcount + 1 WHERE id = $1', [commentData.postId]);
+
+    await client.query('COMMIT');
+    return result.rows[0];
+  } catch(e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
 export async function getCommentsByPostIdDb(postId: number): Promise<Comment[]> {

@@ -16,33 +16,11 @@ async function geocodeCoordinates(latitude: number, longitude: number): Promise<
   return "Unknown City";
 }
 
-async function attachMentions(posts: Post[]): Promise<Post[]> {
-  const postIds = posts.map(p => p.id);
-  if (postIds.length > 0) {
-    const mentionsMap = await db.getMentionsForPostsDb(postIds);
-    posts.forEach(post => {
-      post.mentions = mentionsMap.get(post.id) || [];
-    });
-  }
-  return posts;
-}
-
-// Helper to attach like status to posts for a logged-in user
-async function attachLikeStatus(posts: Post[], user: User | null): Promise<Post[]> {
-    if (user && posts.length > 0) {
-      const postIds = posts.map(p => p.id);
-      const likedPostIds = await db.getLikedPostIdsForUserDb(user.id, postIds);
-      posts.forEach(post => {
-        post.isLikedByCurrentUser = likedPostIds.has(post.id);
-      });
-    }
-    return posts;
-}
-
 const mapPostFromDb = (post: Post) => ({
     ...post,
     createdAt: post.createdat,
     likeCount: post.likecount,
+    commentCount: post.commentcount,
     notifiedCount: post.notifiedcount,
     viewCount: post.viewcount,
     mediaUrl: post.mediaurl,
@@ -51,6 +29,7 @@ const mapPostFromDb = (post: Post) => ({
     authorId: post.authorid,
     authorName: post.authorname,
     authorRole: post.authorrole,
+    authorProfilePictureUrl: post.authorprofilepictureurl,
     mentions: post.mentions || [],
 });
 
@@ -64,8 +43,21 @@ export async function getPosts(options?: { page: number; limit: number }): Promi
     } : undefined;
 
     let posts = await db.getPostsDb(dbOptions, user?.role);
-    posts = await attachLikeStatus(posts, user);
-    posts = await attachMentions(posts);
+    
+    if (posts.length > 0) {
+        const postIds = posts.map(p => p.id);
+        
+        // Fetch likes and mentions in parallel to reduce sequential database calls
+        const [likedPostIds, mentionsMap] = await Promise.all([
+            user ? db.getLikedPostIdsForUserDb(user.id, postIds) : Promise.resolve(new Set<number>()),
+            db.getMentionsForPostsDb(postIds)
+        ]);
+
+        posts.forEach(post => {
+            post.isLikedByCurrentUser = likedPostIds.has(post.id);
+            post.mentions = mentionsMap.get(post.id) || [];
+        });
+    }
     
     return posts.map(mapPostFromDb);
   } catch (error) {
@@ -82,10 +74,14 @@ export async function getAdminPosts(options?: { page: number; limit: number }): 
         offset: (options.page - 1) * options.limit
     } : undefined;
 
-    // We don't need user role here, admin sees all. No session needed.
     let posts = await db.getPostsDb(dbOptions);
-    // Admin doesn't need to see "like" status.
-    posts = await attachMentions(posts);
+    
+    if (posts.length > 0) {
+      const mentionsMap = await db.getMentionsForPostsDb(posts.map(p => p.id));
+      posts.forEach(post => {
+        post.mentions = mentionsMap.get(post.id) || [];
+      });
+    }
     
     return posts.map(mapPostFromDb);
   } catch (error) {
@@ -101,8 +97,20 @@ export async function getMediaPosts(options?: { page: number; limit: number }): 
     const dbOptions = options ? { limit: options.limit, offset: (options.page - 1) * options.limit } : undefined;
     
     let posts = await db.getMediaPostsDb(dbOptions);
-    posts = await attachLikeStatus(posts, user);
-    posts = await attachMentions(posts);
+
+    if (posts.length > 0) {
+        const postIds = posts.map(p => p.id);
+
+        const [likedPostIds, mentionsMap] = await Promise.all([
+            user ? db.getLikedPostIdsForUserDb(user.id, postIds) : Promise.resolve(new Set<number>()),
+            db.getMentionsForPostsDb(postIds)
+        ]);
+        
+        posts.forEach(post => {
+            post.isLikedByCurrentUser = likedPostIds.has(post.id);
+            post.mentions = mentionsMap.get(post.id) || [];
+        });
+    }
 
     return posts.map(mapPostFromDb);
   } catch (error) {
@@ -118,6 +126,11 @@ async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[
     const processedTokens = new Set<string>();
     const authorDisplayName = post.authorname || 'an Anonymous Pulsar';
 
+    const notificationPayload = {
+        title: `New Pulse Nearby from ${authorDisplayName}!`,
+        body: post.content.substring(0, 100) + (post.content.length > 100 ? '...' : ''),
+    };
+
     // 1. Send notifications to mentioned users
     if (mentionedUserIds.length > 0) {
         const mentionedTokens = await db.getDeviceTokensForUsersDb(mentionedUserIds);
@@ -125,8 +138,8 @@ async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[
             mentionedTokens.forEach(t => processedTokens.add(t));
             const message = {
                 notification: {
-                    title: `${authorDisplayName} mentioned you in a pulse!`,
-                    body: post.content.substring(0, 100) + (post.content.length > 100 ? '...' : ''),
+                  ...notificationPayload,
+                  title: `${authorDisplayName} mentioned you in a pulse!`,
                 },
                 data: {
                     postId: String(post.id)
@@ -149,10 +162,7 @@ async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[
     const nearbyOnlyTokens = nearbyTokens.filter(t => !processedTokens.has(t));
     if (nearbyOnlyTokens.length > 0) {
         const message = {
-            notification: {
-                title: `New Pulse Nearby from ${authorDisplayName}!`,
-                body: post.content.substring(0, 100) + (post.content.length > 100 ? '...' : ''),
-            },
+            notification: notificationPayload,
             data: {
                 postId: String(post.id)
             },
@@ -225,7 +235,7 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
       console.error("Background notification sending failed:", err);
     });
 
-    return { post: finalPost };
+    return { post: mapPostFromDb(finalPost) };
   } catch (error: any) {
     console.error("Server action error adding post:", error);
     return { error: error.message || 'Failed to add post due to an unknown server error.' };
@@ -388,8 +398,19 @@ export async function getPostsByUserId(userId: number): Promise<Post[]> {
   try {
     const { user: sessionUser } = await getSession();
     let posts = await db.getPostsByUserIdDb(userId);
-    posts = await attachLikeStatus(posts, sessionUser);
-    posts = await attachMentions(posts);
+    
+    if (posts.length > 0) {
+        const postIds = posts.map(p => p.id);
+        const [likedPostIds, mentionsMap] = await Promise.all([
+            sessionUser ? db.getLikedPostIdsForUserDb(sessionUser.id, postIds) : Promise.resolve(new Set<number>()),
+            db.getMentionsForPostsDb(postIds)
+        ]);
+
+        posts.forEach(post => {
+            post.isLikedByCurrentUser = likedPostIds.has(post.id);
+            post.mentions = mentionsMap.get(post.id) || [];
+        });
+    }
     
     return posts.map(mapPostFromDb);
   } catch (error) {
@@ -404,11 +425,18 @@ export async function getPostById(postId: number): Promise<Post | null> {
     let post = await db.getPostByIdDb(postId, user?.role);
     if (!post) return null;
 
-    let posts = [post];
-    posts = await attachLikeStatus(posts, user);
-    posts = await attachMentions(posts);
+    if (post) {
+        const postIds = [post.id];
+        const [likedPostIds, mentionsMap] = await Promise.all([
+            user ? db.getLikedPostIdsForUserDb(user.id, postIds) : Promise.resolve(new Set<number>()),
+            db.getMentionsForPostsDb(postIds)
+        ]);
+        
+        post.isLikedByCurrentUser = likedPostIds.has(post.id);
+        post.mentions = mentionsMap.get(post.id) || [];
+    }
 
-    return mapPostFromDb(posts[0]);
+    return mapPostFromDb(post);
   } catch (error) {
     console.error(`Server action error fetching post ${postId}:`, error);
     return null;

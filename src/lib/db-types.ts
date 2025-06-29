@@ -44,6 +44,7 @@ export interface Post {
   mediaurl?: string | null;
   mediatype?: 'image' | 'video' | null;
   likecount: number;
+  commentcount: number;
   notifiedcount: number;
   viewcount: number;
   city?: string | null;

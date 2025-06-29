@@ -1,41 +1,41 @@
 
 'use client';
-import type { FC, FormEvent } from 'react';
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import type { FC } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import type { Post, Comment as CommentType, User } from '@/lib/db-types';
+import type { Post, User } from '@/lib/db-types';
 import { formatDistanceToNowStrict } from 'date-fns';
-import { MapPin, UserCircle, MessageCircle, Send, Map, CornerDownRight, Share2, Rss, ThumbsUp, Tag, ShieldCheck, Building, Eye, BellRing } from 'lucide-react';
+import { MapPin, UserCircle, MessageCircle, Map, Share2, ThumbsUp, Tag, Eye, BellRing } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { toggleLikePost, addComment, getComments, recordPostView, likePostAnonymously } from '@/app/actions';
+import { toggleLikePost, recordPostView, likePostAnonymously } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
 
-const CommentCard: FC<{ comment: CommentType }> = ({ comment }) => {
-  return (
-    <div className="flex space-x-3 py-3 pl-2 border-l-2 border-primary/20 ml-1 hover:border-primary/50 transition-colors duration-200 bg-transparent hover:bg-primary/5 rounded-r-md">
-      <Avatar className="h-9 w-9 border-2 border-primary/40 flex-shrink-0 mt-1 shadow-sm">
-        <AvatarFallback className="bg-muted text-sm font-semibold text-primary/80">
-          {comment.author.substring(0, 1).toUpperCase()}
-        </AvatarFallback>
-      </Avatar>
-      <div className="flex-1 space-y-1">
-        <div className="flex items-center justify-between">
-          <h4 className="text-sm font-semibold text-foreground/90">{comment.author}</h4>
-          <p className="text-xs text-muted-foreground">
-            {formatDistanceToNowStrict(new Date(comment.createdat), { addSuffix: true })}
-          </p>
-        </div>
-        <p className="text-sm text-foreground/80 whitespace-pre-wrap break-words">{comment.content}</p>
-      </div>
+const CommentSectionSkeleton = () => (
+  <div className="px-5 pb-4 border-t border-border/30 pt-4 bg-muted/20 space-y-4">
+    <Skeleton className="h-6 w-1/3" />
+    <div className="flex items-start space-x-3">
+      <Skeleton className="h-10 w-10 rounded-full flex-shrink-0" />
+      <Skeleton className="h-20 w-full" />
     </div>
-  );
-};
+    <div className="space-y-3 pt-4">
+      <Skeleton className="h-12 w-full" />
+      <Skeleton className="h-12 w-full" />
+    </div>
+  </div>
+);
+
+const CommentSection = dynamic(() => import('./comment-section'), {
+  loading: () => <CommentSectionSkeleton />,
+  ssr: false,
+});
+
 
 const getAnonymousLikedPosts = (): number[] => {
     if (typeof window === "undefined") return [];
@@ -80,10 +80,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
   const [isLikedByClient, setIsLikedByClient] = useState(false);
   const [displayLikeCount, setDisplayLikeCount] = useState<number>(post.likecount);
   const [isLiking, setIsLiking] = useState<boolean>(false);
-  const [comments, setComments] = useState<CommentType[]>([]);
-  const [newComment, setNewComment] = useState('');
-  const [isLoadingComments, setIsLoadingComments] = useState(false);
-  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [displayCommentCount, setDisplayCommentCount] = useState<number>(post.commentcount);
   const [showComments, setShowComments] = useState(false);
   const [currentOrigin, setCurrentOrigin] = useState('');
 
@@ -131,30 +128,14 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
   // Sync state if post prop changes (e.g., from feed refresh)
   useEffect(() => {
     setDisplayLikeCount(post.likecount);
+    setDisplayCommentCount(post.commentcount);
     if (sessionUser) {
         setIsLikedByClient(post.isLikedByCurrentUser || false);
     } else {
         setIsLikedByClient(getAnonymousLikedPosts().includes(post.id));
     }
-  }, [post.isLikedByCurrentUser, post.likecount, post.id, sessionUser]);
+  }, [post.isLikedByCurrentUser, post.likecount, post.commentcount, post.id, sessionUser]);
 
-
-  const fetchPostComments = useCallback(async () => {
-    if (!showComments) return;
-    setIsLoadingComments(true);
-    try {
-      const fetchedComments = await getComments(post.id);
-      setComments(fetchedComments);
-    } catch (error) {
-      toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch comments.' });
-    } finally {
-      setIsLoadingComments(false);
-    }
-  }, [post.id, showComments, toast]);
-
-  useEffect(() => {
-    fetchPostComments();
-  }, [fetchPostComments]);
 
   const handleLikeClick = async () => {
     if (isLiking) return;
@@ -192,27 +173,6 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
         toast({ variant: 'destructive', title: 'Error', description: 'An unexpected server error occurred.' });
     } finally {
         setIsLiking(false);
-    }
-  };
-
-  const handleCommentSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!newComment.trim()) {
-      toast({ variant: 'destructive', title: 'Error', description: 'Comment cannot be empty.' });
-      return;
-    }
-    setIsSubmittingComment(true);
-    try {
-      // Use session user's name if available, otherwise a default
-      const author = sessionUser?.name || 'PulseFan';
-      const added = await addComment({ postId: post.id, content: newComment.trim(), author });
-      setComments(prev => [added, ...prev]);
-      setNewComment('');
-      toast({ title: 'Comment Pulsed!', description: 'Your thoughts are now part of the vibe.', className:"bg-accent text-accent-foreground" });
-    } catch (error) {
-      toast({ variant: 'destructive', title: 'Error', description: 'Could not post comment.' });
-    } finally {
-      setIsSubmittingComment(false);
     }
   };
 
@@ -384,9 +344,9 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
           <ThumbsUp className={cn('w-5 h-5 transition-all duration-200 group-hover:scale-110 group-hover:text-blue-500', isLikedByClient ? 'text-blue-500 fill-blue-500' : 'text-muted-foreground')} />
           <span className="font-medium text-sm">{displayLikeCount} {displayLikeCount === 1 ? 'Like' : 'Likes'}</span>
         </Button>
-        <Button variant="ghost" size="sm" onClick={() => { setShowComments(!showComments); if(!showComments) fetchPostComments(); }} className="flex items-center space-x-1.5 text-muted-foreground hover:text-primary transition-colors duration-150 group">
+        <Button variant="ghost" size="sm" onClick={() => setShowComments(!showComments)} className="flex items-center space-x-1.5 text-muted-foreground hover:text-primary transition-colors duration-150 group">
           <MessageCircle className="w-5 h-5 group-hover:scale-110 transition-transform" />
-          <span className="font-medium text-sm">{comments.length > 0 ? `${comments.length} ` : ''}{showComments ? 'Hide' : (comments.length > 0 ? 'Comments' : 'Comment')}</span>
+          <span className="font-medium text-sm">{displayCommentCount} {showComments ? 'Hide' : (displayCommentCount === 1 ? 'Comment' : 'Comments')}</span>
         </Button>
         <Button variant="ghost" size="sm" onClick={handleShare} className="flex items-center space-x-1.5 text-muted-foreground hover:text-blue-500 transition-colors duration-150 group">
           <Share2 className="w-5 h-5 group-hover:scale-110 transition-transform" />
@@ -395,41 +355,11 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
       </div>
 
       {showComments && (
-        <div className="px-5 pb-4 border-t border-border/30 pt-4 bg-muted/20">
-          <h4 className="text-base font-semibold mb-3 text-primary flex items-center">
-            <CornerDownRight className="w-4 h-4 mr-2 text-accent"/>
-            Vibes & Thoughts
-          </h4>
-          <form onSubmit={handleCommentSubmit} className="space-y-3 mb-4">
-            <div className="flex items-start space-x-3">
-              <Avatar className="h-10 w-10 border-2 border-accent/50 flex-shrink-0 shadow-sm">
-                <AvatarFallback className="bg-muted text-accent font-semibold">
-                  {sessionUser?.name.charAt(0).toUpperCase() || 'P'}
-                </AvatarFallback>
-              </Avatar>
-              <Textarea
-                placeholder="Share your vibe on this pulse..."
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                rows={2}
-                className="text-sm flex-grow min-h-[40px] shadow-inner focus:ring-2 focus:ring-primary/60 bg-background/70 rounded-lg"
-                disabled={isSubmittingComment}
-              />
-              <Button type="submit" size="icon" variant="ghost" disabled={isSubmittingComment || !newComment.trim()} className="h-10 w-10 self-end shadow-sm hover:bg-primary/10 border border-transparent hover:border-primary/30 group">
-                <Send className="w-5 h-5 text-primary group-hover:scale-110 transition-transform" />
-              </Button>
-            </div>
-          </form>
-
-          {isLoadingComments && <p className="text-xs text-center text-muted-foreground py-3">Loading comments...</p>}
-          {!isLoadingComments && comments.length === 0 && <p className="text-sm text-center text-muted-foreground py-4 italic">No thoughts shared yet. Be the first to vibe!</p>}
-
-          {!isLoadingComments && comments.length > 0 && (
-            <div className="space-y-2 max-h-72 overflow-y-auto pr-2 rounded-md border-t border-border/20 pt-3 mt-3 custom-scrollbar">
-              {comments.map(comment => <CommentCard key={comment.id} comment={comment} />)}
-            </div>
-          )}
-        </div>
+        <CommentSection
+          postId={post.id}
+          sessionUser={sessionUser}
+          onCommentPosted={() => setDisplayCommentCount(prev => prev + 1)}
+        />
       )}
     </Card>
   );
