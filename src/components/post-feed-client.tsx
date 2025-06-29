@@ -104,16 +104,12 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
 
   // Effect to get user location & hydrate state from cache, now safe from hydration errors.
   useEffect(() => {
-    let isMounted = true;
-
-    // --- Hydrate state after initial render ---
-    
     // 1. Posts from localStorage
     try {
       const cachedItem = localStorage.getItem(POST_CACHE_KEY);
       if (cachedItem) {
         const cachedData = JSON.parse(cachedItem);
-        if (cachedData.version === CACHE_VERSION && Array.isArray(cachedData.posts) && cachedData.posts.length > 0 && isMounted && allPosts.length === 0) {
+        if (cachedData.version === CACHE_VERSION && Array.isArray(cachedData.posts) && cachedData.posts.length > 0 && initialPosts.length === 0) {
           setAllPosts(cachedData.posts);
         }
       }
@@ -126,44 +122,36 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
     if (cachedLocationJSON) {
         try {
             const cachedLocation = JSON.parse(cachedLocationJSON);
-            if (isMounted) {
-                setLocation(cachedLocation);
-                setIsLoadingLocation(false);
-            }
+            setLocation(cachedLocation);
+            setIsLoadingLocation(false);
         } catch (e) {
             console.warn("Failed to parse cached location:", e);
-            if (isMounted) setIsLoadingLocation(false);
+            setIsLoadingLocation(false);
         }
     } else {
        // 3. If no cached location, get from navigator
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           (position) => {
-            if (isMounted) {
-              const newLocation = {
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude,
-              };
-              setLocation(newLocation);
-              sessionStorage.setItem(LOCATION_CACHE_KEY, JSON.stringify(newLocation));
-              setIsLoadingLocation(false);
-            }
+            const newLocation = {
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+            };
+            setLocation(newLocation);
+            sessionStorage.setItem(LOCATION_CACHE_KEY, JSON.stringify(newLocation));
+            setIsLoadingLocation(false);
           },
           (error) => {
-            if (isMounted) {
-              console.error("Geolocation error in feed:", error);
-              setIsLoadingLocation(false);
-            }
+            console.error("Geolocation error in feed:", error);
+            setIsLoadingLocation(false);
           },
           { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
       } else {
-          if (isMounted) setIsLoadingLocation(false);
+          setIsLoadingLocation(false);
       }
     }
-    
-    return () => { isMounted = false; };
-  }, [allPosts.length]); // Re-run if initialPosts changes (e.g. from empty to filled by server)
+  }, [initialPosts.length]); 
 
 
   // Effect to save posts to cache
@@ -287,6 +275,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
   }, [allPosts]);
 
   useEffect(() => {
+    // Do not run sorting/filtering until location is determined.
     if (isLoadingLocation) {
         return;
     }
@@ -548,9 +537,13 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
     }
   };
 
-  const showSkeletons = isLoadingLocation && allPosts.length === 0;
+  // While waiting for location on the client, render the skeleton to match the server's Suspense fallback.
+  // This prevents layout shift and hydration errors.
+  if (isLoadingLocation) {
+    return <PostFeedSkeleton />;
+  }
 
-  if (allPosts.length === 0 && !isLoadingLocation) {
+  if (allPosts.length === 0) {
     return (
         <Card className="text-center py-16 rounded-xl shadow-xl border border-border/40 bg-card/80 backdrop-blur-sm">
             <CardContent className="flex flex-col items-center">
@@ -625,11 +618,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
       </div>
 
       <div className="space-y-6">
-        {showSkeletons ? (
-            <>
-                <PostFeedSkeleton />
-            </>
-        ) : filteredAndSortedPosts.length > 0 ? (
+        {filteredAndSortedPosts.length > 0 ? (
             <>
             {filteredAndSortedPosts.map((post, index) => (
                 <PostCard key={post.id} post={post} userLocation={location} sessionUser={sessionUser} isFirst={index === 0} />
