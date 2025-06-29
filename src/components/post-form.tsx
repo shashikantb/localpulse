@@ -72,7 +72,7 @@ export const HASHTAG_CATEGORIES = [
 ];
 
 const formSchema = z.object({
-  content: z.string().min(1, "Post cannot be empty").max(280, "Post cannot exceed 280 characters"),
+  content: z.string().min(1, "Post cannot be empty").max(1000, "Post cannot exceed 1000 characters"),
   hashtags: z.array(z.string()),
 });
 
