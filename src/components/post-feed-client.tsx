@@ -96,7 +96,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
   const [newPulsesCount, setNewPulsesCount] = useState(0);
 
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [isLoadingLocation, setIsLoadingLocation] = useState(false);
+  const [isLoadingLocation, setIsLoadingLocation] = useState(true);
 
   const [hasMorePosts, setHasMorePosts] = useState<boolean>(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -108,6 +108,26 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
   const [notificationPermissionStatus, setNotificationPermissionStatus] = useState<'default' | 'loading' | 'granted' | 'denied'>('default');
   const [showTroubleshootingDialog, setShowTroubleshootingDialog] = useState(false);
   
+  const getGeoLocation = (): Promise<{ latitude: number; longitude: number }> => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error("Geolocation is not supported by this browser."));
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          });
+        },
+        (error) => {
+          reject(error);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    });
+  };
 
   const calculateDistance = useCallback((lat1: number, lon1: number, lat2: number, lon2: number) => {
     if (!lat1 || !lon1 || !lat2 || !lon2) return Infinity;
@@ -123,33 +143,19 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
     return distance;
   }, []);
 
-  const handleRequestLocation = async () => {
+  useEffect(() => {
     setIsLoadingLocation(true);
-    toast({ title: "Getting Location", description: "Please allow location access to filter by distance." });
-    
-    if (!navigator.geolocation) {
-        toast({ variant: 'destructive', title: 'Error', description: 'Geolocation is not supported by this browser.' });
+    getGeoLocation()
+      .then(loc => {
+        setLocation(loc);
         setIsLoadingLocation(false);
-        return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setLocation({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        });
+        toast({ title: "Location Found!", description: "You can now sort by distance." });
+      })
+      .catch((error: Error) => {
+        console.warn("Geolocation error in feed:", error.message);
         setIsLoadingLocation(false);
-        toast({ title: "Location Found!", description: "You can now filter and sort by distance." });
-      },
-      (error) => {
-        console.error("Geolocation error in feed:", error);
-        toast({ variant: 'destructive', title: 'Location Error', description: 'Could not get your location. Please check browser permissions.' });
-        setIsLoadingLocation(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
-  };
+      });
+  }, [toast]);
 
 
   // Effect to save posts to cache
@@ -452,31 +458,25 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
           <div className="space-y-3">
             <Label htmlFor="distance-filter-slider" className="text-muted-foreground flex justify-between items-center">
               <span>Max Distance:</span>
-              {location && (
-                  <span className="font-semibold text-primary">
-                    {showAnyDistance ? "Any Distance" : `${distanceFilterKm} km`}
-                  </span>
-              )}
+              <span className="font-semibold text-primary">
+                {showAnyDistance ? "Any Distance" : `${distanceFilterKm} km`}
+              </span>
             </Label>
-            {location ? (
-                <Slider
-                  id="distance-filter-slider"
-                  min={1}
-                  max={101} 
-                  step={1}
-                  value={[distanceFilterKm]} 
-                  onValueChange={handleDistanceChange} 
-                  disabled={isLoadingMore}
-                  aria-label="Distance filter"
-                />
-            ) : (
-                <Button onClick={handleRequestLocation} disabled={isLoadingLocation} className="w-full">
-                    {isLoadingLocation ? (
-                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Getting Location...</>
-                    ) : (
-                        <><MapPin className="mr-2 h-4 w-4" /> Enable Distance Filtering</>
-                    )}
-                </Button>
+            <Slider
+              id="distance-filter-slider"
+              min={1}
+              max={101} 
+              step={1}
+              value={[distanceFilterKm]} 
+              onValueChange={handleDistanceChange} 
+              disabled={!location || isLoadingMore}
+              aria-label="Distance filter"
+            />
+            {isLoadingLocation && (
+              <p className="text-xs text-muted-foreground text-center pt-1">Getting location...</p>
+            )}
+            {!location && !isLoadingLocation && (
+              <p className="text-xs text-muted-foreground text-center pt-1">Enable location services to filter by distance.</p>
             )}
           </div>
 

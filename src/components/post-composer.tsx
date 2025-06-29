@@ -2,7 +2,7 @@
 'use client';
 
 import type { FC } from 'react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { NewPost, User } from '@/lib/db-types';
 import { addPost } from '@/app/actions';
 import { PostForm } from '@/components/post-form';
@@ -20,6 +20,7 @@ const PostComposer: FC<PostComposerProps> = ({ sessionUser }) => {
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [formSubmitting, setFormSubmitting] = useState(false);
+  const [isLoadingLocation, setIsLoadingLocation] = useState(true);
 
   const getGeoLocation = (): Promise<{ latitude: number; longitude: number }> => {
     return new Promise((resolve, reject) => {
@@ -46,6 +47,20 @@ const PostComposer: FC<PostComposerProps> = ({ sessionUser }) => {
     });
   };
 
+  useEffect(() => {
+    setIsLoadingLocation(true);
+    setLocationError(null);
+    getGeoLocation()
+      .then(loc => {
+        setLocation(loc);
+        setIsLoadingLocation(false);
+      })
+      .catch((error: Error) => {
+        setLocationError(error.message);
+        setIsLoadingLocation(false);
+      });
+  }, []);
+
   const handleAddPost = async (content: string, hashtags: string[], mediaUrl?: string, mediaType?: 'image' | 'video', mentionedUserIds?: number[]) => {
     if (!content.trim()) {
       toast({ variant: "destructive", title: "Post Error", description: "Post content cannot be empty." });
@@ -53,29 +68,20 @@ const PostComposer: FC<PostComposerProps> = ({ sessionUser }) => {
     }
 
     setFormSubmitting(true);
-    setLocationError(null);
-    let currentLocationToPost = location;
-
-    // If we don't have location yet, get it now.
-    // This will trigger the browser permission prompt on the first post submission.
-    if (!currentLocationToPost) {
-        try {
-            toast({ title: "Getting Location", description: "Please allow location access to create a post." });
-            currentLocationToPost = await getGeoLocation();
-            setLocation(currentLocationToPost); // Cache it for next post
-        } catch (error: any) {
-            setLocationError(error.message);
-            toast({ variant: "destructive", title: "Location Error", description: error.message });
-            setFormSubmitting(false);
-            return;
-        }
+    
+    if (!location) {
+        setLocationError("Location has not been determined. Please enable location services and reload the page.");
+        toast({ variant: "destructive", title: "Location Required", description: "Could not determine your location." });
+        setFormSubmitting(false);
+        return;
     }
+    setLocationError(null);
     
     try {
       const postData: NewPost = {
         content,
-        latitude: currentLocationToPost.latitude,
-        longitude: currentLocationToPost.longitude,
+        latitude: location.latitude,
+        longitude: location.longitude,
         mediaUrl: mediaUrl,
         mediaType: mediaType,
         hashtags: hashtags || [],
@@ -88,7 +94,6 @@ const PostComposer: FC<PostComposerProps> = ({ sessionUser }) => {
         toast({ variant: "destructive", title: "Post Error", description: result.error || "Failed to add post." });
       } else if (result.post) {
         toast({ title: "Post Added!", description: "Your pulse is now live! It will appear in the feed shortly.", variant: "default", className: "bg-primary text-primary-foreground" });
-        // revalidatePath('/') is called in the server action, so the feed will update automatically.
       } else {
         toast({ variant: "destructive", title: "Post Error", description: "An unexpected issue occurred." });
       }
@@ -119,7 +124,7 @@ const PostComposer: FC<PostComposerProps> = ({ sessionUser }) => {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-5">
-          <PostForm onSubmit={handleAddPost} submitting={formSubmitting} />
+          <PostForm onSubmit={handleAddPost} submitting={formSubmitting || isLoadingLocation} />
         </CardContent>
       </Card>
     </>
