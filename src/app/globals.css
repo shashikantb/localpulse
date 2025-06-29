@@ -4,99 +4,88 @@
 
 @layer base {
   :root {
-    --background: 210 40% 96.1%; /* Very light, cool gray/blueish tint */
-    --foreground: 210 40% 9.8%; /* Dark blueish gray for contrast */
+    --background: 240 10% 96.1%; /* PRD: Light Gray (#F0F0F0) - adjusted for better feel */
+    --foreground: 222.2 84% 4.9%;
 
-    --card: 0 0% 100%; /* White */
-    --card-foreground: 210 40% 9.8%; /* Dark blueish gray */
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+ 
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+ 
+    --primary: 180 100% 25.1%; /* PRD: Teal (#008080) */
+    --primary-foreground: 0 0% 100%;
+ 
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+ 
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+ 
+    --accent: 39 100% 50%; /* PRD: Bright Orange (#FFA500) */
+    --accent-foreground: 222.2 47.4% 11.2%;
+ 
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
 
-    --popover: 0 0% 100%; /* White */
-    --popover-foreground: 210 40% 9.8%; /* Dark blueish gray */
-
-    /* FIX: Darkened primary color for better contrast (WCAG AA pass) */
-    --primary: 210 80% 45%; 
-    --primary-foreground: 0 0% 100%; /* White */
-
-    --secondary: 210 40% 92%; /* Lighter gray for secondary elements */
-    --secondary-foreground: 200 90% 45%; /* Teal/blue */
-
-    --muted: 210 40% 90%; /* Slightly darker than secondary for muted states */
-    --muted-foreground: 210 30% 50%; /* Softer muted text color */
-
-    --accent: 30 95% 55%; /* More vibrant orange */
-    --accent-foreground: 0 0% 100%; /* White text on orange for better contrast */
-
-    --destructive: 0 72% 51%; /* Adjusted destructive red */
-    --destructive-foreground: 0 0% 98%;
-
-    --border: 210 30% 88%; /* Softer border color */
-    --input: 210 30% 88%; /* Input border to match general border */
-    --ring: 200 90% 45%; /* Teal/blue for focus rings */
-
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
-    --radius: 0.75rem; /* Slightly more rounded corners */
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 180 100% 25.1%;
+ 
+    --radius: 0.75rem;
 
     /* Sidebar remains mostly default, adjust if needed */
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 200 90% 45%;
+    --sidebar-primary: 180 100% 25.1%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 0 0% 96.1%;
     --sidebar-accent-foreground: 0 0% 9%;
     --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 200 90% 45%;
+    --sidebar-ring: 180 100% 25.1%;
   }
-
+ 
   .dark {
-    --background: 210 20% 12%; /* Darker cool gray/blueish */
-    --foreground: 210 30% 95%; /* Lighter text for dark mode */
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+ 
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+ 
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+ 
+    --primary: 180 100% 35%; /* PRD: Teal (#008080) - lightened for dark mode */
+    --primary-foreground: 0 0% 100%;
+ 
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+ 
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+ 
+    --accent: 39 100% 55%; /* PRD: Bright Orange (#FFA500) - lightened for dark mode */
+    --accent-foreground: 222.2 47.4% 11.2%;
+ 
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+ 
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 180 100% 35%;
 
-    --card: 210 20% 15%; /* Darker Card */
-    --card-foreground: 210 30% 95%;
-
-    --popover: 210 20% 15%; /* Darker Popover */
-    --popover-foreground: 210 30% 95%;
-
-    --primary: 200 85% 60%; /* Brighter Teal/blue for dark mode contrast */
-    --primary-foreground: 210 20% 10%; /* Dark text on primary for contrast */
-
-    --secondary: 210 20% 20%; /* Darker Secondary */
-    --secondary-foreground: 200 80% 55%;
-
-    --muted: 210 20% 22%; /* Darker Muted */
-    --muted-foreground: 210 30% 65%;
-
-    --accent: 30 90% 60%; /* Slightly adjusted Orange for dark mode */
-    --accent-foreground: 210 20% 10%; /* Dark text on accent for contrast */
-
-    --destructive: 0 65% 55%; /* Adjusted destructive for dark mode */
-    --destructive-foreground: 0 0% 98%;
-
-    --border: 210 20% 25%;
-    --input: 210 20% 25%;
-    --ring: 200 80% 55%;
-
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-
-    --sidebar-background: 210 20% 12%;
-    --sidebar-foreground: 210 30% 95%;
-    --sidebar-primary: 200 80% 55%;
-    --sidebar-primary-foreground: 210 20% 10%;
-    --sidebar-accent: 210 20% 18%;
-    --sidebar-accent-foreground: 210 30% 95%;
-    --sidebar-border: 210 20% 25%;
-    --sidebar-ring: 200 80% 55%;
+    /* Sidebar remains mostly default, adjust if needed */
+    --sidebar-background: 222.2 84% 4.9%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 180 100% 35%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 217.2 32.6% 17.5%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 217.2 32.6% 17.5%;
+    --sidebar-ring: 180 100% 35%;
   }
 }
-
+ 
 @layer base {
   body {
     @apply bg-background text-foreground;

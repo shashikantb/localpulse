@@ -170,7 +170,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
             console.warn("Failed to read post cache:", error);
         }
     }
-  }, []); // Note: initialPosts is a stable prop, so this runs once on mount.
+  }, [initialPosts]);
 
 
   // Effect to save posts to cache
@@ -617,7 +617,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
           </Button>
           <Sheet>
               <SheetTrigger asChild>
-                  <Button variant="outline" className="shadow-lg hover:shadow-xl transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary">
+                  <Button variant="outline" className="shadow-lg hover:shadow-xl transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary" aria-label="Open filters">
                   <SlidersHorizontal className="w-5 h-5 mr-2" />
                   Filters {activeFilterCount > 0 && <span className="ml-2 bg-accent text-accent-foreground text-xs px-1.5 py-0.5 rounded-full">{activeFilterCount}</span>}
                   </Button>
@@ -631,7 +631,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, sessionUser }) 
       <div className="space-y-6">
         {showSkeletons ? (
             <>
-                {[...Array(3)].map((_, i) => <PostCardSkeleton key={i} />)}
+                <PostFeedSkeleton />
             </>
         ) : filteredAndSortedPosts.length > 0 ? (
             <>
