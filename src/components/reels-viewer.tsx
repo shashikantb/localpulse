@@ -16,85 +16,133 @@ import { useSwipeable } from 'react-swipeable';
 import { ReelsPageSkeleton } from './reels-page-skeleton';
 
 const REELS_PER_PAGE = 10;
+const REELS_CACHE_KEY = 'localpulse-reels-cache';
+const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
 
-interface ReelsViewerProps {
-  sessionUser: User | null;
+interface CachedReels {
+  timestamp: number;
+  posts: Post[];
+  hasMore: boolean;
+  currentPage: number;
 }
 
-const ReelsViewer: FC<ReelsViewerProps> = ({ sessionUser }) => {
+const ReelsViewer: FC<{ sessionUser: User | null }> = ({ sessionUser }) => {
   const { toast } = useToast();
   const router = useRouter();
+  
   const [reelPosts, setReelPosts] = useState<Post[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isLoading, setIsLoading] = useState(true); // For initial load
-  const [isLoadingMore, setIsLoadingMore] = useState(false); // For subsequent "infinite scroll" loads
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
 
-  // Effect for fetching the very first set of reels
-  useEffect(() => {
-    const fetchInitialReels = async () => {
-      setIsLoading(true);
-      try {
-        const newPosts = await getMediaPosts({ page: 1, limit: REELS_PER_PAGE });
-        setReelPosts(newPosts);
-        setHasMore(newPosts.length === REELS_PER_PAGE);
-      } catch (error) {
-        console.error("Error fetching initial reels:", error);
-        toast({
-          variant: "destructive",
-          title: "Fetch Error",
-          description: "Could not load reels.",
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchInitialReels();
-  }, [toast]);
+  // Function to save data to cache
+  const saveToCache = useCallback((posts: Post[], page: number, more: boolean) => {
+    try {
+      const cacheData: CachedReels = {
+        timestamp: Date.now(),
+        posts: posts,
+        currentPage: page,
+        hasMore: more,
+      };
+      localStorage.setItem(REELS_CACHE_KEY, JSON.stringify(cacheData));
+    } catch (error) {
+      console.warn("Failed to save reels to cache:", error);
+    }
+  }, []);
 
-
-  const fetchMoreReelPosts = useCallback(async (page: number) => {
-    if (isLoadingMore || !hasMore) return;
-    setIsLoadingMore(true);
+  // Function to fetch posts, which will be used for both initial load and revalidation
+  const fetchAndCacheReels = useCallback(async (page: number, append: boolean = false) => {
+    if (!append) { // If it's a refresh/revalidation, not loading more
+       setIsLoading(true);
+    } else { // If it's for "infinite scroll"
+       if (isLoadingMore || !hasMore) return;
+       setIsLoadingMore(true);
+    }
 
     try {
       const newPosts = await getMediaPosts({ page, limit: REELS_PER_PAGE });
-
-      if (newPosts.length > 0) {
-         setReelPosts(prev => {
-          // Append new posts, avoiding duplicates
-          const existingIds = new Set(prev.map(p => p.id));
-          const filteredNewPosts = newPosts.filter(p => !existingIds.has(p.id));
-          return [...prev, ...filteredNewPosts];
-        });
-        setCurrentPage(page);
-        setHasMore(newPosts.length === REELS_PER_PAGE);
-      } else {
-        setHasMore(false);
-        if (reelPosts.length > 0) {
-            toast({title: "That's all for now!", description: "You've seen all the available reels."});
-        }
-      }
-    } catch (error) {
-      console.error("Error fetching more posts for reels:", error);
-      toast({
-        variant: "destructive",
-        title: "Fetch Error",
-        description: "Could not load more reels.",
+      
+      setReelPosts(prev => {
+        const updatedPosts = append ? [...prev, ...newPosts.filter(p => !prev.some(ep => ep.id === p.id))] : newPosts;
+        saveToCache(updatedPosts, page, newPosts.length === REELS_PER_PAGE);
+        return updatedPosts;
       });
+
+      setCurrentPage(page);
+      setHasMore(newPosts.length === REELS_PER_PAGE);
+
+      if (append && newPosts.length === 0) {
+        toast({ title: "That's all for now!", description: "You've seen all the available reels." });
+      }
+
+    } catch (error) {
+      console.error("Error fetching reels:", error);
+      toast({ variant: "destructive", title: "Fetch Error", description: "Could not load reels." });
     } finally {
+      setIsLoading(false);
       setIsLoadingMore(false);
     }
-  }, [toast, isLoadingMore, hasMore, reelPosts.length]);
-  
+  }, [toast, saveToCache, isLoadingMore, hasMore]);
 
-  // Fetch more posts when user gets close to the end of the current list.
+
+  // Effect for initial load and revalidation logic (Stale-While-Revalidate)
+  useEffect(() => {
+    let isMounted = true;
+    
+    // 1. Load from cache immediately
+    try {
+      const cachedItem = localStorage.getItem(REELS_CACHE_KEY);
+      if (cachedItem) {
+        const cachedData: CachedReels = JSON.parse(cachedItem);
+        const isCacheStale = (Date.now() - cachedData.timestamp) > CACHE_EXPIRY_MS;
+        
+        if (cachedData.posts.length > 0) {
+            setReelPosts(cachedData.posts);
+            setCurrentPage(cachedData.currentPage);
+            setHasMore(cachedData.hasMore);
+            setIsLoading(false); // We have something to show, so stop initial loading state
+        }
+        
+        // 2. Revalidate in the background if cache is stale
+        if (isCacheStale) {
+          console.log("Reels cache is stale, revalidating in background...");
+          fetchAndCacheReels(1, false);
+        }
+      } else {
+         // No cache, so fetch fresh data
+         fetchAndCacheReels(1, false);
+      }
+    } catch (error) {
+      console.warn("Failed to read cache, fetching fresh data.", error);
+      fetchAndCacheReels(1, false);
+    }
+
+    // 3. Revalidate on focus
+    const handleRevalidate = () => {
+      if (isMounted && !document.hidden) {
+        console.log("Tab is focused, checking for stale reels data...");
+        fetchAndCacheReels(1, false);
+      }
+    };
+    window.addEventListener('visibilitychange', handleRevalidate);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('visibilitychange', handleRevalidate);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Intentionally empty to run only once on mount
+
+  
+  // Effect to fetch more posts when user gets close to the end
   useEffect(() => {
     if (hasMore && !isLoading && !isLoadingMore && reelPosts.length > 0 && currentIndex >= reelPosts.length - 3) {
-      fetchMoreReelPosts(currentPage + 1);
+      fetchAndCacheReels(currentPage + 1, true);
     }
-  }, [currentIndex, reelPosts.length, hasMore, isLoading, isLoadingMore, currentPage, fetchMoreReelPosts]);
+  }, [currentIndex, reelPosts.length, hasMore, isLoading, isLoadingMore, currentPage, fetchAndCacheReels]);
+
 
   const goToPreviousReel = useCallback(() => {
     setCurrentIndex(prevIndex => (prevIndex > 0 ? prevIndex - 1 : 0));
@@ -105,33 +153,26 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ sessionUser }) => {
   }, [reelPosts.length]);
 
   const swipeHandlers = useSwipeable({
-    onSwipedUp: () => {
-      if (reelPosts.length > 1) goToNextReel();
-    },
-    onSwipedDown: () => {
-       if (reelPosts.length > 1) goToPreviousReel();
-    },
+    onSwipedUp: () => { if (reelPosts.length > 1) goToNextReel(); },
+    onSwipedDown: () => { if (reelPosts.length > 1) goToPreviousReel(); },
     preventScrollOnSwipe: true,
     trackMouse: true
   });
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
-        goToNextReel();
-      } else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
-        goToPreviousReel();
-      }
+      if (event.key === 'ArrowDown' || event.key === 'ArrowRight') goToNextReel();
+      else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') goToPreviousReel();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [goToNextReel, goToPreviousReel]);
   
-  if (isLoading) {
+  if (isLoading && reelPosts.length === 0) {
     return <ReelsPageSkeleton />;
   }
   
-  if (reelPosts.length === 0) {
+  if (!isLoading && reelPosts.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-svh bg-black text-white p-4 text-center">
         <Alert className="max-w-md bg-gray-900/80 border-gray-700 text-white">
@@ -154,23 +195,14 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ sessionUser }) => {
   return (
     <div {...swipeHandlers} className="h-svh w-screen overflow-hidden flex flex-col bg-black touch-none">
       <div className="absolute top-4 left-4 z-30">
-        <Button
-          onClick={() => router.push('/')}
-          variant="ghost"
-          size="icon"
-          className="text-white hover:bg-white/20 backdrop-blur-sm rounded-full h-11 w-11"
-          aria-label="Back to Feed"
-        >
+        <Button onClick={() => router.push('/')} variant="ghost" size="icon" className="text-white hover:bg-white/20 backdrop-blur-sm rounded-full h-11 w-11" aria-label="Back to Feed">
           <Home className="h-6 w-6" />
         </Button>
       </div>
       
       <div className="flex-grow relative w-full h-full overflow-hidden">
         {reelPosts.map((post, index) => {
-            // Only render the current, previous, and next items to optimize performance
-            if (Math.abs(index - currentIndex) > 1) {
-                return null;
-            }
+            if (Math.abs(index - currentIndex) > 1) return null;
 
             const getTransform = () => {
                 if (index < currentIndex) return 'translateY(-100%)';
@@ -179,24 +211,13 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ sessionUser }) => {
             };
 
             return (
-                <div
-                    key={post.id}
-                    className="absolute inset-0 w-full h-full transition-transform duration-300 ease-in-out"
-                    style={{ 
-                        transform: getTransform(),
-                        zIndex: index === currentIndex ? 20 : 10,
-                     }}
-                >
-                    <ReelItem
-                        post={post}
-                        isActive={index === currentIndex}
-                        sessionUser={sessionUser}
-                    />
+                <div key={post.id} className="absolute inset-0 w-full h-full transition-transform duration-300 ease-in-out" style={{ transform: getTransform(), zIndex: index === currentIndex ? 20 : 10 }}>
+                    <ReelItem post={post} isActive={index === currentIndex} sessionUser={sessionUser} />
                 </div>
             );
         })}
 
-        {isLoadingMore && hasMore && (
+        {(isLoadingMore || (isLoading && reelPosts.length > 0)) && (
              <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-20">
                 <Loader2 className="w-10 h-10 animate-spin text-white"/>
             </div>
@@ -205,33 +226,15 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ sessionUser }) => {
 
       {reelPosts.length > 1 && (
         <div className="absolute right-4 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-2 pointer-events-none">
-          <Button 
-            onClick={goToPreviousReel} 
-            variant="ghost" 
-            size="icon"
-            className="text-white hover:bg-white/20 backdrop-blur-sm rounded-full h-11 w-11 disabled:opacity-30 pointer-events-auto"
-            aria-label="Previous Reel"
-            disabled={currentIndex === 0}
-          >
+          <Button onClick={goToPreviousReel} variant="ghost" size="icon" className="text-white hover:bg-white/20 backdrop-blur-sm rounded-full h-11 w-11 disabled:opacity-30 pointer-events-auto" aria-label="Previous Reel" disabled={currentIndex === 0}>
             <ChevronUp className="h-7 w-7" />
           </Button>
           
           <div className="text-xs text-white/80 bg-black/30 px-2 py-1 rounded-md backdrop-blur-sm flex items-center pointer-events-auto">
-            {isLoadingMore ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <span>{currentIndex + 1} / {reelPosts.length}</span>
-            )}
+            {isLoadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>{currentIndex + 1} / {reelPosts.length}</span>}
           </div>
           
-          <Button 
-            onClick={goToNextReel} 
-            variant="ghost" 
-            size="icon"
-            className="text-white hover:bg-white/20 backdrop-blur-sm rounded-full h-11 w-11 disabled:opacity-30 pointer-events-auto"
-            aria-label="Next Reel"
-            disabled={currentIndex === reelPosts.length - 1 && !hasMore}
-          >
+          <Button onClick={goToNextReel} variant="ghost" size="icon" className="text-white hover:bg-white/20 backdrop-blur-sm rounded-full h-11 w-11 disabled:opacity-30 pointer-events-auto" aria-label="Next Reel" disabled={currentIndex === reelPosts.length - 1 && !hasMore}>
             <ChevronDown className="h-7 w-7" />
           </Button>
         </div>
