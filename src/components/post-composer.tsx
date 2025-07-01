@@ -51,7 +51,7 @@ const PostComposer: FC<PostComposerProps> = ({ sessionUser }) => {
     }
   }, []);
 
-  const handleAddPost = async (content: string, hashtags: string[], mediaType?: 'image' | 'video', mentionedUserIds?: number[]) => {
+  const handleAddPost = async (content: string, hashtags: string[], mediaUrl?: string, mediaType?: 'image' | 'video', mentionedUserIds?: number[]) => {
     if (!location) {
       const errMessage = locationError || "Cannot determine location. Please enable location services and refresh.";
       toast({ variant: "destructive", title: "Location Error", description: errMessage });
@@ -68,6 +68,7 @@ const PostComposer: FC<PostComposerProps> = ({ sessionUser }) => {
         content,
         latitude: location.latitude,
         longitude: location.longitude,
+        mediaUrl: mediaUrl,
         mediaType: mediaType,
         hashtags: hashtags || [],
         authorId: sessionUser ? sessionUser.id : undefined,

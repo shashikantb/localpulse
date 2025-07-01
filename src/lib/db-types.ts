@@ -57,19 +57,23 @@ export interface Post {
   mentions?: { id: number; name: string; }[];
 }
 
-// For creating a new post from the client, now authorId is optional and mediaUrl is removed
+// For creating a new post from the client
 export type NewPost = {
   content: string;
   latitude: number;
   longitude: number;
+  mediaUrl?: string | null; // The final GCS URL
   mediaType?: 'image' | 'video' | null;
   hashtags: string[];
   authorId?: number;
   mentionedUserIds?: number[];
 };
 
-// For inserting a new post into the DB, authorid is now nullable
-export type DbNewPost = Omit<NewPost, 'mediaType' | 'authorId'> & {
+// For inserting a new post into the DB
+export type DbNewPost = {
+  content: string;
+  latitude: number;
+  longitude: number;
   mediaurl?: string | null;
   mediatype?: 'image' | 'video' | null;
   city?: string | null;

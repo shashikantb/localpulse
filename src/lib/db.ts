@@ -258,16 +258,11 @@ if (process.env.NODE_ENV !== 'test') {
 
 // --- Function Implementations ---
 
-// Define a reusable, sanitized column list to prevent fetching large data URIs
 const POST_COLUMNS_SANITIZED = `
   p.id, p.content, p.latitude, p.longitude, p.createdat, p.likecount, 
   p.commentcount, p.viewcount, p.notifiedcount, p.city, p.hashtags, 
-  p.authorid, p.mediatype,
+  p.authorid, p.mediatype, p.mediaurl,
   u.name as authorname, u.role as authorrole,
-  CASE 
-    WHEN p.mediaurl LIKE 'data:%' THEN 'https://placehold.co/800x450.png' 
-    ELSE p.mediaurl 
-  END as mediaurl,
   CASE 
     WHEN u.profilepictureurl LIKE 'data:%' THEN 'https://placehold.co/200x200.png' 
     ELSE u.profilepictureurl 

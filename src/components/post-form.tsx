@@ -2,7 +2,7 @@
 'use client';
 
 import type { FC } from 'react';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -34,14 +34,15 @@ import { Loader2, XCircle, UploadCloud, Film, Image as ImageIcon, Tag, ChevronDo
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
-import { searchUsers } from '@/app/actions';
+import { searchUsers, getSignedUploadUrl } from '@/app/actions';
 import type { User as UserType } from '@/lib/db-types';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from './ui/badge';
+import { Progress } from './ui/progress';
 
 const MAX_VIDEO_UPLOAD_LIMIT = 50 * 1024 * 1024; // 50MB
-const MAX_IMAGE_UPLOAD_LIMIT = 10 * 1024 * 1024; // 10MB (before client-side compression)
+const MAX_IMAGE_UPLOAD_LIMIT = 10 * 1024 * 1024; // 10MB
 
 
 export const HASHTAG_CATEGORIES = [
@@ -79,7 +80,7 @@ const formSchema = z.object({
 type FormData = z.infer<typeof formSchema>;
 
 interface PostFormProps {
-  onSubmit: (content: string, hashtags: string[], mediaType?: 'image' | 'video', mentionedUserIds?: number[]) => Promise<void>;
+  onSubmit: (content: string, hashtags: string[], mediaUrl?: string, mediaType?: 'image' | 'video', mentionedUserIds?: number[]) => Promise<void>;
   submitting: boolean;
 }
 
@@ -88,17 +89,15 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
   const [mediaType, setMediaType] = React.useState<'image' | 'video' | null>(null);
-  const [isReadingFile, setIsReadingFile] = React.useState(false);
+  const [isUploading, setIsUploading] = React.useState(false);
   const [fileError, setFileError] = React.useState<string | null>(null);
   const [showCameraOptions, setShowCameraOptions] = React.useState(false);
   
-  // --- State for Tagging Dialog ---
   const [isTaggingDialogOpen, setIsTaggingDialogOpen] = React.useState(false);
   const [mentionQuery, setMentionQuery] = React.useState('');
   const [mentionResults, setMentionResults] = React.useState<UserType[]>([]);
   const [taggedUsers, setTaggedUsers] = React.useState<UserType[]>([]);
   const [isSearching, setIsSearching] = React.useState(false);
-  // --- End State for Tagging Dialog ---
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const imageCaptureInputRef = React.useRef<HTMLInputElement>(null);
@@ -112,22 +111,23 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
     },
   });
 
-  const removeMedia = () => {
+  const removeMedia = useCallback(() => {
+      if (previewUrl) {
+          URL.revokeObjectURL(previewUrl);
+      }
       setSelectedFile(null);
       setPreviewUrl(null);
       setMediaType(null);
       setFileError(null);
-      setIsReadingFile(false);
       setShowCameraOptions(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
       if (imageCaptureInputRef.current) imageCaptureInputRef.current.value = '';
       if (videoCaptureInputRef.current) videoCaptureInputRef.current.value = '';
-  };
+  }, [previewUrl]);
 
-   const handleFileChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
+  const handleFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
       removeMedia();
-
+      const file = event.target.files?.[0];
       if (!file) return;
 
       const currentFileType = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : null;
@@ -138,86 +138,23 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
           return;
       }
       
-      // Resize image client-side
-      if (currentFileType === 'image') {
-          if (file.size > MAX_IMAGE_UPLOAD_LIMIT) {
-              setFileError(`Image is too large. Max size: ${Math.round(MAX_IMAGE_UPLOAD_LIMIT / 1024 / 1024)}MB.`);
-              return;
-          }
-
-          setIsReadingFile(true);
-          const reader = new FileReader();
-          reader.onload = (e) => {
-              const img = new window.Image();
-              img.onload = () => {
-                  const canvas = document.createElement('canvas');
-                  const MAX_WIDTH = 1024;
-                  const MAX_HEIGHT = 1024;
-                  let { width, height } = img;
-
-                  if (width > height) {
-                      if (width > MAX_WIDTH) {
-                          height *= MAX_WIDTH / width;
-                          width = MAX_WIDTH;
-                      }
-                  } else {
-                      if (height > MAX_HEIGHT) {
-                          width *= MAX_HEIGHT / height;
-                          height = MAX_HEIGHT;
-                      }
-                  }
-                  canvas.width = width;
-                  canvas.height = height;
-                  const ctx = canvas.getContext('2d');
-                  if (!ctx) {
-                      setFileError('Could not process image.');
-                      setIsReadingFile(false);
-                      return;
-                  }
-                  ctx.drawImage(img, 0, 0, width, height);
-                  const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-                  
-                  setPreviewUrl(dataUrl);
-                  setSelectedFile(file);
-                  setMediaType('image');
-                  setIsReadingFile(false);
-              };
-              img.onerror = () => {
-                   setFileError('Could not load the selected image file.');
-                   setIsReadingFile(false);
-              }
-              img.src = e.target?.result as string;
-          };
-          reader.onerror = () => {
-              setFileError('Error reading file.');
-              setIsReadingFile(false);
-          };
-          reader.readAsDataURL(file);
-
-      } else if (currentFileType === 'video') {
-          if (file.size > MAX_VIDEO_UPLOAD_LIMIT) {
-              setFileError(`Video is too large. Max size: ${Math.round(MAX_VIDEO_UPLOAD_LIMIT / 1024 / 1024)}MB. Please use a smaller file.`);
-              return;
-          }
-          setIsReadingFile(true);
-          setSelectedFile(file);
-          setMediaType('video');
-          const reader = new FileReader();
-          reader.onloadend = () => {
-              setPreviewUrl(reader.result as string);
-              setIsReadingFile(false);
-          };
-          reader.onerror = () => {
-              setFileError('Error reading file.');
-              setIsReadingFile(false);
-          };
-          reader.readAsDataURL(file);
+      if (currentFileType === 'image' && file.size > MAX_IMAGE_UPLOAD_LIMIT) {
+          setFileError(`Image is too large. Max size: ${Math.round(MAX_IMAGE_UPLOAD_LIMIT / 1024 / 1024)}MB.`);
+          return;
       }
-   }, []);
+      if (currentFileType === 'video' && file.size > MAX_VIDEO_UPLOAD_LIMIT) {
+          setFileError(`Video is too large. Max size: ${Math.round(MAX_VIDEO_UPLOAD_LIMIT / 1024 / 1024)}MB.`);
+          return;
+      }
+      
+      setSelectedFile(file);
+      setMediaType(currentFileType);
+      setPreviewUrl(URL.createObjectURL(file));
+
+   }, [removeMedia]);
 
   
-  // --- Debounced search for user mentions ---
-  useEffect(() => {
+  React.useEffect(() => {
     if (!mentionQuery) {
         setMentionResults([]);
         return;
@@ -243,7 +180,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   };
   
   const handleSubmitForm: SubmitHandler<FormData> = async (data) => {
-      if (submitting || isReadingFile) return;
+      if (submitting || isUploading) return;
 
       if (fileError) {
         toast({ variant: 'destructive', title: 'File Error', description: fileError });
@@ -252,20 +189,47 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
       
       const mentionedUserIds = taggedUsers.map(user => user.id);
       const hashtagsToSubmit = data.hashtags || [];
-      
-      // Do not pass the previewUrl (data URI) to the server.
-      // Only pass the media type. The server will generate a placeholder.
-      await onSubmit(data.content, hashtagsToSubmit, mediaType ?? undefined, mentionedUserIds);
 
+      if (selectedFile && mediaType) {
+        setIsUploading(true);
+        try {
+          const signedUrlResult = await getSignedUploadUrl(selectedFile.name, selectedFile.type);
+
+          if (!signedUrlResult.success || !signedUrlResult.uploadUrl || !signedUrlResult.publicUrl) {
+            throw new Error(signedUrlResult.error || 'Could not prepare file for upload.');
+          }
+
+          const uploadResult = await fetch(signedUrlResult.uploadUrl, {
+            method: 'PUT',
+            body: selectedFile,
+            headers: { 'Content-Type': selectedFile.type },
+          });
+
+          if (!uploadResult.ok) {
+            throw new Error('Upload failed. Please check your network and try again.');
+          }
+
+          await onSubmit(data.content, hashtagsToSubmit, signedUrlResult.publicUrl, mediaType, mentionedUserIds);
+
+        } catch (error: any) {
+          toast({ variant: 'destructive', title: 'Upload Failed', description: error.message });
+          return; // Stop form submission on upload failure
+        } finally {
+          setIsUploading(false);
+        }
+      } else {
+        await onSubmit(data.content, hashtagsToSubmit, undefined, undefined, mentionedUserIds);
+      }
+      
       form.reset();
       removeMedia();
       setTaggedUsers([]);
   };
 
-  const isButtonDisabled = submitting || isReadingFile;
+  const isButtonDisabled = submitting || isUploading;
 
   let buttonText = 'Share Your Pulse';
-  if (isReadingFile) buttonText = 'Processing File...';
+  if (isUploading) buttonText = 'Uploading File...';
   else if (submitting) buttonText = 'Pulsing...';
 
   return (
@@ -486,12 +450,6 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
                   </div>
                 )}
               </div>
-              {isReadingFile && (
-                <div className="flex flex-col items-center text-muted-foreground py-4">
-                  <Loader2 className="h-8 w-8 animate-spin mb-2 text-primary" />
-                  <p className="text-sm">Processing file...</p>
-                </div>
-              )}
             </div>
           )}
           {fileError && (
@@ -500,9 +458,11 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
             </Alert>
           )}
         </FormItem>
+        
+        {isUploading && <Progress value={100} className="w-full h-2 animate-pulse" />}
 
         <Button type="submit" disabled={isButtonDisabled || !form.formState.isValid} className="w-full text-base py-3 shadow-md hover:shadow-lg transition-shadow bg-accent hover:bg-accent/90 text-accent-foreground rounded-lg">
-          {(isReadingFile || submitting) && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
+          {(isUploading || submitting) && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
           {buttonText}
         </Button>
       </form>

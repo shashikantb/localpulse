@@ -6,6 +6,9 @@ import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, Vi
 import { revalidatePath } from 'next/cache';
 import { admin as firebaseAdmin } from '@/lib/firebase-admin';
 import { getSession } from './auth/actions';
+import { getGcsClient, getGcsBucketName } from '@/lib/gcs';
+import { v4 as uuidv4 } from 'uuid';
+
 
 async function geocodeCoordinates(latitude: number, longitude: number): Promise<string | null> {
   // ... (existing geocode placeholder logic)
@@ -186,16 +189,11 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
 
     const cityName = await geocodeCoordinates(newPostData.latitude, newPostData.longitude);
 
-    let mediaUrlForDb: string | null = null;
-    if (newPostData.mediaType) {
-      mediaUrlForDb = 'https://placehold.co/800x450.png';
-    }
-
     const postDataForDb: DbNewPost = {
       content: newPostData.content,
       latitude: newPostData.latitude,
       longitude: newPostData.longitude,
-      mediaurl: mediaUrlForDb,
+      mediaurl: newPostData.mediaUrl, // Use the final GCS URL from the client
       mediatype: newPostData.mediaType,
       hashtags: newPostData.hashtags || [], 
       city: cityName,
@@ -221,6 +219,37 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
   } catch (error: any) {
     console.error("Server action error adding post:", error);
     return { error: error.message || 'Failed to add post due to an unknown server error.' };
+  }
+}
+
+export async function getSignedUploadUrl(fileName: string, fileType: string): Promise<{ success: boolean; error?: string; uploadUrl?: string; publicUrl?: string }> {
+  const storage = getGcsClient();
+  const bucketName = getGcsBucketName();
+
+  if (!storage || !bucketName) {
+    return { success: false, error: 'Google Cloud Storage is not configured on the server.' };
+  }
+  
+  // Make filename unique to avoid collisions
+  const uniqueFileName = `${uuidv4()}-${fileName.replace(/\s/g, '_')}`;
+
+  const file = storage.bucket(bucketName).file(uniqueFileName);
+
+  const options = {
+    version: 'v4' as const,
+    action: 'write' as const,
+    expires: Date.now() + 15 * 60 * 1000, // 15 minutes
+    contentType: fileType,
+  };
+
+  try {
+    const [uploadUrl] = await file.getSignedUrl(options);
+    const publicUrl = `https://storage.googleapis.com/${bucketName}/${uniqueFileName}`;
+    
+    return { success: true, uploadUrl, publicUrl };
+  } catch (error: any) {
+    console.error('Error getting signed URL:', error);
+    return { success: false, error: 'Could not get a file upload URL.' };
   }
 }
 
