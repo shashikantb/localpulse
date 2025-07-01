@@ -7,7 +7,6 @@ import { revalidatePath } from 'next/cache';
 import { admin as firebaseAdmin } from '@/lib/firebase-admin';
 import { getSession } from './auth/actions';
 import { getGcsClient, getGcsBucketName } from '@/lib/gcs';
-import { v4 as uuidv4 } from 'uuid';
 
 
 async function geocodeCoordinates(latitude: number, longitude: number): Promise<string | null> {
@@ -230,8 +229,10 @@ export async function getSignedUploadUrl(fileName: string, fileType: string): Pr
     return { success: false, error: 'Google Cloud Storage is not configured on the server.' };
   }
   
-  // Make filename unique to avoid collisions
-  const uniqueFileName = `${uuidv4()}-${fileName.replace(/\s/g, '_')}`;
+  // Make filename unique to avoid collisions, using built-in methods
+  const randomString = Math.random().toString(36).substring(2, 11);
+  const uniqueFileName = `${Date.now()}-${randomString}-${fileName.replace(/\s/g, '_')}`;
+
 
   const file = storage.bucket(bucketName).file(uniqueFileName);
 
