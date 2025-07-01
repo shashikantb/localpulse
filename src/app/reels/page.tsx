@@ -1,24 +1,18 @@
 
 import type { FC } from 'react';
 import { Suspense } from 'react';
-import { getMediaPosts } from '@/app/actions';
 import { ReelsPageSkeleton } from '@/components/reels-page-skeleton';
 import ReelsViewer from '@/components/reels-viewer';
 import { getSession } from '../auth/actions';
 
 export const dynamic = 'force-dynamic';
 
-const REELS_PER_PAGE = 10;
-
+// This component can now be simplified as the ReelsViewer fetches its own data.
 async function ReelsLoader() {
-  // Fetch the first page of reel posts on the server
-  const [initialPosts, { user: sessionUser }] = await Promise.all([
-    getMediaPosts({ page: 1, limit: REELS_PER_PAGE }),
-    getSession()
-  ]);
+  const { user: sessionUser } = await getSession();
 
-  // Pass the pre-fetched posts to the client component
-  return <ReelsViewer initialPosts={initialPosts} sessionUser={sessionUser} />;
+  // ReelsViewer will now handle its own data fetching.
+  return <ReelsViewer sessionUser={sessionUser} />;
 }
 
 const ReelsPage: FC = () => {

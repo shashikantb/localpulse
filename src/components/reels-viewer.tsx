@@ -13,62 +13,50 @@ import { ChevronUp, ChevronDown, Home, Loader2, Film } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { AlertDescription, AlertTitle, Alert } from '@/components/ui/alert';
 import { useSwipeable } from 'react-swipeable';
+import { ReelsPageSkeleton } from './reels-page-skeleton';
 
 const REELS_PER_PAGE = 10;
-const REELS_CACHE_KEY = 'localpulse-reels-cache';
-const CACHE_VERSION = 'v1.1'; // Increment to invalidate old cache structures
-
-// Helper to get initial reels from cache or server data
-const getInitialCachedReels = (serverInitialPosts: Post[]): Post[] => {
-  if (typeof window === 'undefined') {
-    return serverInitialPosts;
-  }
-  try {
-    const cachedItem = localStorage.getItem(REELS_CACHE_KEY);
-    if (cachedItem) {
-      const cachedData = JSON.parse(cachedItem);
-      if (cachedData.version === CACHE_VERSION && Array.isArray(cachedData.posts)) {
-        return cachedData.posts.length > 0 ? cachedData.posts : serverInitialPosts;
-      }
-    }
-  } catch (error) {
-    console.warn("Failed to read reels cache:", error);
-  }
-  return serverInitialPosts;
-};
-
 
 interface ReelsViewerProps {
-  initialPosts: Post[];
   sessionUser: User | null;
 }
 
-const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts, sessionUser }) => {
+const ReelsViewer: FC<ReelsViewerProps> = ({ sessionUser }) => {
   const { toast } = useToast();
   const router = useRouter();
-  const [reelPosts, setReelPosts] = useState<Post[]>(() => getInitialCachedReels(initialPosts));
+  const [reelPosts, setReelPosts] = useState<Post[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isLoading, setIsLoading] = useState(false); // Only for loading *more* posts
+  const [isLoading, setIsLoading] = useState(true); // For initial load
+  const [isLoadingMore, setIsLoadingMore] = useState(false); // For subsequent "infinite scroll" loads
   const [currentPage, setCurrentPage] = useState(1);
-  const [hasMore, setHasMore] = useState(initialPosts.length === REELS_PER_PAGE);
+  const [hasMore, setHasMore] = useState(true);
 
-  // Effect to save reels to cache
+  // Effect for fetching the very first set of reels
   useEffect(() => {
-    try {
-      const cacheData = {
-        version: CACHE_VERSION,
-        timestamp: new Date().toISOString(),
-        posts: reelPosts.slice(0, REELS_PER_PAGE * 2), // Cache up to 2 pages of reels
-      };
-      localStorage.setItem(REELS_CACHE_KEY, JSON.stringify(cacheData));
-    } catch (error) {
-      console.warn("Failed to save reels to cache:", error);
-    }
-  }, [reelPosts]);
+    const fetchInitialReels = async () => {
+      setIsLoading(true);
+      try {
+        const newPosts = await getMediaPosts({ page: 1, limit: REELS_PER_PAGE });
+        setReelPosts(newPosts);
+        setHasMore(newPosts.length === REELS_PER_PAGE);
+      } catch (error) {
+        console.error("Error fetching initial reels:", error);
+        toast({
+          variant: "destructive",
+          title: "Fetch Error",
+          description: "Could not load reels.",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchInitialReels();
+  }, [toast]);
+
 
   const fetchMoreReelPosts = useCallback(async (page: number) => {
-    if (isLoading || !hasMore) return;
-    setIsLoading(true);
+    if (isLoadingMore || !hasMore) return;
+    setIsLoadingMore(true);
 
     try {
       const newPosts = await getMediaPosts({ page, limit: REELS_PER_PAGE });
@@ -81,9 +69,7 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts, sessionUser }) => {
           return [...prev, ...filteredNewPosts];
         });
         setCurrentPage(page);
-        if (newPosts.length < REELS_PER_PAGE) {
-            setHasMore(false);
-        }
+        setHasMore(newPosts.length === REELS_PER_PAGE);
       } else {
         setHasMore(false);
         if (reelPosts.length > 0) {
@@ -98,17 +84,17 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts, sessionUser }) => {
         description: "Could not load more reels.",
       });
     } finally {
-      setIsLoading(false);
+      setIsLoadingMore(false);
     }
-  }, [toast, isLoading, hasMore, reelPosts.length]);
+  }, [toast, isLoadingMore, hasMore, reelPosts.length]);
   
 
   // Fetch more posts when user gets close to the end of the current list.
   useEffect(() => {
-    if (hasMore && !isLoading && reelPosts.length > 0 && currentIndex >= reelPosts.length - 3) {
+    if (hasMore && !isLoading && !isLoadingMore && reelPosts.length > 0 && currentIndex >= reelPosts.length - 3) {
       fetchMoreReelPosts(currentPage + 1);
     }
-  }, [currentIndex, reelPosts.length, hasMore, isLoading, currentPage, fetchMoreReelPosts]);
+  }, [currentIndex, reelPosts.length, hasMore, isLoading, isLoadingMore, currentPage, fetchMoreReelPosts]);
 
   const goToPreviousReel = useCallback(() => {
     setCurrentIndex(prevIndex => (prevIndex > 0 ? prevIndex - 1 : 0));
@@ -141,7 +127,11 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts, sessionUser }) => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [goToNextReel, goToPreviousReel]);
   
-  if (initialPosts.length === 0 && reelPosts.length === 0) {
+  if (isLoading) {
+    return <ReelsPageSkeleton />;
+  }
+  
+  if (reelPosts.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-svh bg-black text-white p-4 text-center">
         <Alert className="max-w-md bg-gray-900/80 border-gray-700 text-white">
@@ -206,7 +196,7 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts, sessionUser }) => {
             );
         })}
 
-        {isLoading && currentIndex >= reelPosts.length - 1 && hasMore && (
+        {isLoadingMore && hasMore && (
              <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-20">
                 <Loader2 className="w-10 h-10 animate-spin text-white"/>
             </div>
@@ -227,7 +217,7 @@ const ReelsViewer: FC<ReelsViewerProps> = ({ initialPosts, sessionUser }) => {
           </Button>
           
           <div className="text-xs text-white/80 bg-black/30 px-2 py-1 rounded-md backdrop-blur-sm flex items-center pointer-events-auto">
-            {isLoading && hasMore ? (
+            {isLoadingMore ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <span>{currentIndex + 1} / {reelPosts.length}</span>
