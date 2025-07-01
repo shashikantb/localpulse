@@ -120,38 +120,51 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
       setMediaType(null);
       setFileError(null);
       setShowCameraOptions(false);
+      // Reset file input fields
       if (fileInputRef.current) fileInputRef.current.value = '';
       if (imageCaptureInputRef.current) imageCaptureInputRef.current.value = '';
       if (videoCaptureInputRef.current) videoCaptureInputRef.current.value = '';
   }, [previewUrl]);
 
   const handleFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-      removeMedia();
-      const file = event.target.files?.[0];
-      if (!file) return;
+    // If there's already a file preview, revoke its object URL to prevent memory leaks
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
 
-      const currentFileType = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : null;
+    const file = event.target.files?.[0];
+    
+    // If user cancelled the file selection, reset state and exit
+    if (!file) {
+      setSelectedFile(null);
+      setPreviewUrl(null);
+      setMediaType(null);
       setFileError(null);
+      return;
+    }
 
-      if (!currentFileType) {
-          setFileError('Invalid file type. Please select an image or video.');
-          return;
-      }
-      
-      if (currentFileType === 'image' && file.size > MAX_IMAGE_UPLOAD_LIMIT) {
-          setFileError(`Image is too large. Max size: ${Math.round(MAX_IMAGE_UPLOAD_LIMIT / 1024 / 1024)}MB.`);
-          return;
-      }
-      if (currentFileType === 'video' && file.size > MAX_VIDEO_UPLOAD_LIMIT) {
-          setFileError(`Video is too large. Max size: ${Math.round(MAX_VIDEO_UPLOAD_LIMIT / 1024 / 1024)}MB.`);
-          return;
-      }
-      
-      setSelectedFile(file);
-      setMediaType(currentFileType);
-      setPreviewUrl(URL.createObjectURL(file));
+    const currentFileType = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : null;
+    setFileError(null);
 
-   }, [removeMedia]);
+    if (!currentFileType) {
+        setFileError('Invalid file type. Please select an image or video.');
+        return;
+    }
+    
+    if (currentFileType === 'image' && file.size > MAX_IMAGE_UPLOAD_LIMIT) {
+        setFileError(`Image is too large. Max size: ${Math.round(MAX_IMAGE_UPLOAD_LIMIT / 1024 / 1024)}MB.`);
+        return;
+    }
+    if (currentFileType === 'video' && file.size > MAX_VIDEO_UPLOAD_LIMIT) {
+        setFileError(`Video is too large. Max size: ${Math.round(MAX_VIDEO_UPLOAD_LIMIT / 1024 / 1024)}MB.`);
+        return;
+    }
+    
+    setSelectedFile(file);
+    setMediaType(currentFileType);
+    setPreviewUrl(URL.createObjectURL(file));
+
+ }, [previewUrl]);
 
   
   React.useEffect(() => {
@@ -476,5 +489,3 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
     </Form>
   );
 };
-
-    
