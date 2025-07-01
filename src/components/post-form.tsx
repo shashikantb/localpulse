@@ -206,12 +206,19 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
           });
 
           if (!uploadResult.ok) {
-            throw new Error('Upload failed. Please check your network and try again.');
+            const errorBody = await uploadResult.text();
+            console.error("GCS Upload Error:", { 
+              status: uploadResult.status,
+              statusText: uploadResult.statusText,
+              body: errorBody 
+            });
+            throw new Error(`Upload failed with status ${uploadResult.status}. Check the browser console for details.`);
           }
 
           await onSubmit(data.content, hashtagsToSubmit, signedUrlResult.publicUrl, mediaType, mentionedUserIds);
 
         } catch (error: any) {
+          console.error("A critical error occurred during the upload process:", error);
           toast({ variant: 'destructive', title: 'Upload Failed', description: error.message });
           return; // Stop form submission on upload failure
         } finally {
@@ -469,3 +476,5 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
     </Form>
   );
 };
+
+    
