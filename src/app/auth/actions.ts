@@ -118,30 +118,23 @@ export const getSession = cache(async (): Promise<{ user: User | null }> => {
     return { user: null };
   }
 
-  // The getUserByIdDb function now handles sanitization of the profile picture URL.
-  // No need for redundant client-side checks.
   const user = await getUserByIdDb(payload.userId);
 
   return { user };
 });
 
-export async function updateUserProfilePicture(formData: FormData): Promise<{ success: boolean; error?: string }> {
+export async function updateUserProfilePicture(imageUrl: string): Promise<{ success: boolean; error?: string }> {
   const { user } = await getSession();
   if (!user) {
     return { success: false, error: 'You must be logged in to update your profile picture.' };
   }
 
-  const image = formData.get('profilePicture') as string | null;
-  if (!image) {
-    return { success: false, error: 'No image data provided.' };
+  if (!imageUrl || typeof imageUrl !== 'string') {
+    return { success: false, error: 'No valid image URL provided.' };
   }
 
-  // CRITICAL FIX: Do not store the large data URI. Store a placeholder instead.
-  // This prevents bloating the database and the initial HTML payload.
-  const imageUrlForDb = 'https://placehold.co/200x200.png';
-
   try {
-    await updateUserProfilePictureDb(user.id, imageUrlForDb);
+    await updateUserProfilePictureDb(user.id, imageUrl);
     revalidatePath(`/users/${user.id}`);
     revalidatePath('/', 'layout'); // To update the user-nav avatar
     return { success: true };

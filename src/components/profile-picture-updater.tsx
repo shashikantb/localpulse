@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, type ChangeEvent } from 'react';
+import { useState, type ChangeEvent, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, UploadCloud, XCircle } from 'lucide-react';
 import { updateUserProfilePicture } from '@/app/auth/actions';
+import { getSignedUploadUrl } from '@/app/actions';
+import { Progress } from './ui/progress';
 
 export default function ProfilePictureUpdater() {
   const router = useRouter();
@@ -17,15 +19,13 @@ export default function ProfilePictureUpdater() {
   const [preview, setPreview] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isResizing, setIsResizing] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     setError(null);
     setPreview(null);
     setFile(null);
-    setIsResizing(false);
 
     if (!selectedFile) {
       return;
@@ -35,77 +35,68 @@ export default function ProfilePictureUpdater() {
       setError('Please select a valid image file (PNG, JPG, etc.).');
       return;
     }
+    
+    if (selectedFile.size > 10 * 1024 * 1024) { // 10MB limit
+      setError('Image is too large. Max size is 10MB.');
+      return;
+    }
 
-    setIsResizing(true);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = document.createElement('img');
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 512;
-        const MAX_HEIGHT = 512;
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height) {
-          if (width > MAX_WIDTH) {
-            height *= MAX_WIDTH / width;
-            width = MAX_WIDTH;
-          }
-        } else {
-          if (height > MAX_HEIGHT) {
-            width *= MAX_HEIGHT / height;
-            height = MAX_HEIGHT;
-          }
-        }
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          setError('Could not process image.');
-          setIsResizing(false);
-          return;
-        }
-        ctx.drawImage(img, 0, 0, width, height);
-
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85); // Use JPEG with 85% quality
-        setPreview(dataUrl);
-        setFile(selectedFile);
-        setIsResizing(false);
-      };
-      img.onerror = () => {
-        setError('Could not load the selected image file.');
-        setIsResizing(false);
-      };
-      img.src = event.target?.result as string;
-    };
-    reader.onerror = () => {
-      setError('Failed to read the selected file.');
-      setIsResizing(false);
-    };
-    reader.readAsDataURL(selectedFile);
+    setFile(selectedFile);
+    setPreview(URL.createObjectURL(selectedFile));
   };
 
+  // Revoke object URL when the component unmounts or the preview changes
+  useEffect(() => {
+    return () => {
+      if (preview) {
+        URL.revokeObjectURL(preview);
+      }
+    };
+  }, [preview]);
+
   const handleRemoveImage = () => {
+    if (preview) {
+      URL.revokeObjectURL(preview);
+    }
     setPreview(null);
     setFile(null);
+    if ((document.getElementById('profile-picture-input') as HTMLInputElement)) {
+      (document.getElementById('profile-picture-input') as HTMLInputElement).value = '';
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!file || !preview) {
+    if (!file) {
       setError('Please select an image to upload.');
       return;
     }
 
-    setIsSubmitting(true);
+    setIsUploading(true);
     setError(null);
 
     try {
-      const formData = new FormData();
-      formData.append('profilePicture', preview);
+      // 1. Get signed URL from server
+      const signedUrlResult = await getSignedUploadUrl(file.name, file.type);
+      if (!signedUrlResult.success || !signedUrlResult.uploadUrl || !signedUrlResult.publicUrl) {
+        throw new Error(signedUrlResult.error || 'Could not prepare file for upload.');
+      }
 
-      const result = await updateUserProfilePicture(formData);
+      // 2. Upload file directly to GCS
+      const uploadResult = await fetch(signedUrlResult.uploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': file.type },
+      });
+
+      if (!uploadResult.ok) {
+        const errorBody = await uploadResult.text();
+        console.error("GCS Upload Error:", { status: uploadResult.status, body: errorBody });
+        throw new Error(`Upload to cloud storage failed. Please check browser console for details.`);
+      }
+
+      // 3. Update the user profile with the new public URL
+      const result = await updateUserProfilePicture(signedUrlResult.publicUrl);
 
       if (result.success) {
         toast({
@@ -114,19 +105,19 @@ export default function ProfilePictureUpdater() {
         });
         router.refresh();
       } else {
-        setError(result.error || 'An unexpected error occurred.');
+        throw new Error(result.error || 'An unexpected error occurred while saving the picture URL.');
       }
     } catch (err: any) {
       setError(err.message || 'An unexpected server error occurred.');
+      toast({ variant: 'destructive', title: 'Upload Failed', description: err.message });
     } finally {
-      setIsSubmitting(false);
+      setIsUploading(false);
     }
   };
   
-  const isProcessing = isResizing || isSubmitting;
+  const isProcessing = isUploading;
   let buttonText = 'Save Changes';
-  if (isSubmitting) buttonText = 'Saving...';
-  if (isResizing) buttonText = 'Processing...';
+  if (isUploading) buttonText = 'Uploading...';
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -151,35 +142,34 @@ export default function ProfilePictureUpdater() {
                 fill
                 sizes="128px"
               />
-              <div
+              <button
+                type="button"
                 className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                 onClick={(ev) => { ev.preventDefault(); handleRemoveImage(); }}
+                aria-label="Remove image"
               >
                 <XCircle className="h-8 w-8 text-white" />
-              </div>
-            </div>
-          ) : isResizing ? (
-            <div className="flex flex-col items-center space-y-2 text-muted-foreground">
-                <Loader2 className="h-10 w-10 animate-spin" />
-                <span>Resizing Image...</span>
+              </button>
             </div>
           ) : (
             <div className="flex flex-col items-center space-y-2 text-muted-foreground">
               <UploadCloud className="h-10 w-10" />
               <span>Click to upload or drag & drop</span>
-              <span className="text-xs">PNG, JPG, GIF will be resized</span>
+              <span className="text-xs">PNG or JPG, up to 10MB</span>
             </div>
           )}
         </label>
         <Input
           id="profile-picture-input"
           type="file"
-          accept="image/*"
+          accept="image/png,image/jpeg"
           className="hidden"
           onChange={handleFileChange}
           disabled={isProcessing}
         />
       </div>
+
+      {isUploading && <Progress value={100} className="w-full h-2 animate-pulse" />}
 
       <Button type="submit" disabled={!file || isProcessing} className="w-full">
         {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

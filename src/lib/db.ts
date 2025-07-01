@@ -263,18 +263,11 @@ const POST_COLUMNS_SANITIZED = `
   p.commentcount, p.viewcount, p.notifiedcount, p.city, p.hashtags, 
   p.authorid, p.mediatype, p.mediaurl,
   u.name as authorname, u.role as authorrole,
-  CASE 
-    WHEN u.profilepictureurl LIKE 'data:%' THEN 'https://placehold.co/200x200.png' 
-    ELSE u.profilepictureurl 
-  END as authorprofilepictureurl
+  u.profilepictureurl as authorprofilepictureurl
 `;
 
 const USER_COLUMNS_SANITIZED = `
-  id, email, name, role, status, createdat,
-  CASE 
-    WHEN profilepictureurl LIKE 'data:%' THEN 'https://placehold.co/200x200.png' 
-    ELSE profilepictureurl 
-  END as profilepictureurl
+  id, email, name, role, status, createdat, profilepictureurl
 `;
 
 export async function getPostsDb(options: { limit: number; offset: number } = { limit: 10, offset: 0 }, userRole?: UserRole): Promise<Post[]> {
@@ -608,7 +601,7 @@ export async function createUserDb(newUser: NewUser, status: 'pending' | 'approv
         VALUES($1, $2, $3, $4, $5)
         RETURNING id, name, email, role, status, createdat, profilepictureurl;
     `;
-    const values = [newUser.name, newUser.email, passwordhash, newUser.role, status];
+    const values = [newUser.name, newUser.email.toLowerCase(), passwordhash, newUser.role, status];
     const result: QueryResult<User> = await dbPool.query(query, values);
     return result.rows[0];
 }
