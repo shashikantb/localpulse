@@ -39,7 +39,8 @@ async function decrypt(token: string): Promise<any | null> {
 
 export async function signUp(newUser: NewUser): Promise<{ success: boolean; error?: string }> {
   try {
-    const existingUser = await getUserByEmailDb(newUser.email);
+    const emailLower = newUser.email.toLowerCase();
+    const existingUser = await getUserByEmailDb(emailLower);
     if (existingUser) {
       return { success: false, error: 'An account with this email already exists.' };
     }
@@ -47,7 +48,7 @@ export async function signUp(newUser: NewUser): Promise<{ success: boolean; erro
     // Gorakshak & Janta users are approved automatically. Business users are pending.
     const status = newUser.role === 'Gorakshak' || newUser.role === 'Janta' ? 'approved' : 'pending';
 
-    const user = await createUserDb(newUser, status);
+    const user = await createUserDb({ ...newUser, email: emailLower }, status);
     if (user) {
       return { success: true };
     } else {
@@ -61,7 +62,8 @@ export async function signUp(newUser: NewUser): Promise<{ success: boolean; erro
 
 export async function login(email: string, password: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const user = await getUserByEmailDb(email);
+    const emailLower = email.toLowerCase();
+    const user = await getUserByEmailDb(emailLower);
 
     if (!user) {
       return { success: false, error: 'Invalid email or password.' };

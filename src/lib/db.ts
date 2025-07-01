@@ -617,7 +617,7 @@ export async function getUserByEmailDb(email: string): Promise<UserWithPassword 
     const dbPool = getDbPool();
     if (!dbPool) return null;
     
-    const query = 'SELECT * FROM users WHERE email = $1';
+    const query = 'SELECT * FROM users WHERE LOWER(email) = LOWER($1)';
     const result: QueryResult<UserWithPassword> = await dbPool.query(query, [email]);
     return result.rows[0] || null;
 }
@@ -709,7 +709,7 @@ export async function updateUserDb(userId: number, userData: UpdatableUserFields
       WHERE id = $5
       RETURNING id, name, email, role, status, createdat, profilepictureurl;
     `;
-    const values = [userData.name, userData.email, userData.role, userData.status, userId];
+    const values = [userData.name, userData.email.toLowerCase(), userData.role, userData.status, userId];
     const result: QueryResult<User> = await dbPool.query(query, values);
     return result.rows[0] || null;
 }
