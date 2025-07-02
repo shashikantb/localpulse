@@ -379,9 +379,10 @@ export async function registerDeviceToken(
 
 export async function checkForNewerPosts(latestPostIdClientKnows: number): Promise<{ hasNewerPosts: boolean; count: number }> {
   try {
-    if (latestPostIdClientKnows === 0) { 
-        const anyPosts = await db.getPostsDb(); 
-        return { hasNewerPosts: anyPosts.length > 0, count: anyPosts.length };
+    // If the client doesn't know about any posts yet (e.g., initial load),
+    // there are no "newer" posts to show. The initial fetch will get the latest ones.
+    if (latestPostIdClientKnows === 0) {
+        return { hasNewerPosts: false, count: 0 };
     }
     const count = await db.getNewerPostsCountDb(latestPostIdClientKnows);
     return { hasNewerPosts: count > 0, count };
