@@ -2,7 +2,7 @@
 'use client';
 
 import type { FC } from 'react';
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -30,7 +30,7 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
-import { Loader2, XCircle, UploadCloud, Film, Image as ImageIcon, Tag, ChevronDown, Camera, User, Search, UserPlus } from 'lucide-react';
+import { Loader2, XCircle, UploadCloud, Film, Image as ImageIcon, Tag, ChevronDown, Camera, User, Search, UserPlus, Video } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
@@ -99,6 +99,8 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   const [taggedUsers, setTaggedUsers] = React.useState<UserType[]>([]);
   const [isSearching, setIsSearching] = React.useState(false);
 
+  const [hasDetectedUrl, setHasDetectedUrl] = React.useState(false);
+
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const imageCaptureInputRef = React.useRef<HTMLInputElement>(null);
   const videoCaptureInputRef = React.useRef<HTMLInputElement>(null);
@@ -110,6 +112,14 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
       hashtags: [],
     },
   });
+
+  const contentValue = form.watch('content');
+  const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+
+  useEffect(() => {
+    setHasDetectedUrl(youtubeRegex.test(contentValue));
+  }, [contentValue, youtubeRegex]);
+
 
   const removeMedia = useCallback(() => {
       if (previewUrl) {
@@ -195,6 +205,15 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   const handleSubmitForm: SubmitHandler<FormData> = async (data) => {
       if (submitting || isUploading) return;
 
+      if (hasDetectedUrl && selectedFile) {
+        toast({
+          variant: 'destructive',
+          title: 'Media Conflict',
+          description: "A YouTube link was detected in your text. You can't upload a separate file at the same time.",
+        });
+        return;
+      }
+      
       if (fileError) {
         toast({ variant: 'destructive', title: 'File Error', description: fileError });
         return;
@@ -238,6 +257,8 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
           setIsUploading(false);
         }
       } else {
+        // This case handles both no-media posts and posts with a URL in the content.
+        // The server action will parse the URL from the content.
         await onSubmit(data.content, hashtagsToSubmit, undefined, undefined, mentionedUserIds);
       }
       
@@ -247,6 +268,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   };
 
   const isButtonDisabled = submitting || isUploading;
+  const isMediaUploadDisabled = isButtonDisabled || hasDetectedUrl;
 
   let buttonText = 'Share Your Pulse';
   if (isUploading) buttonText = 'Uploading File...';
@@ -264,7 +286,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
               <FormControl>
                 <Textarea
                   id="post-content"
-                  placeholder="Share your local pulse..."
+                  placeholder="Share your local pulse, or paste a YouTube link..."
                   className="resize-none min-h-[100px] text-base shadow-sm focus:ring-2 focus:ring-primary/50 rounded-lg"
                   rows={4}
                   {...field}
@@ -276,6 +298,15 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
           )}
         />
         
+        {hasDetectedUrl && (
+          <Alert variant="default" className="p-2 border-primary/30 bg-primary/5 text-primary">
+            <Video className="h-4 w-4" />
+            <AlertDescription className="text-xs font-semibold">
+              YouTube link detected! This will be attached as video media. File uploads are disabled.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {taggedUsers.length > 0 && (
           <div className="space-y-2">
             <FormLabel className="text-xs text-muted-foreground">Tagged Users:</FormLabel>
@@ -407,9 +438,9 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
             Attach Media (Optional)
           </FormLabel>
             <>
-              <Input id="file-upload" type="file" accept="image/*,video/*" ref={fileInputRef} onChange={handleFileChange} className="hidden" disabled={isButtonDisabled} />
-              <Input id="image-capture" type="file" accept="image/*" capture="environment" ref={imageCaptureInputRef} onChange={handleFileChange} className="hidden" disabled={isButtonDisabled} />
-              <Input id="video-capture" type="file" accept="video/*" capture="environment" ref={videoCaptureInputRef} onChange={handleFileChange} className="hidden" disabled={isButtonDisabled} />
+              <Input id="file-upload" type="file" accept="image/*,video/*" ref={fileInputRef} onChange={handleFileChange} className="hidden" disabled={isMediaUploadDisabled} />
+              <Input id="image-capture" type="file" accept="image/*" capture="environment" ref={imageCaptureInputRef} onChange={handleFileChange} className="hidden" disabled={isMediaUploadDisabled} />
+              <Input id="video-capture" type="file" accept="video/*" capture="environment" ref={videoCaptureInputRef} onChange={handleFileChange} className="hidden" disabled={isMediaUploadDisabled} />
             </>
           
           {previewUrl && selectedFile ? (
@@ -445,10 +476,10 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
               <div className={cn("grid gap-2", showCameraOptions ? "grid-cols-1" : "grid-cols-2")}>
                 {!showCameraOptions && (
                   <>
-                    <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isButtonDisabled}>
+                    <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isMediaUploadDisabled}>
                       <UploadCloud className="mr-2 h-4 w-4" /> Upload File
                     </Button>
-                    <Button type="button" variant="outline" onClick={() => setShowCameraOptions(true)} disabled={isButtonDisabled}>
+                    <Button type="button" variant="outline" onClick={() => setShowCameraOptions(true)} disabled={isMediaUploadDisabled}>
                       <Camera className="mr-2 h-4 w-4" /> Use Camera
                     </Button>
                   </>
@@ -457,14 +488,14 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
                   <div className="space-y-2 text-center">
                     <p className="text-sm text-muted-foreground">Choose a capture option:</p>
                     <div className="grid grid-cols-2 gap-2">
-                       <Button type="button" variant="secondary" onClick={() => imageCaptureInputRef.current?.click()} disabled={isButtonDisabled}>
+                       <Button type="button" variant="secondary" onClick={() => imageCaptureInputRef.current?.click()} disabled={isMediaUploadDisabled}>
                           <ImageIcon className="mr-2 h-4 w-4" /> Take Photo
                       </Button>
-                      <Button type="button" variant="secondary" onClick={() => videoCaptureInputRef.current?.click()} disabled={isButtonDisabled}>
+                      <Button type="button" variant="secondary" onClick={() => videoCaptureInputRef.current?.click()} disabled={isMediaUploadDisabled}>
                           <Film className="mr-2 h-4 w-4" /> Record Video
                       </Button>
                     </div>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => setShowCameraOptions(false)} disabled={isButtonDisabled}>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setShowCameraOptions(false)} disabled={isMediaUploadDisabled}>
                       Cancel
                     </Button>
                   </div>
@@ -489,3 +520,5 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
     </Form>
   );
 };
+
+    

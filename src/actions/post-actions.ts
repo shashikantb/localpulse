@@ -237,26 +237,33 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
         return { error: 'Authentication mismatch. You can only post for yourself.' };
     }
     
-    // Convert YouTube watch URL to embed URL
-    const youtubeWatchRegex = /(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})/;
-    const youtubeShortRegex = /(?:https?:\/\/)?youtu\.be\/([a-zA-Z0-9_-]{11})/;
     let mediaUrl = newPostData.mediaUrl;
     let mediaType = newPostData.mediaType;
+    let content = newPostData.content;
+    
+    // If no media file was uploaded, check the text content for a YouTube link.
+    if (!mediaUrl) {
+        const youtubeWatchRegex = /(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})/;
+        const youtubeShortRegex = /(?:https?:\/\/)?youtu\.be\/([a-zA-Z0-9_-]{11})/;
+        
+        const urlInContent = content; // for clarity
+        const watchMatch = urlInContent.match(youtubeWatchRegex);
+        const shortMatch = urlInContent.match(youtubeShortRegex);
+        const youtubeId = watchMatch ? watchMatch[1] : (shortMatch ? shortMatch[1] : null);
 
-    const watchMatch = mediaUrl?.match(youtubeWatchRegex);
-    const shortMatch = mediaUrl?.match(youtubeShortRegex);
-    const youtubeId = watchMatch ? watchMatch[1] : (shortMatch ? shortMatch[1] : null);
-
-    if (youtubeId) {
-        mediaUrl = `https://www.youtube.com/embed/${youtubeId}`;
-        mediaType = 'video';
+        if (youtubeId) {
+            mediaUrl = `https://www.youtube.com/embed/${youtubeId}`;
+            mediaType = 'video';
+            // Also remove the URL from the content text itself to avoid duplication.
+            const urlToRemove = watchMatch ? watchMatch[0] : shortMatch![0];
+            content = content.replace(urlToRemove, '').trim();
+        }
     }
-
 
     const cityName = await geocodeCoordinates(newPostData.latitude, newPostData.longitude);
 
     const postDataForDb: DbNewPost = {
-      content: newPostData.content,
+      content: content, // Use potentially modified content
       latitude: newPostData.latitude,
       longitude: newPostData.longitude,
       mediaurl: mediaUrl,
@@ -348,6 +355,7 @@ export async function toggleLikePost(postId: number): Promise<{ post?: Post; err
     }
     return { error: 'Post not found or failed to update.' };
   } catch (error: any) {
+    // Fail silently on the client
     console.error(`Server action error toggling like for post ${postId}:`, error.message);
     return { error: 'Failed to update like count due to a server error.' };
   }
@@ -365,6 +373,7 @@ export async function likePostAnonymously(postId: number): Promise<{ post?: Post
     }
     return { error: 'Post not found or failed to update.' };
   } catch (error: any) {
+    // Fail silently on the client
     console.error(`Server action error liking post ${postId} anonymously:`, error.message);
     return { error: 'Failed to update like count due to a server error.' };
   }
@@ -391,6 +400,7 @@ export async function addComment(commentData: NewComment): Promise<{ comment?: C
     revalidatePath(`/posts/${commentData.postId}`);
     return { comment: addedComment };
   } catch (error: any) {
+    // Fail silently on the client
     console.error(`Server action error adding comment to post ${commentData.postId}:`, error.message);
     return { error: 'Failed to add comment due to a server error.' };
   }
@@ -603,5 +613,7 @@ export async function searchUsers(query: string): Promise<User[]> {
     return [];
   }
 }
+
+    
 
     
