@@ -321,7 +321,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
                     </Button>
                 </div>
             )}
-            {!mediaError && (
+            {!mediaError && post.mediatype && (
                  <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/50 text-white text-xs rounded-md backdrop-blur-sm">
                     {post.mediatype.charAt(0).toUpperCase() + post.mediatype.slice(1)}
                 </div>

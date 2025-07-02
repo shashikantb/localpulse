@@ -243,16 +243,20 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
                         </Button>
                     </div>
                 )}
-                <div 
-                  className="absolute top-4 right-4 p-2 bg-black/50 rounded-full cursor-pointer z-10"
-                  onClick={(e) => { e.stopPropagation(); handleVideoTap(); }}
-                >
-                  {isInternallyMuted ? <VolumeX className="w-5 h-5 text-white" /> : <Volume2 className="w-5 h-5 text-white" />}
-                </div>
-                 {videoRef.current?.paused && isActive && !mediaError && (
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
-                        <PlayCircle className="w-16 h-16 text-white/50 backdrop-blur-sm rounded-full" />
+                {!mediaError && (
+                  <>
+                    <div 
+                      className="absolute top-4 right-4 p-2 bg-black/50 rounded-full cursor-pointer z-10"
+                      onClick={(e) => { e.stopPropagation(); handleVideoTap(); }}
+                    >
+                      {isInternallyMuted ? <VolumeX className="w-5 h-5 text-white" /> : <Volume2 className="w-5 h-5 text-white" />}
                     </div>
+                    {videoRef.current?.paused && isActive && (
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
+                            <PlayCircle className="w-16 h-16 text-white/50 backdrop-blur-sm rounded-full" />
+                        </div>
+                    )}
+                  </>
                 )}
               </>
             )}
