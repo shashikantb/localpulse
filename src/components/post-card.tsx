@@ -84,14 +84,37 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
   const [showComments, setShowComments] = useState(false);
   const [currentOrigin, setCurrentOrigin] = useState('');
   const [mediaError, setMediaError] = useState(false);
+  const [youtubeStatus, setYoutubeStatus] = useState<'loading' | 'valid' | 'error'>('loading');
 
   const cardRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [wasViewed, setWasViewed] = useState(false);
 
   useEffect(() => {
+    // Check YouTube video validity
+    if (post.mediatype === 'video' && post.mediaurl?.includes('youtube.com/embed')) {
+      setYoutubeStatus('loading');
+      const videoId = post.mediaurl.split('/').pop()?.split('?')[0];
+      if (!videoId) {
+        setYoutubeStatus('error');
+        return;
+      }
+      // Use oEmbed endpoint to check for validity without an API key
+      fetch(`https://www.youtube.com/oembed?url=http://www.youtube.com/watch?v=${videoId}&format=json`)
+        .then(response => {
+          if (response.ok) {
+            setYoutubeStatus('valid');
+          } else {
+            setYoutubeStatus('error');
+          }
+        })
+        .catch(() => {
+          setYoutubeStatus('error');
+        });
+    }
+    // Reset native media error on post change
     setMediaError(false);
-  }, [post.id]);
+  }, [post.mediaurl, post.mediatype]);
   
   const handleRetryVideo = () => {
     if (videoRef.current) {
@@ -297,35 +320,46 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
             {post.mediatype === 'image' && (
               <Image src={post.mediaurl} alt="Post image" fill style={{ objectFit: "contain" }} sizes="(max-width: 768px) 100vw, 50vw" className="transition-transform duration-300 group-hover:scale-105" data-ai-hint="user generated content" priority={isFirst} />
             )}
-            {post.mediatype === 'video' && (
-              post.mediaurl.includes('youtube.com/embed') ? (
-                <iframe
-                  src={post.mediaurl}
-                  title="YouTube video player"
-                  frameBorder="0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowFullScreen
-                  className="w-full h-full"
-                />
-              ) : (
-                 <video ref={videoRef} controls src={post.mediaurl} className={cn("w-full h-full object-contain", mediaError && "hidden")} onError={() => setMediaError(true)} />
-              )
-            )}
-            {mediaError && (
-                <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center text-white p-4">
+            {post.mediatype === 'video' && post.mediaurl.includes('youtube.com/embed') && (
+              <>
+                {youtubeStatus === 'loading' && <Skeleton className="h-full w-full" />}
+                {youtubeStatus === 'error' && (
+                  <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center text-white p-4">
                     <AlertTriangle className="w-8 h-8 mb-2 text-yellow-400" />
-                    <p className="text-sm text-center font-semibold mb-3">This video could not be loaded.</p>
-                    <Button onClick={handleRetryVideo} variant="secondary" size="sm">
-                        <RefreshCw className="w-4 h-4 mr-2"/>
-                        Retry
-                    </Button>
-                </div>
+                    <p className="text-sm text-center font-semibold">This YouTube video is unavailable.</p>
+                  </div>
+                )}
+                {youtubeStatus === 'valid' && (
+                   <iframe
+                    src={post.mediaurl}
+                    title="YouTube video player"
+                    frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                    className="w-full h-full"
+                  />
+                )}
+              </>
             )}
-            {!mediaError && post.mediatype && (
-                 <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/50 text-white text-xs rounded-md backdrop-blur-sm">
-                    {post.mediatype.charAt(0).toUpperCase() + post.mediatype.slice(1)}
-                </div>
+            {post.mediatype === 'video' && !post.mediaurl.includes('youtube.com/embed') && (
+              <>
+                 <video ref={videoRef} controls src={post.mediaurl} className={cn("w-full h-full object-contain", mediaError && "hidden")} onError={() => setMediaError(true)} />
+                 {mediaError && (
+                    <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center text-white p-4">
+                        <AlertTriangle className="w-8 h-8 mb-2 text-yellow-400" />
+                        <p className="text-sm text-center font-semibold mb-3">This video could not be loaded.</p>
+                        <Button onClick={handleRetryVideo} variant="secondary" size="sm">
+                            <RefreshCw className="w-4 h-4 mr-2"/>
+                            Retry
+                        </Button>
+                    </div>
+                )}
+              </>
             )}
+            
+            <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/50 text-white text-xs rounded-md backdrop-blur-sm">
+                {post.mediatype.charAt(0).toUpperCase() + post.mediatype.slice(1)}
+            </div>
           </div>
         </div>
       )}

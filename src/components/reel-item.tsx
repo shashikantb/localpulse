@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { ReelCommentsSkeleton } from './reel-comments-skeleton';
+import { Skeleton } from './ui/skeleton';
 
 const ReelComments = dynamic(() => import('./reel-comments'), {
     loading: () => <ReelCommentsSkeleton />,
@@ -51,7 +52,7 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isInternallyMuted, setIsInternallyMuted] = useState(true); // Default to muted for better autoplay
   const [mediaError, setMediaError] = useState(false);
-
+  const [youtubeStatus, setYoutubeStatus] = useState<'loading' | 'valid' | 'error'>('loading');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -72,7 +73,23 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
     setShowComments(false);
     setIsInternallyMuted(true);
     setMediaError(false);
-  }, [post.id, post.likecount, post.commentcount, post.isLikedByCurrentUser, sessionUser]);
+    
+    // Check YouTube video validity
+    if (isActive && post.mediatype === 'video' && post.mediaurl?.includes('youtube.com/embed')) {
+      setYoutubeStatus('loading');
+      const videoId = post.mediaurl.split('/').pop()?.split('?')[0];
+      if (!videoId) {
+        setYoutubeStatus('error');
+        return;
+      }
+      fetch(`https://www.youtube.com/oembed?url=http://www.youtube.com/watch?v=${videoId}&format=json`)
+        .then(response => {
+          if (response.ok) setYoutubeStatus('valid');
+          else setYoutubeStatus('error');
+        })
+        .catch(() => setYoutubeStatus('error'));
+    }
+  }, [post.id, post.likecount, post.commentcount, post.isLikedByCurrentUser, sessionUser, post.mediaurl, post.mediatype, isActive]);
 
 
   useEffect(() => {
@@ -214,14 +231,25 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
         {post.mediatype === 'video' && post.mediaurl && (
           <>
             {isYouTubeVideo ? (
-              <iframe
-                src={`${post.mediaurl}?autoplay=1&mute=1&playsinline=1&loop=1&playlist=${post.mediaurl.split('/').pop()}`}
-                title="YouTube video player"
-                frameBorder="0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
-                className="w-full h-full object-contain"
-              />
+              <>
+                {youtubeStatus === 'loading' && <Skeleton className="h-full w-full bg-gray-900" />}
+                {youtubeStatus === 'error' && (
+                  <div className="absolute inset-0 bg-black flex flex-col items-center justify-center text-white p-4 z-20">
+                    <AlertTriangle className="w-12 h-12 mb-3 text-yellow-400" />
+                    <p className="text-base font-semibold text-center">This YouTube video is unavailable.</p>
+                  </div>
+                )}
+                {youtubeStatus === 'valid' && (
+                  <iframe
+                    src={`${post.mediaurl}?autoplay=1&mute=1&playsinline=1&loop=1&playlist=${post.mediaurl.split('/').pop()?.split('?')[0]}`}
+                    title="YouTube video player"
+                    frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                    className="w-full h-full object-contain"
+                  />
+                )}
+              </>
             ) : (
               <>
                 <video
