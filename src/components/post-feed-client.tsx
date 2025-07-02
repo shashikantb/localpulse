@@ -217,20 +217,10 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
       if (window.Android && typeof window.Android.getFCMToken === 'function') {
         const token = await getTokenWithRetries();
         if (token) {
-          toast({
-            duration: 15000,
-            title: "Your Device Token",
-            description: (
-              <div className="w-full break-words">
-                <p className="mb-2">Use this token for testing push notifications:</p>
-                <code className="text-xs bg-muted p-1 rounded font-mono">{token}</code>
-              </div>
-            ),
-          });
           const result = await registerDeviceToken(token, location?.latitude, location?.longitude);
           if (result.success) {
             setNotificationPermissionStatus('granted');
-            toast({ title: "Success!", description: "Notification token registered."});
+            toast({ title: "Success!", description: "You are now set up for notifications."});
           } else {
              toast({ variant: "destructive", title: "Registration Error", description: result.error || "Could not register for notifications." });
              setNotificationPermissionStatus('denied');
@@ -425,7 +415,8 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
             });
         }
     } catch (error: any) {
-        console.error("Error loading more posts:", error);
+      // Don't show a toast for this, just log it.
+      console.error("Error loading more posts:", error.message);
     } finally {
         setIsLoadingMore(false);
     }
@@ -601,7 +592,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
         </AlertDialogContent>
       </AlertDialog>
 
-      <div className="flex justify-end items-center sticky top-6 z-30 mb-4 px-1 gap-2 flex-wrap">
+      <div className="flex justify-end items-center sticky top-16 z-30 mb-4 px-1 gap-2 flex-wrap">
           {newPulsesAvailable && (
               <Button variant="outline" size="sm" onClick={handleLoadNewPulses} className="animate-pulse bg-accent/10 hover:bg-accent/20 border-accent/50 text-accent hover:text-accent/90 shadow-md mr-auto">
                   <RefreshCw className="w-4 h-4 mr-2" />
@@ -653,3 +644,5 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
 };
 
 export default PostFeedClient;
+
+    

@@ -69,12 +69,16 @@ const ReelComments: FC<ReelCommentsProps> = ({ postId, sessionUser, onClose, onC
         setIsSubmittingComment(true);
         try {
           const author = sessionUser?.name || 'ReelViewer';
-          const added = await addComment({ postId, content: newComment.trim(), author });
-          setComments(prev => [added, ...prev]);
-          setNewComment('');
-          onCommentPosted(added);
+          const result = await addComment({ postId, content: newComment.trim(), author });
+          if (result.comment) {
+            setComments(prev => [result.comment!, ...prev]);
+            setNewComment('');
+            onCommentPosted(result.comment);
+          } else {
+            console.error("Could not post comment on reel:", result.error);
+          }
         } catch (error) {
-          console.error("Could not post comment on reel:", error);
+          console.error("An unexpected error occurred while posting comment on reel:", error);
         } finally {
           setIsSubmittingComment(false);
         }
@@ -122,3 +126,5 @@ const ReelComments: FC<ReelCommentsProps> = ({ postId, sessionUser, onClose, onC
 };
 
 export default ReelComments;
+
+    

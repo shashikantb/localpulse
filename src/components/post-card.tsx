@@ -155,36 +155,38 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
     if (isLiking) return;
     setIsLiking(true);
 
+    const originalLikeState = isLikedByClient;
+    const originalLikeCount = displayLikeCount;
+
+    // Optimistic UI update
+    setIsLikedByClient(!originalLikeState);
+    setDisplayLikeCount(prev => originalLikeState ? prev - 1 : prev + 1);
+
     try {
-        if (sessionUser) {
-            // --- LOGGED-IN USER ---
-            const result = await toggleLikePost(post.id);
-            if (result.error || !result.post) {
-                console.error("Failed to toggle like:", result.error);
-            } else {
-                // Update UI from server's response
-                setDisplayLikeCount(result.post.likecount);
-                setIsLikedByClient(result.post.isLikedByCurrentUser || false);
-            }
+        const result = sessionUser 
+            ? await toggleLikePost(post.id) 
+            : await likePostAnonymously(post.id);
+
+        if (result.error || !result.post) {
+            console.error("Failed to toggle like:", result.error);
+            // Revert UI on failure
+            setIsLikedByClient(originalLikeState);
+            setDisplayLikeCount(originalLikeCount);
         } else {
-            // --- ANONYMOUS USER ---
-            if (getAnonymousLikedPosts().includes(post.id)) {
-                toast({ title: "You've already liked this post." });
-                return;
-            }
-            const result = await likePostAnonymously(post.id);
-            if (result.error || !result.post) {
-                console.error("Failed to like anonymously:", result.error);
-            } else {
-                // Success, save to localStorage and update UI from server's response
+            // If anonymous, update local storage
+            if (!sessionUser) {
                 const currentLikes = getAnonymousLikedPosts();
                 window.localStorage.setItem('localpulse-anonymous-likes', JSON.stringify([...currentLikes, post.id]));
-                setDisplayLikeCount(result.post.likecount);
-                setIsLikedByClient(true);
             }
+            // Sync with server state just in case
+            setDisplayLikeCount(result.post.likecount);
+            setIsLikedByClient(result.post.isLikedByCurrentUser || !sessionUser);
         }
     } catch (error) {
         console.error("An unexpected server error occurred during like action:", error);
+        // Revert UI on unexpected error
+        setIsLikedByClient(originalLikeState);
+        setDisplayLikeCount(originalLikeCount);
     } finally {
         setIsLiking(false);
     }
@@ -295,21 +297,14 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
               <Image src={post.mediaurl} alt="Post image" fill style={{ objectFit: "contain" }} sizes="(max-width: 768px) 100vw, 50vw" className="transition-transform duration-300 group-hover:scale-105" data-ai-hint="user generated content" priority={isFirst} />
             )}
             {isYouTubeVideo ? (
-                <a href={post.mediaurl.replace('/embed/', '/watch?v=')} target="_blank" rel="noopener noreferrer" className="block w-full h-full">
-                    <Image 
-                        src={`https://img.youtube.com/vi/${post.mediaurl.split('/').pop()?.split('?')[0]}/hqdefault.jpg`} 
-                        alt="YouTube video thumbnail" 
-                        fill 
-                        style={{ objectFit: "cover" }} 
-                        sizes="(max-width: 768px) 100vw, 50vw" 
-                        className="transition-transform duration-300 group-hover:scale-105"
-                    />
-                    <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-                        <div className="w-16 h-16 bg-red-600/80 rounded-full flex items-center justify-center">
-                            <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
-                        </div>
-                    </div>
-                </a>
+                <iframe
+                    src={post.mediaurl}
+                    title="YouTube video player"
+                    frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                    className="w-full h-full"
+                ></iframe>
             ) : post.mediatype === 'video' && (
               <>
                  <video ref={videoRef} controls src={post.mediaurl} className={cn("w-full h-full object-contain", mediaError && "hidden")} onError={() => setMediaError(true)} />
@@ -403,3 +398,5 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
     </Card>
   );
 };
+
+    

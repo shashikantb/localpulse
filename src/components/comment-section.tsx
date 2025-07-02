@@ -73,13 +73,18 @@ const CommentSection: FC<CommentSectionProps> = ({ postId, sessionUser, onCommen
     setIsSubmittingComment(true);
     try {
       const author = sessionUser?.name || 'PulseFan';
-      const added = await addComment({ postId, content: newComment.trim(), author });
-      setComments(prev => [added, ...prev]);
-      setNewComment('');
-      onCommentPosted(); // Notify parent to update count
-      toast({ title: 'Comment Pulsed!', description: 'Your thoughts are now part of the vibe.', className:"bg-accent text-accent-foreground" });
+      const result = await addComment({ postId, content: newComment.trim(), author });
+      if (result.comment) {
+        setComments(prev => [result.comment!, ...prev]);
+        setNewComment('');
+        onCommentPosted(); // Notify parent to update count
+        toast({ title: 'Comment Pulsed!', description: 'Your thoughts are now part of the vibe.', className:"bg-accent text-accent-foreground" });
+      } else {
+        // Silently fail but log the error
+        console.error("Could not post comment:", result.error);
+      }
     } catch (error) {
-      console.error("Could not post comment:", error);
+      console.error("An unexpected error occurred while posting comment:", error);
     } finally {
       setIsSubmittingComment(false);
     }
@@ -130,3 +135,5 @@ const CommentSection: FC<CommentSectionProps> = ({ postId, sessionUser, onCommen
 }
 
 export default CommentSection;
+
+    

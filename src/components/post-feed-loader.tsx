@@ -14,3 +14,5 @@ export default function PostFeedLoader() {
   // initialPosts will now be fetched inside PostFeedClient itself.
   return <PostFeedClient initialPosts={[]} />;
 }
+
+    

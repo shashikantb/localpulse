@@ -15,19 +15,6 @@ interface PostComposerProps {
   onPostSuccess: () => void;
 }
 
-const getYouTubeVideoId = (url: string): string | null => {
-  if (!url) return null;
-  // This regex handles youtu.be, /embed/, /v/, /watch?v=, and &v= formats
-  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-  const match = url.match(regExp);
-
-  if (match && match[2].length === 11) {
-    return match[2];
-  }
-  return null;
-};
-
-
 const PostComposer: FC<PostComposerProps> = ({ sessionUser, onPostSuccess }) => {
   const { toast } = useToast();
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -66,45 +53,29 @@ const PostComposer: FC<PostComposerProps> = ({ sessionUser, onPostSuccess }) => 
 
   const handleAddPost = async (content: string, hashtags: string[], mediaUrl?: string, mediaType?: 'image' | 'video', mentionedUserIds?: number[]) => {
     if (!location && !locationError) {
-      console.warn("Location not yet available. Please wait.");
+      toast({ variant: 'destructive', title: "Location Unavailable", description: "Your location is still being determined. Please wait a moment and try again." });
       return;
     }
     
     if(locationError) {
-        console.error("Cannot post due to location error:", locationError);
+        toast({ variant: 'destructive', title: "Location Error", description: "Cannot post without a valid location." });
         return;
     }
 
     if (!content.trim() && !mediaUrl) {
-      console.error("Post content cannot be empty without media.");
+      toast({ variant: 'destructive', title: "Empty Post", description: "Please write some content or upload media to create a pulse." });
       return;
     }
 
     setFormSubmitting(true);
 
-    let finalContent = content;
-    let finalMediaUrl = mediaUrl;
-    let finalMediaType = mediaType;
-    
-    // Check for YouTube link in the original content
-    const youtubeId = getYouTubeVideoId(content);
-        
-    if (youtubeId && !mediaUrl) { // Only convert to YouTube embed if no other file is uploaded
-      finalMediaUrl = `https://www.youtube.com/embed/${youtubeId}`;
-      finalMediaType = 'video';
-      
-      const urlRegex = /(?:https?:\/\/)?(?:www\.)?(?:m\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?(?:embed\/)?(?:v\/)?(?:u\/\w\/)?([^#&?\s]+)/g;
-      finalContent = content.replace(urlRegex, '').trim();
-    }
-
-
     try {
       const postData: NewPost = {
-        content: finalContent,
+        content: content,
         latitude: location!.latitude,
         longitude: location!.longitude,
-        mediaUrl: finalMediaUrl,
-        mediaType: finalMediaType,
+        mediaUrl: mediaUrl,
+        mediaType: mediaType,
         hashtags: hashtags || [],
         authorId: sessionUser ? sessionUser.id : undefined,
         mentionedUserIds: mentionedUserIds || [],
@@ -113,12 +84,14 @@ const PostComposer: FC<PostComposerProps> = ({ sessionUser, onPostSuccess }) => 
 
       if (result.error) {
         console.error("Failed to add post:", result.error);
+        toast({ variant: "destructive", title: "Post Failed", description: result.error });
       } else if (result.post) {
         toast({ title: "Post Added!", description: "Your pulse is now live! It will appear in the feed shortly.", variant: "default", className: "bg-primary text-primary-foreground" });
         onPostSuccess();
       }
     } catch (error: any) {
       console.error("An unexpected error occurred while adding post:", error.message);
+      toast({ variant: "destructive", title: "An Error Occurred", description: "Could not add post due to a server error." });
     } finally {
       setFormSubmitting(false);
     }
@@ -149,3 +122,5 @@ const PostComposer: FC<PostComposerProps> = ({ sessionUser, onPostSuccess }) => 
 };
 
 export default PostComposer;
+
+    
