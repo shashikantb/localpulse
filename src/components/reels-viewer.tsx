@@ -3,13 +3,12 @@
 
 import type { FC } from 'react';
 import { useState, useEffect, useCallback } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { Post, User } from '@/lib/db-types';
 import { getMediaPosts } from '@/app/actions';
 import { ReelItem } from '@/components/reel-item';
 import { Button } from '@/components/ui/button';
-import { ChevronUp, ChevronDown, Home, Loader2, Film, RefreshCw, Terminal } from 'lucide-react';
+import { ChevronUp, ChevronDown, Loader2, Film } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { AlertDescription, AlertTitle, Alert } from '@/components/ui/alert';
 import { useSwipeable } from 'react-swipeable';
@@ -173,32 +172,20 @@ const ReelsViewer: FC<{ sessionUser: User | null }> = ({ sessionUser }) => {
   
   if (!isLoading && reelPosts.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-svh bg-black text-white p-4 text-center">
+      <div className="flex flex-col items-center justify-center h-full bg-black text-white p-4 text-center">
         <Alert className="max-w-md bg-gray-900/80 border-gray-700 text-white">
           <Film className="h-5 w-5 text-primary" />
           <AlertTitle className="text-xl font-semibold mb-2">No Reels to Show</AlertTitle>
-          <AlertDescription className="text-base text-gray-300 mb-6">
-            It looks like there are no image or video posts available right now. Create one from the main feed!
+          <AlertDescription className="text-base text-gray-300">
+            It looks like there are no image or video posts available right now. You can create one from the Home feed!
           </AlertDescription>
-           <Button asChild variant="outline" className="bg-primary text-primary-foreground hover:bg-primary/90 border-primary w-full">
-            <Link href="/">
-              <Home className="mr-2 h-5 w-5" />
-              Back to Main Feed
-            </Link>
-          </Button>
         </Alert>
       </div>
     );
   }
 
   return (
-    <div {...swipeHandlers} className="h-svh w-screen overflow-hidden flex flex-col bg-black touch-none">
-      <div className="absolute top-4 left-4 z-30">
-        <Button onClick={() => router.push('/')} variant="ghost" size="icon" className="text-white hover:bg-white/20 backdrop-blur-sm rounded-full h-11 w-11" aria-label="Back to Feed">
-          <Home className="h-6 w-6" />
-        </Button>
-      </div>
-      
+    <div {...swipeHandlers} className="h-full w-full overflow-hidden flex flex-col bg-black touch-none">
       <div className="flex-grow relative w-full h-full overflow-hidden">
         {reelPosts.map((post, index) => {
             if (Math.abs(index - currentIndex) > 1) return null;

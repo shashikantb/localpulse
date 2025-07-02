@@ -51,7 +51,7 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
   const isOwnProfile = sessionUser?.id === profileUser.id;
 
   return (
-    <main className="flex min-h-svh flex-col items-center p-4 sm:p-6 md:p-8 lg:p-16 bg-gradient-to-br from-background to-muted/30">
+    <div className="flex flex-col items-center p-4 sm:p-6 md:p-8 lg:p-16 bg-gradient-to-br from-background to-muted/30">
       <div className="container mx-auto max-w-2xl space-y-8 py-8">
         
         <Card className="shadow-xl border border-border/60 rounded-xl bg-card/80 backdrop-blur-sm">
@@ -154,7 +154,7 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
         </div>
 
       </div>
-    </main>
+    </div>
   );
 };
 

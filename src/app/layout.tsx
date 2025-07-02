@@ -6,6 +6,7 @@ import { Toaster } from '@/components/ui/toaster';
 import Footer from '@/components/layout/footer';
 import { AppInstallPrompt } from '@/components/app-install-prompt';
 import Header from '@/components/layout/header';
+import StickyNav from '@/components/sticky-nav';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -31,11 +32,11 @@ export default function RootLayout({
       </head>
       <body className={`${geistSans.variable} antialiased bg-background text-foreground flex flex-col min-h-svh`}>
         <Header />
-        <div className="flex-grow"> {/* Removed padding that compensated for the old bottom bar */}
+        <StickyNav />
+        <main className="flex-grow">
           {children}
-        </div>
+        </main>
         <Footer />
-        {/* The BottomNavBar has been removed to prevent content overlap */}
         <AppInstallPrompt />
         <Toaster />
       </body>

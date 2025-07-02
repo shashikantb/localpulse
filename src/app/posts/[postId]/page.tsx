@@ -28,7 +28,7 @@ const PostPage: FC<PostPageProps> = async ({ params }) => {
   }
 
   return (
-    <main className="flex min-h-svh flex-col items-center p-4 sm:p-6 md:p-8 lg:p-16 bg-gradient-to-br from-background to-muted/30">
+    <div className="flex flex-col items-center p-4 sm:p-6 md:p-8 lg:p-16 bg-gradient-to-br from-background to-muted/30">
       <div className="container mx-auto max-w-2xl py-8">
         <PostCard 
           key={post.id} 
@@ -37,7 +37,7 @@ const PostPage: FC<PostPageProps> = async ({ params }) => {
           sessionUser={sessionUser} 
         />
       </div>
-    </main>
+    </div>
   );
 };
 
