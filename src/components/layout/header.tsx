@@ -2,17 +2,22 @@
 import type { FC } from 'react';
 import Link from 'next/link';
 import { Rss } from 'lucide-react';
-import { getSession } from '@/app/auth/actions';
 import dynamic from 'next/dynamic';
 import { Skeleton } from '@/components/ui/skeleton';
+import type { User } from '@/lib/db-types';
 
 // Dynamically import the user nav to code-split it from the main bundle.
 const HeaderUserNav = dynamic(() => import('./header-user-nav'), {
   loading: () => <Skeleton className="h-10 w-10 rounded-full" />,
 });
 
-const Header: FC = async () => {
-  const { user } = await getSession();
+interface HeaderProps {
+  user: User | null;
+}
+
+const Header: FC<HeaderProps> = ({ user }) => {
+  // The Header component now receives the user session as a prop.
+  // It no longer needs to be async or fetch the session itself.
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">

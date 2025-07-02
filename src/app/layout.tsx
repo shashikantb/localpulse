@@ -6,12 +6,9 @@ import { Toaster } from '@/components/ui/toaster';
 import Footer from '@/components/layout/footer';
 import { AppInstallPrompt } from '@/components/app-install-prompt';
 import Header from '@/components/layout/header';
-import dynamic from 'next/dynamic';
-
-const BottomNavBar = dynamic(() => import('@/components/layout/bottom-nav-bar'), {
-  // No loading skeleton needed as it's invisible on desktop and loads after hydration on mobile.
-  loading: () => null, 
-});
+import { getSession } from './auth/actions';
+import type { User } from '@/lib/db-types';
+import BottomNavBar from '@/components/layout/bottom-nav-bar';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -28,8 +25,8 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // This component is now static and does not fetch the session.
-  // This allows Next.js to cache the page shell, improving performance.
+  // Fetch session once in the root layout.
+  const { user } = await getSession();
 
   return (
     <html lang="en" className="h-full">
@@ -38,12 +35,14 @@ export default async function RootLayout({
         {/* Next.js will populate this head based on metadata and other conventions */}
       </head>
       <body className={`${geistSans.variable} antialiased bg-background text-foreground flex flex-col min-h-svh`}>
-        <Header />
+        {/* Pass the user session down to the header */}
+        <Header user={user} />
         <div className="flex-grow pb-16 sm:pb-0"> {/* Add padding-bottom for mobile, remove for sm and up */}
           {children}
         </div>
         <Footer />
-        <BottomNavBar />
+        {/* Pass the user session down to the bottom nav bar */}
+        <BottomNavBar user={user} />
         <AppInstallPrompt />
         <Toaster />
       </body>
