@@ -42,7 +42,6 @@ interface ReelCommentsProps {
 }
 
 const ReelComments: FC<ReelCommentsProps> = ({ postId, sessionUser, onClose, onCommentPosted, initialCommentCount }) => {
-    const { toast } = useToast();
     const [comments, setComments] = useState<CommentType[]>([]);
     const [newComment, setNewComment] = useState('');
     const [isLoadingComments, setIsLoadingComments] = useState(true);
@@ -54,11 +53,11 @@ const ReelComments: FC<ReelCommentsProps> = ({ postId, sessionUser, onClose, onC
           const fetchedComments = await getComments(postId);
           setComments(fetchedComments);
         } catch (error) {
-          toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch comments.' });
+          console.error("Could not fetch comments for reel:", error);
         } finally {
           setIsLoadingComments(false);
         }
-    }, [postId, toast]);
+    }, [postId]);
 
     useEffect(() => {
         fetchPostComments();
@@ -75,7 +74,7 @@ const ReelComments: FC<ReelCommentsProps> = ({ postId, sessionUser, onClose, onC
           setNewComment('');
           onCommentPosted(added);
         } catch (error) {
-          toast({ variant: 'destructive', title: 'Error', description: 'Could not post comment.' });
+          console.error("Could not post comment on reel:", error);
         } finally {
           setIsSubmittingComment(false);
         }

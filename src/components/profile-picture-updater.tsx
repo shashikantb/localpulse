@@ -109,7 +109,6 @@ export default function ProfilePictureUpdater() {
       }
     } catch (err: any) {
       setError(err.message || 'An unexpected server error occurred.');
-      toast({ variant: 'destructive', title: 'Upload Failed', description: err.message });
     } finally {
       setIsUploading(false);
     }

@@ -68,7 +68,6 @@ const CommentSection: FC<CommentSectionProps> = ({ postId, sessionUser, onCommen
   const handleCommentSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!newComment.trim()) {
-      toast({ variant: 'destructive', title: 'Error', description: 'Comment cannot be empty.' });
       return;
     }
     setIsSubmittingComment(true);
@@ -80,7 +79,7 @@ const CommentSection: FC<CommentSectionProps> = ({ postId, sessionUser, onCommen
       onCommentPosted(); // Notify parent to update count
       toast({ title: 'Comment Pulsed!', description: 'Your thoughts are now part of the vibe.', className:"bg-accent text-accent-foreground" });
     } catch (error) {
-      toast({ variant: 'destructive', title: 'Error', description: 'Could not post comment.' });
+      console.error("Could not post comment:", error);
     } finally {
       setIsSubmittingComment(false);
     }

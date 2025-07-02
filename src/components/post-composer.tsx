@@ -65,14 +65,18 @@ const PostComposer: FC<PostComposerProps> = ({ sessionUser, onPostSuccess }) => 
   }, []);
 
   const handleAddPost = async (content: string, hashtags: string[], mediaUrl?: string, mediaType?: 'image' | 'video', mentionedUserIds?: number[]) => {
-    if (!location) {
-      const errMessage = locationError || "Cannot determine location. Please enable location services and refresh.";
-      toast({ variant: "destructive", title: "Location Error", description: errMessage });
+    if (!location && !locationError) {
+      console.warn("Location not yet available. Please wait.");
       return;
     }
-    // Content can be empty if there's a video link
-    if (!content.trim() && !getYouTubeVideoId(content)) {
-      toast({ variant: "destructive", title: "Post Error", description: "Post content cannot be empty." });
+    
+    if(locationError) {
+        console.error("Cannot post due to location error:", locationError);
+        return;
+    }
+
+    if (!content.trim() && !mediaUrl) {
+      console.error("Post content cannot be empty without media.");
       return;
     }
 
@@ -85,29 +89,20 @@ const PostComposer: FC<PostComposerProps> = ({ sessionUser, onPostSuccess }) => 
     // Check for YouTube link in the original content
     const youtubeId = getYouTubeVideoId(content);
         
-    if (youtubeId) {
+    if (youtubeId && !mediaUrl) { // Only convert to YouTube embed if no other file is uploaded
       finalMediaUrl = `https://www.youtube.com/embed/${youtubeId}`;
       finalMediaType = 'video';
       
-      // Remove the original YouTube link from the content to avoid redundancy
       const urlRegex = /(?:https?:\/\/)?(?:www\.)?(?:m\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?(?:embed\/)?(?:v\/)?(?:u\/\w\/)?([^#&?\s]+)/g;
       finalContent = content.replace(urlRegex, '').trim();
-
-      if (mediaUrl) { // If a file was uploaded AND a youtube link was found
-          toast({
-              title: "Media Priority",
-              description: "A YouTube link was found, so it will be used as the media for this post instead of the uploaded file.",
-              variant: "default",
-          });
-      }
     }
 
 
     try {
       const postData: NewPost = {
         content: finalContent,
-        latitude: location.latitude,
-        longitude: location.longitude,
+        latitude: location!.latitude,
+        longitude: location!.longitude,
         mediaUrl: finalMediaUrl,
         mediaType: finalMediaType,
         hashtags: hashtags || [],
@@ -117,15 +112,13 @@ const PostComposer: FC<PostComposerProps> = ({ sessionUser, onPostSuccess }) => 
       const result = await addPost(postData);
 
       if (result.error) {
-        toast({ variant: "destructive", title: "Post Error", description: result.error || "Failed to add post." });
+        console.error("Failed to add post:", result.error);
       } else if (result.post) {
         toast({ title: "Post Added!", description: "Your pulse is now live! It will appear in the feed shortly.", variant: "default", className: "bg-primary text-primary-foreground" });
         onPostSuccess();
-      } else {
-        toast({ variant: "destructive", title: "Post Error", description: "An unexpected issue occurred." });
       }
     } catch (error: any) {
-      toast({ variant: "destructive", title: "Post Error", description: error.message || "An unexpected error." });
+      console.error("An unexpected error occurred while adding post:", error.message);
     } finally {
       setFormSubmitting(false);
     }

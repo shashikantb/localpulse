@@ -57,11 +57,8 @@ const UsernameEditor: FC<UsernameEditorProps> = ({ children, currentName }) => {
       });
       setIsOpen(false);
     } else {
-      toast({
-        variant: 'destructive',
-        title: 'Update Failed',
-        description: result.error,
-      });
+      console.error("Failed to update username:", result.error);
+      form.setError("name", { type: "manual", message: result.error || "An unexpected error occurred." });
     }
     setIsSubmitting(false);
   };

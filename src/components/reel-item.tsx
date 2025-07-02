@@ -52,7 +52,6 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isInternallyMuted, setIsInternallyMuted] = useState(true); // Default to muted for better autoplay
   const [mediaError, setMediaError] = useState(false);
-  const [youtubeStatus, setYoutubeStatus] = useState<'loading' | 'valid' | 'error'>('loading');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -74,21 +73,6 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
     setIsInternallyMuted(true);
     setMediaError(false);
     
-    // Check YouTube video validity
-    if (isActive && post.mediatype === 'video' && post.mediaurl?.includes('youtube.com/embed')) {
-      setYoutubeStatus('loading');
-      const videoId = post.mediaurl.split('/').pop()?.split('?')[0];
-      if (!videoId) {
-        setYoutubeStatus('error');
-        return;
-      }
-      fetch(`https://www.youtube.com/oembed?url=http://www.youtube.com/watch?v=${videoId}&format=json`)
-        .then(response => {
-          if (response.ok) setYoutubeStatus('valid');
-          else setYoutubeStatus('error');
-        })
-        .catch(() => setYoutubeStatus('error'));
-    }
   }, [post.id, post.likecount, post.commentcount, post.isLikedByCurrentUser, sessionUser, post.mediaurl, post.mediatype, isActive]);
 
 
@@ -139,7 +123,7 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
             // --- LOGGED-IN USER ---
             const result = await toggleLikePost(post.id);
             if (result.error || !result.post) {
-                toast({ variant: 'destructive', title: 'Error', description: result.error || 'Could not update like.' });
+                console.error("Failed to toggle like:", result.error);
             } else {
                 // Update UI from server's response
                 setDisplayLikeCount(result.post.likecount);
@@ -153,7 +137,7 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
             }
             const result = await likePostAnonymously(post.id);
             if (result.error || !result.post) {
-                toast({ variant: 'destructive', title: 'Error', description: 'Could not like post.' });
+                console.error("Failed to like anonymously:", result.error);
             } else {
                 // Success, save to localStorage and update UI from server's response
                 const currentLikes = getAnonymousLikedPosts();
@@ -163,7 +147,7 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
             }
         }
     } catch (error) {
-        toast({ variant: 'destructive', title: 'Error', description: 'An unexpected server error occurred.' });
+        console.error("An unexpected server error occurred during like action:", error);
     } finally {
         setIsLiking(false);
     }
@@ -188,7 +172,7 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
         await navigator.clipboard.writeText(postUrl);
         toast({ title: "Link Copied!", description: "The link to this reel has been copied." });
       } catch (err) {
-        toast({ variant: "destructive", title: "Error", description: "Could not copy link." });
+        console.error("Failed to copy link:", err);
       }
     }
   };
@@ -231,25 +215,21 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
         {post.mediatype === 'video' && post.mediaurl && (
           <>
             {isYouTubeVideo ? (
-              <>
-                {youtubeStatus === 'loading' && <Skeleton className="h-full w-full bg-gray-900" />}
-                {youtubeStatus === 'error' && (
-                  <div className="absolute inset-0 bg-black flex flex-col items-center justify-center text-white p-4 z-20">
-                    <AlertTriangle className="w-12 h-12 mb-3 text-yellow-400" />
-                    <p className="text-base font-semibold text-center">This YouTube video is unavailable.</p>
-                  </div>
-                )}
-                {youtubeStatus === 'valid' && (
-                  <iframe
-                    src={`${post.mediaurl}?autoplay=1&mute=1&playsinline=1&loop=1&playlist=${post.mediaurl.split('/').pop()?.split('?')[0]}`}
-                    title="YouTube video player"
-                    frameBorder="0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    allowFullScreen
-                    className="w-full h-full object-contain"
+              <a href={post.mediaurl.replace('/embed/', '/watch?v=')} target="_blank" rel="noopener noreferrer" className="block w-full h-full">
+                  <Image 
+                      src={`https://img.youtube.com/vi/${post.mediaurl.split('/').pop()?.split('?')[0]}/hqdefault.jpg`} 
+                      alt="YouTube video thumbnail" 
+                      fill 
+                      style={{ objectFit: "cover" }} 
+                      sizes="(max-width: 768px) 100vw, 50vw" 
+                      className="transition-transform duration-300 group-hover:scale-105"
                   />
-                )}
-              </>
+                  <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                      <div className="w-16 h-16 bg-red-600/80 rounded-full flex items-center justify-center">
+                          <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+                      </div>
+                  </div>
+              </a>
             ) : (
               <>
                 <video

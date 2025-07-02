@@ -5,7 +5,6 @@ import type { FC } from 'react';
 import { useState, useTransition } from 'react';
 import { Button } from '@/components/ui/button';
 import { toggleFollow } from '@/app/actions';
-import { useToast } from '@/hooks/use-toast';
 import { Loader2, UserPlus, UserCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -15,7 +14,6 @@ interface FollowButtonProps {
 }
 
 const FollowButton: FC<FollowButtonProps> = ({ targetUserId, initialIsFollowing }) => {
-  const { toast } = useToast();
   const [isFollowing, setIsFollowing] = useState(initialIsFollowing);
   const [isPending, startTransition] = useTransition();
 
@@ -27,11 +25,7 @@ const FollowButton: FC<FollowButtonProps> = ({ targetUserId, initialIsFollowing 
       const result = await toggleFollow(targetUserId);
       if (!result.success) {
         setIsFollowing(!newFollowState); // Revert on error
-        toast({
-          variant: 'destructive',
-          title: 'Error',
-          description: result.error || 'Could not update follow status.',
-        });
+        console.error("Failed to update follow status:", result.error);
       }
     });
   };
