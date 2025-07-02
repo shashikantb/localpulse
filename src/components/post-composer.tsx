@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { FC } from 'react';
@@ -6,16 +5,16 @@ import { useState, useEffect } from 'react';
 import type { NewPost, User } from '@/lib/db-types';
 import { addPost } from '@/app/actions';
 import { PostForm } from '@/components/post-form';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Terminal, Zap, Loader2 } from 'lucide-react';
+import { Terminal, Loader2 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 
 interface PostComposerProps {
   sessionUser: User | null;
+  onPostSuccess: () => void;
 }
 
-const PostComposer: FC<PostComposerProps> = ({ sessionUser }) => {
+const PostComposer: FC<PostComposerProps> = ({ sessionUser, onPostSuccess }) => {
   const { toast } = useToast();
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
@@ -80,7 +79,7 @@ const PostComposer: FC<PostComposerProps> = ({ sessionUser }) => {
         toast({ variant: "destructive", title: "Post Error", description: result.error || "Failed to add post." });
       } else if (result.post) {
         toast({ title: "Post Added!", description: "Your pulse is now live! It will appear in the feed shortly.", variant: "default", className: "bg-primary text-primary-foreground" });
-        // revalidatePath('/') is called in the server action, so the feed will update automatically.
+        onPostSuccess();
       } else {
         toast({ variant: "destructive", title: "Post Error", description: "An unexpected issue occurred." });
       }
@@ -92,9 +91,9 @@ const PostComposer: FC<PostComposerProps> = ({ sessionUser }) => {
   };
 
   return (
-    <>
+    <div className="pt-4">
       {locationError && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="mb-4">
           <Terminal className="h-4 w-4" />
           <AlertTitle>Location Error</AlertTitle>
           <AlertDescription>
@@ -103,24 +102,15 @@ const PostComposer: FC<PostComposerProps> = ({ sessionUser }) => {
         </Alert>
       )}
 
-      <Card className="overflow-hidden shadow-2xl border border-primary/30 rounded-xl bg-card/90 backdrop-blur-md transform hover:shadow-primary/20 transition-all duration-300 hover:border-primary/60">
-        <CardHeader className="bg-gradient-to-br from-primary/10 to-accent/5 p-5">
-          <CardTitle className="text-2xl font-semibold text-primary flex items-center">
-            <Zap className="w-7 h-7 mr-2 text-accent drop-shadow-sm" />
-            Share Your Pulse
-          </CardTitle>
-          {loadingLocation && (
-            <p className="text-sm text-muted-foreground flex items-center pt-1">
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Determining your location...
-            </p>
-          )}
-        </CardHeader>
-        <CardContent className="p-5">
-          <PostForm onSubmit={handleAddPost} submitting={formSubmitting || loadingLocation} />
-        </CardContent>
-      </Card>
-    </>
+      {loadingLocation && (
+        <div className="flex items-center justify-center text-sm text-muted-foreground p-4">
+          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          Determining your location...
+        </div>
+      )}
+      
+      <PostForm onSubmit={handleAddPost} submitting={formSubmitting || loadingLocation} />
+    </div>
   );
 };
 
