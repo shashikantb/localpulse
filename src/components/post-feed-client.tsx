@@ -166,8 +166,6 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
         setHasMorePosts(freshPosts.length === POSTS_PER_PAGE);
       } catch (error: any) {
         console.error("Silent background refresh failed:", error);
-        // No toast will be shown on network failure.
-        // The component will just show a skeleton or empty state if there's no cached data.
       } finally {
         setIsLoading(false);
         setInitialFetchComplete(true); // Signal that the first load is done and polling can begin.

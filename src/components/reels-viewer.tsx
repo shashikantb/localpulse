@@ -79,7 +79,6 @@ const ReelsViewer: FC<{ sessionUser: User | null }> = ({ sessionUser }) => {
 
     } catch (error) {
       console.error("Error fetching reels:", error);
-      // No toast will be shown on network failure.
     } finally {
       setIsLoading(false);
       setIsLoadingMore(false);
