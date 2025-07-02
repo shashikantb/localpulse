@@ -48,8 +48,8 @@ export interface Post {
   latitude: number;
   longitude: number;
   createdat: string;
-  mediaurl?: string | null;
-  mediatype?: 'image' | 'video' | null;
+  mediaurls?: string[] | null;
+  mediatype?: 'image' | 'video' | 'gallery' | null;
   likecount: number;
   commentcount: number;
   notifiedcount: number;
@@ -69,8 +69,8 @@ export type NewPost = {
   content: string;
   latitude: number;
   longitude: number;
-  mediaUrl?: string | null; // The final GCS URL
-  mediaType?: 'image' | 'video' | null;
+  mediaUrls?: string[] | null; // The final GCS URLs
+  mediaType?: 'image' | 'video' | 'gallery' | null;
   hashtags: string[];
   authorId?: number;
   mentionedUserIds?: number[];
@@ -81,8 +81,8 @@ export type DbNewPost = {
   content: string;
   latitude: number;
   longitude: number;
-  mediaurl?: string | null;
-  mediatype?: 'image' | 'video' | null;
+  mediaurls?: string[] | null;
+  mediatype?: 'image' | 'video' | 'gallery' | null;
   city?: string | null;
   hashtags: string[];
   authorid: number | null; 

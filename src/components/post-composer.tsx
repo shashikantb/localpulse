@@ -51,7 +51,7 @@ const PostComposer: FC<PostComposerProps> = ({ sessionUser, onPostSuccess }) => 
     }
   }, []);
 
-  const handleAddPost = async (content: string, hashtags: string[], mediaUrl?: string, mediaType?: 'image' | 'video', mentionedUserIds?: number[]) => {
+  const handleAddPost = async (content: string, hashtags: string[], mediaUrls?: string[], mediaType?: 'image' | 'video' | 'gallery', mentionedUserIds?: number[]) => {
     if (!location && !locationError) {
       toast({ variant: 'destructive', title: "Location Unavailable", description: "Your location is still being determined. Please wait a moment and try again." });
       return;
@@ -62,7 +62,7 @@ const PostComposer: FC<PostComposerProps> = ({ sessionUser, onPostSuccess }) => 
         return;
     }
 
-    if (!content.trim() && !mediaUrl) {
+    if (!content.trim() && (!mediaUrls || mediaUrls.length === 0)) {
       toast({ variant: 'destructive', title: "Empty Post", description: "Please write some content or upload media to create a pulse." });
       return;
     }
@@ -74,7 +74,7 @@ const PostComposer: FC<PostComposerProps> = ({ sessionUser, onPostSuccess }) => 
         content: content,
         latitude: location!.latitude,
         longitude: location!.longitude,
-        mediaUrl: mediaUrl,
+        mediaUrls: mediaUrls,
         mediaType: mediaType,
         hashtags: hashtags || [],
         authorId: sessionUser ? sessionUser.id : undefined,
@@ -122,5 +122,3 @@ const PostComposer: FC<PostComposerProps> = ({ sessionUser, onPostSuccess }) => 
 };
 
 export default PostComposer;
-
-    

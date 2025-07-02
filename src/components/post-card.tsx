@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader } from '@/co
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import type { Post, User } from '@/lib/db-types';
 import { formatDistanceToNowStrict } from 'date-fns';
-import { MapPin, UserCircle, MessageCircle, Map, Share2, ThumbsUp, Tag, Eye, BellRing, AlertTriangle, RefreshCw } from 'lucide-react';
+import { MapPin, UserCircle, MessageCircle, Map, Share2, ThumbsUp, Tag, Eye, BellRing, AlertTriangle, RefreshCw, ChevronLeft, ChevronRight, Image as ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toggleLikePost, recordPostView, likePostAnonymously } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -84,6 +84,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
   const [showComments, setShowComments] = useState(false);
   const [currentOrigin, setCurrentOrigin] = useState('');
   const [mediaError, setMediaError] = useState(false);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   const cardRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -91,7 +92,8 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
 
   useEffect(() => {
     setMediaError(false);
-  }, [post.mediaurl]);
+    setCurrentImageIndex(0);
+  }, [post.id]);
   
   const handleRetryVideo = () => {
     if (videoRef.current) {
@@ -313,7 +315,20 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
     );
   };
 
-  const isYouTubeVideo = post.mediatype === 'video' && post.mediaurl?.includes('youtube.com/embed');
+  const isYouTubeVideo = post.mediatype === 'video' && post.mediaurls?.[0]?.includes('youtube.com/embed');
+
+  const nextImage = () => {
+    if (post.mediaurls && post.mediaurls.length > 1) {
+        setCurrentImageIndex((prev) => (prev + 1) % post.mediaurls!.length);
+    }
+  };
+
+  const prevImage = () => {
+    if (post.mediaurls && post.mediaurls.length > 1) {
+        setCurrentImageIndex((prev) => (prev - 1 + post.mediaurls!.length) % post.mediaurls!.length);
+    }
+  };
+
 
   return (
     <Card ref={cardRef} className="overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-300 ease-out border border-border/60 rounded-xl bg-card/80 backdrop-blur-sm hover:border-primary/50 transform hover:scale-[1.005]">
@@ -348,24 +363,47 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
         </div>
       </CardHeader>
 
-      {post.mediaurl && post.mediatype && (
+      {post.mediaurls && post.mediaurls.length > 0 && (
         <div className="px-5 pb-0 pt-2">
           <div className="relative w-full aspect-[16/10] overflow-hidden rounded-lg border-2 border-border/50 shadow-inner bg-muted/50 group">
             {post.mediatype === 'image' && (
-              <Image src={post.mediaurl} alt="Post image" fill style={{ objectFit: "contain" }} sizes="(max-width: 768px) 100vw, 50vw" className="transition-transform duration-300 group-hover:scale-105" data-ai-hint="user generated content" priority={isFirst} />
+              <Image src={post.mediaurls[0]} alt="Post image" fill style={{ objectFit: "contain" }} sizes="(max-width: 768px) 100vw, 50vw" className="transition-transform duration-300 group-hover:scale-105" data-ai-hint="user generated content" priority={isFirst} />
+            )}
+            {post.mediatype === 'gallery' && post.mediaurls && (
+                <>
+                    <Image src={post.mediaurls[currentImageIndex]} alt={`Post image ${currentImageIndex + 1}`} fill style={{ objectFit: "contain" }} sizes="(max-width: 768px) 100vw, 50vw" className="transition-opacity duration-300" data-ai-hint="user generated content" priority={isFirst} />
+                    {post.mediaurls.length > 1 && (
+                        <>
+                            <div className="absolute top-1/2 left-2 -translate-y-1/2">
+                                <Button variant="secondary" size="icon" onClick={(e) => { e.stopPropagation(); prevImage(); }} className="h-8 w-8 rounded-full opacity-60 group-hover:opacity-100 transition-opacity">
+                                    <ChevronLeft className="h-5 w-5" />
+                                </Button>
+                            </div>
+                            <div className="absolute top-1/2 right-2 -translate-y-1/2">
+                                <Button variant="secondary" size="icon" onClick={(e) => { e.stopPropagation(); nextImage(); }} className="h-8 w-8 rounded-full opacity-60 group-hover:opacity-100 transition-opacity">
+                                    <ChevronRight className="h-5 w-5" />
+                                </Button>
+                            </div>
+                            <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/60 text-white text-xs rounded-md backdrop-blur-sm">
+                                <ImageIcon className="w-3 h-3 mr-1 inline-block" />
+                                {currentImageIndex + 1} / {post.mediaurls.length}
+                            </div>
+                        </>
+                    )}
+                </>
             )}
             {isYouTubeVideo ? (
                 <iframe
-                    src={post.mediaurl}
+                    src={post.mediaurls[0]}
                     title="YouTube video player"
                     frameBorder="0"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                     allowFullScreen
                     className="w-full h-full"
                 ></iframe>
-            ) : post.mediatype === 'video' && (
+            ) : post.mediatype === 'video' && post.mediaurls && (
               <>
-                 <video ref={videoRef} controls src={post.mediaurl} className={cn("w-full h-full object-contain", mediaError && "hidden")} onError={() => setMediaError(true)} />
+                 <video ref={videoRef} controls src={post.mediaurls[0]} className={cn("w-full h-full object-contain", mediaError && "hidden")} onError={() => setMediaError(true)} />
                  {mediaError && (
                     <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center text-white p-4">
                         <AlertTriangle className="w-8 h-8 mb-2 text-yellow-400" />
@@ -379,14 +417,16 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
               </>
             )}
             
-            <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/50 text-white text-xs rounded-md backdrop-blur-sm">
-                {post.mediatype.charAt(0).toUpperCase() + post.mediatype.slice(1)}
-            </div>
+            {(post.mediatype === 'video' || post.mediatype === 'image') && (
+                <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/50 text-white text-xs rounded-md backdrop-blur-sm">
+                    {post.mediatype.charAt(0).toUpperCase() + post.mediatype.slice(1)}
+                </div>
+            )}
           </div>
         </div>
       )}
 
-      <CardContent className={`px-5 ${post.mediaurl ? 'pt-4' : 'pt-2'} pb-3`}>
+      <CardContent className={`px-5 ${post.mediaurls && post.mediaurls.length > 0 ? 'pt-4' : 'pt-2'} pb-3`}>
         {renderContentWithMentionsAndLinks()}
       </CardContent>
 

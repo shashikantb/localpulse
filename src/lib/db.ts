@@ -119,8 +119,8 @@ async function initializeDbSchema(): Promise<void> {
         latitude REAL NOT NULL,
         longitude REAL NOT NULL,
         createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-        mediaurl TEXT,
-        mediatype VARCHAR(10) CHECK (mediatype IN ('image', 'video')),
+        mediaurls TEXT[],
+        mediatype VARCHAR(10) CHECK (mediatype IN ('image', 'video', 'gallery')),
         likecount INTEGER DEFAULT 0,
         commentcount INTEGER DEFAULT 0,
         viewcount INTEGER DEFAULT 0,
@@ -130,6 +130,39 @@ async function initializeDbSchema(): Promise<void> {
         authorid INTEGER REFERENCES users(id) ON DELETE SET NULL
       );
     `);
+
+    // --- Start: Migration logic for multi-image support ---
+    // This logic handles migration from the old single `mediaurl` to the new `mediaurls` array.
+    const mediaUrlsColRes = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='posts' AND column_name='mediaurls';`);
+    if (mediaUrlsColRes.rowCount === 0) {
+        // If 'mediaurls' doesn't exist, check for the old 'mediaurl' to migrate it
+        const mediaUrlColRes = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='posts' AND column_name='mediaurl';`);
+        if (mediaUrlColRes.rowCount > 0) {
+            console.log("Migrating 'mediaurl' to 'mediaurls' array...");
+            await client.query('ALTER TABLE posts RENAME COLUMN mediaurl TO mediaurls;');
+            await client.query('ALTER TABLE posts ALTER COLUMN mediaurls TYPE TEXT[] USING ARRAY[mediaurls];');
+        } else {
+            // If neither exists (fresh install), just add the new column
+            await client.query('ALTER TABLE posts ADD COLUMN mediaurls TEXT[];');
+        }
+    }
+    
+    // Update mediatype constraint to allow 'gallery'
+    const constraintNameRes = await client.query(`
+        SELECT conname FROM pg_constraint
+        WHERE conrelid = 'posts'::regclass AND conname = 'posts_mediatype_check';
+    `);
+
+    if (constraintNameRes.rowCount > 0) {
+        const constraintDefRes = await client.query(`SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'posts_mediatype_check';`);
+        if (constraintDefRes.rows.length > 0 && !constraintDefRes.rows[0].pg_get_constraintdef.includes('gallery')) {
+            console.log("Updating 'mediatype' constraint to include 'gallery'...");
+            await client.query(`ALTER TABLE posts DROP CONSTRAINT posts_mediatype_check;`);
+            await client.query(`ALTER TABLE posts ADD CONSTRAINT posts_mediatype_check CHECK (mediatype IN ('image', 'video', 'gallery'));`);
+        }
+    }
+    // --- End: Migration logic ---
+
      // Add commentcount column if it doesn't exist (for backwards compatibility)
     const commentCountColRes = await client.query(`
         SELECT 1 FROM information_schema.columns
@@ -263,7 +296,7 @@ async function initializeDbSchema(): Promise<void> {
     await client.query('CREATE EXTENSION IF NOT EXISTS cube');
     await client.query('CREATE EXTENSION IF NOT EXISTS earthdistance');
     await client.query('CREATE INDEX IF NOT EXISTS posts_geo_idx ON posts USING gist (ll_to_earth(latitude, longitude))');
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_posts_media ON posts (createdat DESC) WHERE mediaurl IS NOT NULL`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_posts_media ON posts (createdat DESC) WHERE mediaurls IS NOT NULL AND array_length(mediaurls, 1) > 0`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_users_role_id ON users(role, id)`);
     await client.query('CREATE INDEX IF NOT EXISTS idx_post_likes_user_post ON post_likes (user_id, post_id)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_followers_follower_id ON user_followers (follower_id)');
@@ -299,7 +332,7 @@ if (process.env.NODE_ENV !== 'test') {
 const POST_COLUMNS_SANITIZED = `
   p.id, p.content, p.latitude, p.longitude, p.createdat, p.likecount, 
   p.commentcount, p.viewcount, p.notifiedcount, p.city, p.hashtags, 
-  p.authorid, p.mediatype, p.mediaurl,
+  p.authorid, p.mediatype, p.mediaurls,
   u.name as authorname, u.role as authorrole,
   u.profilepictureurl as authorprofilepictureurl
 `;
@@ -338,7 +371,7 @@ export async function getMediaPostsDb(options: { limit: number; offset: number; 
       SELECT ${POST_COLUMNS_SANITIZED}
       FROM posts p
       LEFT JOIN users u ON p.authorid = u.id
-      WHERE p.mediaurl IS NOT NULL
+      WHERE p.mediaurls IS NOT NULL AND array_length(p.mediaurls, 1) > 0
       ORDER BY p.createdat DESC
       LIMIT $1 OFFSET $2
     `;
@@ -358,11 +391,11 @@ export async function addPostDb(newPost: DbNewPost): Promise<Post> {
     await client.query('BEGIN');
 
     const postQuery = `
-      INSERT INTO posts(content, latitude, longitude, mediaurl, mediatype, hashtags, city, authorid)
+      INSERT INTO posts(content, latitude, longitude, mediaurls, mediatype, hashtags, city, authorid)
       VALUES($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *;
     `;
-    const postValues = [newPost.content, newPost.latitude, newPost.longitude, newPost.mediaurl, newPost.mediatype, newPost.hashtags, newPost.city, newPost.authorid];
+    const postValues = [newPost.content, newPost.latitude, newPost.longitude, newPost.mediaurls, newPost.mediatype, newPost.hashtags, newPost.city, newPost.authorid];
     const postResult: QueryResult<Post> = await client.query(postQuery, postValues);
     const addedPost = postResult.rows[0];
 

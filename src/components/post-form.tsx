@@ -30,7 +30,7 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
-import { Loader2, XCircle, UploadCloud, Film, Image as ImageIcon, Tag, ChevronDown, Camera, User, Search, UserPlus, Video } from 'lucide-react';
+import { Loader2, X, UploadCloud, Film, Image as ImageIcon, Tag, ChevronDown, Camera, User, Search, UserPlus, Video, XCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
@@ -41,6 +41,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from './ui/badge';
 import { Progress } from './ui/progress';
 
+const MAX_IMAGE_COUNT = 5;
 const MAX_VIDEO_UPLOAD_LIMIT = 50 * 1024 * 1024; // 50MB
 const MAX_IMAGE_UPLOAD_LIMIT = 10 * 1024 * 1024; // 10MB
 
@@ -80,16 +81,21 @@ const formSchema = z.object({
 type FormData = z.infer<typeof formSchema>;
 
 interface PostFormProps {
-  onSubmit: (content: string, hashtags: string[], mediaUrl?: string, mediaType?: 'image' | 'video', mentionedUserIds?: number[]) => Promise<void>;
+  onSubmit: (content: string, hashtags: string[], mediaUrls?: string[], mediaType?: 'image' | 'video' | 'gallery', mentionedUserIds?: number[]) => Promise<void>;
   submitting: boolean;
+}
+
+interface FilePreview {
+    file: File;
+    url: string;
 }
 
 export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   const { toast } = useToast();
-  const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
+  const [selectedFiles, setSelectedFiles] = React.useState<FilePreview[]>([]);
   const [mediaType, setMediaType] = React.useState<'image' | 'video' | null>(null);
   const [isUploading, setIsUploading] = React.useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [fileError, setFileError] = React.useState<string | null>(null);
   const [showCameraOptions, setShowCameraOptions] = React.useState(false);
   
@@ -114,68 +120,76 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   });
 
   const contentValue = form.watch('content');
-  const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+  const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/;
 
   useEffect(() => {
     setHasDetectedUrl(youtubeRegex.test(contentValue));
   }, [contentValue, youtubeRegex]);
 
+  const clearAllMedia = () => {
+    selectedFiles.forEach(f => URL.revokeObjectURL(f.url));
+    setSelectedFiles([]);
+    setMediaType(null);
+    setFileError(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (imageCaptureInputRef.current) imageCaptureInputRef.current.value = '';
+    if (videoCaptureInputRef.current) videoCaptureInputRef.current.value = '';
+  };
+  
+  const removeSelectedFile = (index: number) => {
+    const fileToRemove = selectedFiles[index];
+    URL.revokeObjectURL(fileToRemove.url);
+    const newFiles = selectedFiles.filter((_, i) => i !== index);
+    setSelectedFiles(newFiles);
+    if (newFiles.length === 0) {
+        setMediaType(null);
+    }
+  };
 
-  const removeMedia = useCallback(() => {
-      if (previewUrl) {
-          URL.revokeObjectURL(previewUrl);
-      }
-      setSelectedFile(null);
-      setPreviewUrl(null);
-      setMediaType(null);
-      setFileError(null);
-      setShowCameraOptions(false);
-      // Reset file input fields
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      if (imageCaptureInputRef.current) imageCaptureInputRef.current.value = '';
-      if (videoCaptureInputRef.current) videoCaptureInputRef.current.value = '';
-  }, [previewUrl]);
 
   const handleFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    // If there's already a file preview, revoke its object URL to prevent memory leaks
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
-    }
-
-    const file = event.target.files?.[0];
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
     
-    // If user cancelled the file selection, reset state and exit
-    if (!file) {
-      setSelectedFile(null);
-      setPreviewUrl(null);
-      setMediaType(null);
-      setFileError(null);
-      return;
-    }
-
-    const currentFileType = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : null;
     setFileError(null);
+    clearAllMedia();
+    
+    const currentFileType = files[0].type.startsWith('image/') ? 'image' : files[0].type.startsWith('video/') ? 'video' : null;
 
     if (!currentFileType) {
         setFileError('Invalid file type. Please select an image or video.');
         return;
     }
-    
-    if (currentFileType === 'image' && file.size > MAX_IMAGE_UPLOAD_LIMIT) {
-        setFileError(`Image is too large. Max size: ${Math.round(MAX_IMAGE_UPLOAD_LIMIT / 1024 / 1024)}MB.`);
-        return;
-    }
-    if (currentFileType === 'video' && file.size > MAX_VIDEO_UPLOAD_LIMIT) {
-        setFileError(`Video is too large. Max size: ${Math.round(MAX_VIDEO_UPLOAD_LIMIT / 1024 / 1024)}MB.`);
+
+    if (currentFileType === 'video' && files.length > 1) {
+        setFileError('You can only upload one video at a time.');
         return;
     }
     
-    setSelectedFile(file);
+    if (currentFileType === 'image' && files.length > MAX_IMAGE_COUNT) {
+        setFileError(`You can select a maximum of ${MAX_IMAGE_COUNT} images.`);
+        return;
+    }
+    
     setMediaType(currentFileType);
-    setPreviewUrl(URL.createObjectURL(file));
 
- }, [previewUrl]);
+    const newPreviews: FilePreview[] = [];
+    for (const file of Array.from(files)) {
+        if (currentFileType === 'image' && file.size > MAX_IMAGE_UPLOAD_LIMIT) {
+            setFileError(`Image "${file.name}" is too large. Max size: ${Math.round(MAX_IMAGE_UPLOAD_LIMIT / 1024 / 1024)}MB.`);
+            clearAllMedia();
+            return;
+        }
+        if (currentFileType === 'video' && file.size > MAX_VIDEO_UPLOAD_LIMIT) {
+            setFileError(`Video is too large. Max size: ${Math.round(MAX_VIDEO_UPLOAD_LIMIT / 1024 / 1024)}MB.`);
+            clearAllMedia();
+            return;
+        }
+        newPreviews.push({ file: file, url: URL.createObjectURL(file) });
+    }
+    setSelectedFiles(newPreviews);
 
+ }, []);
   
   React.useEffect(() => {
     if (!mentionQuery) {
@@ -205,11 +219,11 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   const handleSubmitForm: SubmitHandler<FormData> = async (data) => {
       if (submitting || isUploading) return;
 
-      if (hasDetectedUrl && selectedFile) {
+      if (hasDetectedUrl && selectedFiles.length > 0) {
         toast({
           variant: 'destructive',
           title: 'Media Conflict',
-          description: "A YouTube link was detected in your text. You can't upload a separate file at the same time.",
+          description: "A YouTube link was detected. You can't upload a separate file at the same time.",
         });
         return;
       }
@@ -222,32 +236,38 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
       const mentionedUserIds = taggedUsers.map(user => user.id);
       const hashtagsToSubmit = data.hashtags || [];
 
-      if (selectedFile && mediaType) {
+      if (selectedFiles.length > 0) {
         setIsUploading(true);
+        setUploadProgress(0);
+
         try {
-          const signedUrlResult = await getSignedUploadUrl(selectedFile.name, selectedFile.type);
-
-          if (!signedUrlResult.success || !signedUrlResult.uploadUrl || !signedUrlResult.publicUrl) {
-            throw new Error(signedUrlResult.error || 'Could not prepare file for upload.');
-          }
-
-          const uploadResult = await fetch(signedUrlResult.uploadUrl, {
-            method: 'PUT',
-            body: selectedFile,
-            headers: { 'Content-Type': selectedFile.type },
+          const uploadPromises = selectedFiles.map(async (filePreview) => {
+            const signedUrlResult = await getSignedUploadUrl(filePreview.file.name, filePreview.file.type);
+            if (!signedUrlResult.success || !signedUrlResult.uploadUrl || !signedUrlResult.publicUrl) {
+                throw new Error(signedUrlResult.error || `Could not prepare ${filePreview.file.name} for upload.`);
+            }
+            const uploadResult = await fetch(signedUrlResult.uploadUrl, {
+                method: 'PUT',
+                body: filePreview.file,
+                headers: { 'Content-Type': filePreview.file.type },
+            });
+            if (!uploadResult.ok) {
+                throw new Error(`Upload failed for ${filePreview.file.name}.`);
+            }
+            setUploadProgress(p => p + 1);
+            return signedUrlResult.publicUrl;
           });
 
-          if (!uploadResult.ok) {
-            const errorBody = await uploadResult.text();
-            console.error("GCS Upload Error:", { 
-              status: uploadResult.status,
-              statusText: uploadResult.statusText,
-              body: errorBody 
-            });
-            throw new Error(`Upload failed with status ${uploadResult.status}. Check the browser console for details.`);
+          const uploadedUrls = await Promise.all(uploadPromises);
+          
+          let finalMediaType: 'image' | 'video' | 'gallery' | undefined = undefined;
+          if (uploadedUrls.length > 0) {
+              if (mediaType === 'video') finalMediaType = 'video';
+              else if (mediaType === 'image' && uploadedUrls.length > 1) finalMediaType = 'gallery';
+              else if (mediaType === 'image') finalMediaType = 'image';
           }
 
-          await onSubmit(data.content, hashtagsToSubmit, signedUrlResult.publicUrl, mediaType, mentionedUserIds);
+          await onSubmit(data.content, hashtagsToSubmit, uploadedUrls, finalMediaType, mentionedUserIds);
 
         } catch (error: any) {
           console.error("A critical error occurred during the upload process:", error);
@@ -257,13 +277,11 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
           setIsUploading(false);
         }
       } else {
-        // This case handles both no-media posts and posts with a URL in the content.
-        // The server action will parse the URL from the content.
         await onSubmit(data.content, hashtagsToSubmit, undefined, undefined, mentionedUserIds);
       }
       
       form.reset();
-      removeMedia();
+      clearAllMedia();
       setTaggedUsers([]);
   };
 
@@ -271,7 +289,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   const isMediaUploadDisabled = isButtonDisabled || hasDetectedUrl;
 
   let buttonText = 'Share Your Pulse';
-  if (isUploading) buttonText = 'Uploading File...';
+  if (isUploading) buttonText = `Uploading ${uploadProgress} / ${selectedFiles.length}...`;
   else if (submitting) buttonText = 'Pulsing...';
 
   return (
@@ -438,38 +456,27 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
             Attach Media (Optional)
           </FormLabel>
             <>
-              <Input id="file-upload" type="file" accept="image/*,video/*" ref={fileInputRef} onChange={handleFileChange} className="hidden" disabled={isMediaUploadDisabled} />
+              <Input id="file-upload" type="file" accept="image/*,video/*" ref={fileInputRef} onChange={handleFileChange} className="hidden" disabled={isMediaUploadDisabled} multiple />
               <Input id="image-capture" type="file" accept="image/*" capture="environment" ref={imageCaptureInputRef} onChange={handleFileChange} className="hidden" disabled={isMediaUploadDisabled} />
               <Input id="video-capture" type="file" accept="video/*" capture="environment" ref={videoCaptureInputRef} onChange={handleFileChange} className="hidden" disabled={isMediaUploadDisabled} />
             </>
           
-          {previewUrl && selectedFile ? (
-            <div className="w-full text-center p-4 border-2 border-dashed rounded-lg border-primary/50">
-              {mediaType === 'image' && (
-                <div className="relative w-full max-w-xs mx-auto aspect-video overflow-hidden rounded-md border shadow-md mb-2 bg-muted">
-                  <Image src={previewUrl} alt="Preview" fill style={{objectFit: "cover"}} data-ai-hint="user uploaded image"/>
+          {selectedFiles.length > 0 ? (
+            <div className="w-full p-2 border-2 border-dashed rounded-lg border-primary/50 space-y-2">
+                <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                    {selectedFiles.map((f, i) => (
+                        <div key={f.url} className="relative aspect-square group">
+                            {mediaType === 'image' && <Image src={f.url} alt={`Preview ${i+1}`} fill sizes="10vw" className="object-cover rounded-md" data-ai-hint="user uploaded image"/>}
+                            {mediaType === 'video' && <video src={f.url} className="w-full h-full object-cover rounded-md bg-black" />}
+                            <Button type="button" variant="destructive" size="icon" onClick={() => removeSelectedFile(i)} className="absolute -top-1 -right-1 h-5 w-5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                                <X className="h-3 w-3" />
+                            </Button>
+                        </div>
+                    ))}
                 </div>
-              )}
-              {mediaType === 'video' && (
-                <div className="relative w-full max-w-xs mx-auto aspect-video overflow-hidden rounded-md border shadow-md mb-2 bg-black">
-                  <video controls src={previewUrl} className="w-full h-full object-contain" />
-                </div>
-              )}
-              <div className="flex items-center justify-center space-x-2 text-sm text-foreground bg-background/70 p-1 rounded-md">
-                {mediaType === 'image' ? <ImageIcon className="h-4 w-4 text-primary" /> : <Film className="h-4 w-4 text-primary" />}
-                <span className="truncate max-w-[200px]">{selectedFile.name}</span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={(e) => { e.stopPropagation(); removeMedia(); }}
-                  disabled={submitting}
-                  className="text-destructive hover:text-destructive/80 h-6 w-6 ml-auto"
-                  aria-label="Remove media"
-                >
-                  <XCircle className="h-4 w-4" />
+                <Button type="button" variant="ghost" size="sm" onClick={clearAllMedia} className="w-full text-destructive">
+                    <XCircle className="mr-2 h-4 w-4" /> Clear All
                 </Button>
-              </div>
             </div>
           ) : (
             <div className="p-4 border-2 border-dashed rounded-lg">
@@ -477,7 +484,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
                 {!showCameraOptions && (
                   <>
                     <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isMediaUploadDisabled}>
-                      <UploadCloud className="mr-2 h-4 w-4" /> Upload File
+                      <UploadCloud className="mr-2 h-4 w-4" /> Upload File(s)
                     </Button>
                     <Button type="button" variant="outline" onClick={() => setShowCameraOptions(true)} disabled={isMediaUploadDisabled}>
                       <Camera className="mr-2 h-4 w-4" /> Use Camera
@@ -510,7 +517,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
           )}
         </FormItem>
         
-        {isUploading && <Progress value={100} className="w-full h-2 animate-pulse" />}
+        {isUploading && <Progress value={(uploadProgress / selectedFiles.length) * 100} className="w-full h-2" />}
 
         <Button type="submit" disabled={isButtonDisabled || !form.formState.isValid} className="w-full text-base py-3 shadow-md hover:shadow-lg transition-shadow bg-accent hover:bg-accent/90 text-accent-foreground rounded-lg">
           {(isUploading || submitting) && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
@@ -520,5 +527,3 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
     </Form>
   );
 };
-
-    

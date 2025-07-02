@@ -73,13 +73,13 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
     setIsInternallyMuted(true);
     setMediaError(false);
     
-  }, [post.id, post.likecount, post.commentcount, post.isLikedByCurrentUser, sessionUser, post.mediaurl, post.mediatype, isActive]);
+  }, [post.id, post.likecount, post.commentcount, post.isLikedByCurrentUser, sessionUser, post.mediaurls, post.mediatype, isActive]);
 
 
   useEffect(() => {
     const videoElement = videoRef.current;
     // Do not control video if it's an iframe or not the active reel
-    if (!videoElement || post.mediatype !== 'video' || post.mediaurl?.includes('youtube.com/embed')) {
+    if (!videoElement || post.mediatype !== 'video' || post.mediaurls?.[0]?.includes('youtube.com/embed')) {
       return;
     }
 
@@ -103,7 +103,7 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
       // This reel is not active, just pause it.
       videoElement.pause();
     }
-  }, [isActive, post.mediatype, post.mediaurl, isInternallyMuted]);
+  }, [isActive, post.mediatype, post.mediaurls, isInternallyMuted]);
   
   const handleRetryVideo = (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent the main video tap handler from firing
@@ -198,14 +198,14 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
     setDisplayCommentCount(prev => prev + 1);
   };
   
-  const isYouTubeVideo = post.mediaurl?.includes('youtube.com/embed');
+  const isYouTubeVideo = post.mediaurls?.[0]?.includes('youtube.com/embed');
 
   return (
     <div className="h-full w-full flex flex-col items-center justify-center bg-black relative text-white">
       <div className="w-full flex-grow flex items-center justify-center overflow-hidden relative" onClick={handleVideoTap}>
-        {post.mediatype === 'image' && post.mediaurl && (
+        { (post.mediatype === 'image' || post.mediatype === 'gallery') && post.mediaurls?.[0] && (
           <Image
-            src={post.mediaurl}
+            src={post.mediaurls[0]}
             alt="Reel image"
             fill
             style={{ objectFit: "contain" }}
@@ -214,11 +214,11 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
             data-ai-hint="user generated content"
           />
         )}
-        {post.mediatype === 'video' && post.mediaurl && (
+        {post.mediatype === 'video' && post.mediaurls?.[0] && (
           <>
             {isYouTubeVideo ? (
               <iframe
-                  src={post.mediaurl}
+                  src={post.mediaurls[0]}
                   title="YouTube video player"
                   frameBorder="0"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
@@ -229,7 +229,7 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
               <>
                 <video
                   ref={videoRef}
-                  src={post.mediaurl}
+                  src={post.mediaurls[0]}
                   loop
                   playsInline // Important for iOS
                   preload="auto"
@@ -320,5 +320,3 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
     </div>
   );
 };
-
-    
