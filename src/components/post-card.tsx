@@ -90,6 +90,9 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
   const videoRef = useRef<HTMLVideoElement>(null);
   const [wasViewed, setWasViewed] = useState(false);
 
+  // More robust check for YouTube URLs, not dependent on mediatype.
+  const isYouTubeVideo = post.mediaurls?.[0]?.includes('youtube.com/embed');
+
   useEffect(() => {
     setMediaError(false);
     setCurrentImageIndex(0);
@@ -219,13 +222,18 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
   };
 
   const renderContentWithMentionsAndLinks = () => {
-    if (!post.content) return null;
+    let contentToRender = post.content;
+    
+    // If we're displaying an embedded YouTube video, remove the link from the text to avoid duplication.
+    if (isYouTubeVideo && contentToRender) {
+      const ytRegex = /(?:https?:\/\/)?(?:www\.)?(?:m\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=|embed\/|v\/|shorts\/)?([a-zA-Z0-9_-]{11})(?:\S+)?/;
+      contentToRender = contentToRender.replace(ytRegex, '').trim();
+    }
 
-    // This regex finds standard URLs. It's safe because the server has already
-    // removed any YouTube URLs that are meant to be embedded as videos.
+    if (!contentToRender) return null;
+
     const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
 
-    // This regex finds mentions that were passed in the post data.
     const mentionTexts = post.mentions?.map(m => `@${m.name}`) || [];
     const mentionRegex = mentionTexts.length > 0
       ? new RegExp(`(${mentionTexts.map(m => m.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')).join('|')})\\b`, 'g')
@@ -235,21 +243,17 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
     let lastIndex = 0;
 
     const allMatches = [];
-    // Find all URL matches
-    for (const match of post.content.matchAll(urlRegex)) {
+    for (const match of contentToRender.matchAll(urlRegex)) {
         allMatches.push({ type: 'url' as const, text: match[0], index: match.index! });
     }
-    // Find all mention matches
     if (mentionRegex) {
-        for (const match of post.content.matchAll(mentionRegex)) {
+        for (const match of contentToRender.matchAll(mentionRegex)) {
             allMatches.push({ type: 'mention' as const, text: match[0], index: match.index! });
         }
     }
 
-    // Sort all found matches by their starting position in the text
     allMatches.sort((a, b) => a.index - b.index);
 
-    // Filter out any overlapping matches (e.g., a mention inside a URL), keeping the first one.
     const uniqueMatches = allMatches.filter((match, i, arr) => {
         if (i === 0) return true;
         const prevMatch = arr[i - 1];
@@ -257,17 +261,14 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
     });
 
     if (uniqueMatches.length === 0) {
-      return <p className="text-foreground/90 leading-relaxed text-base whitespace-pre-wrap break-words">{post.content}</p>;
+      return <p className="text-foreground/90 leading-relaxed text-base whitespace-pre-wrap break-words">{contentToRender}</p>;
     }
 
-    // Build the array of React elements by slicing the text and inserting links/mentions
     for (const match of uniqueMatches) {
-        // Add the plain text part before the current match
         if (match.index > lastIndex) {
-            contentParts.push(post.content.substring(lastIndex, match.index));
+            contentParts.push(contentToRender.substring(lastIndex, match.index));
         }
 
-        // Add the matched element (URL link or Mention link)
         if (match.type === 'url') {
             const href = match.text.startsWith('www.') ? `https://${match.text}` : match.text;
             contentParts.push(
@@ -296,16 +297,15 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
                     </Link>
                 );
             } else {
-                contentParts.push(match.text); // Failsafe, should not happen
+                contentParts.push(match.text);
             }
         }
         
         lastIndex = match.index + match.text.length;
     }
 
-    // Add any remaining plain text after the last match
-    if (lastIndex < post.content.length) {
-        contentParts.push(post.content.substring(lastIndex));
+    if (lastIndex < contentToRender.length) {
+        contentParts.push(contentToRender.substring(lastIndex));
     }
 
     return (
@@ -314,8 +314,6 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
       </p>
     );
   };
-
-  const isYouTubeVideo = post.mediatype === 'video' && post.mediaurls?.[0]?.includes('youtube.com/embed');
 
   const nextImage = () => {
     if (post.mediaurls && post.mediaurls.length > 1) {
@@ -366,11 +364,19 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
       {post.mediaurls && post.mediaurls.length > 0 && (
         <div className="px-5 pb-0 pt-2">
           <div className="relative w-full aspect-[16/10] overflow-hidden rounded-lg border-2 border-border/50 shadow-inner bg-muted/50 group">
-            {post.mediatype === 'image' && (
-              <Image src={post.mediaurls[0]} alt="Post image" fill style={{ objectFit: "contain" }} sizes="(max-width: 768px) 100vw, 50vw" className="transition-transform duration-300 group-hover:scale-105" data-ai-hint="user generated content" priority={isFirst} />
-            )}
-            {post.mediatype === 'gallery' && post.mediaurls && (
-                <>
+            {isYouTubeVideo ? (
+                <iframe
+                    src={post.mediaurls[0]}
+                    title="YouTube video player"
+                    frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                    className="w-full h-full"
+                ></iframe>
+            ) : post.mediatype === 'image' ? (
+                <Image src={post.mediaurls[0]} alt="Post image" fill style={{ objectFit: "contain" }} sizes="(max-width: 768px) 100vw, 50vw" className="transition-transform duration-300 group-hover:scale-105" data-ai-hint="user generated content" priority={isFirst} />
+            ) : post.mediatype === 'gallery' ? (
+                 <>
                     <Image src={post.mediaurls[currentImageIndex]} alt={`Post image ${currentImageIndex + 1}`} fill style={{ objectFit: "contain" }} sizes="(max-width: 768px) 100vw, 50vw" className="transition-opacity duration-300" data-ai-hint="user generated content" priority={isFirst} />
                     {post.mediaurls.length > 1 && (
                         <>
@@ -391,17 +397,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
                         </>
                     )}
                 </>
-            )}
-            {isYouTubeVideo ? (
-                <iframe
-                    src={post.mediaurls[0]}
-                    title="YouTube video player"
-                    frameBorder="0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    allowFullScreen
-                    className="w-full h-full"
-                ></iframe>
-            ) : post.mediatype === 'video' && post.mediaurls && (
+            ) : post.mediatype === 'video' ? (
               <>
                  <video ref={videoRef} controls src={post.mediaurls[0]} className={cn("w-full h-full object-contain", mediaError && "hidden")} onError={() => setMediaError(true)} />
                  {mediaError && (
@@ -415,9 +411,9 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
                     </div>
                 )}
               </>
-            )}
+            ) : null}
             
-            {(post.mediatype === 'video' || post.mediatype === 'image') && (
+            {(post.mediatype === 'video' || post.mediatype === 'image') && !isYouTubeVideo && (
                 <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/50 text-white text-xs rounded-md backdrop-blur-sm">
                     {post.mediatype.charAt(0).toUpperCase() + post.mediatype.slice(1)}
                 </div>
@@ -430,7 +426,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
         {renderContentWithMentionsAndLinks()}
       </CardContent>
 
-      {post.hashtags && post.hashtags.length > 0 && ( /* Hashtags display remains the same */
+      {post.hashtags && post.hashtags.length > 0 && (
         <div className="px-5 pt-1 pb-2 flex flex-wrap gap-2 items-center">
           {post.hashtags.map(tag => (
             <Badge key={tag} variant="secondary" className="text-xs bg-primary/10 text-primary hover:bg-primary/20 cursor-default">
