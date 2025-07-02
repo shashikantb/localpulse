@@ -55,11 +55,11 @@ const CommentSection: FC<CommentSectionProps> = ({ postId, sessionUser, onCommen
       const fetchedComments = await getComments(postId);
       setComments(fetchedComments);
     } catch (error) {
-      toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch comments.' });
+      console.error("Error fetching comments:", error);
     } finally {
       setIsLoadingComments(false);
     }
-  }, [postId, toast]);
+  }, [postId]);
 
   useEffect(() => {
     fetchPostComments();
