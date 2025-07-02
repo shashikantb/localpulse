@@ -95,6 +95,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
   const [sessionUser, setSessionUser] = useState<User | null>(null);
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [isLoading, setIsLoading] = useState(allPosts.length === 0);
+  const [initialFetchComplete, setInitialFetchComplete] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [latestPostIdClientKnows, setLatestPostIdClientKnows] = useState<number>(0);
   const [newPulsesAvailable, setNewPulsesAvailable] = useState(false);
@@ -136,60 +137,44 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
   }, [allPosts]);
 
 
-  // Consolidated effect to get user session, location & initial posts.
+  // Effect for initial load (stale-while-revalidate)
   useEffect(() => {
     const loadInitialData = async () => {
-      // Promise to get session
-      const fetchSessionPromise = getSession();
-
-      // Promise to get location
-      const fetchLocationPromise = new Promise<{ latitude: number, longitude: number } | null>(resolve => {
+      // Fetch fresh data and other info in the background
+      const sessionPromise = getSession();
+      const locationPromise = new Promise<{ latitude: number; longitude: number } | null>(resolve => {
         if (navigator.geolocation) {
           navigator.geolocation.getCurrentPosition(
-            (position) => {
-              const newLocation = { latitude: position.coords.latitude, longitude: position.coords.longitude };
-              resolve(newLocation);
-            },
-            () => resolve(null), // Don't block on error
+            (position) => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
+            () => resolve(null),
             { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
           );
         } else {
           resolve(null);
         }
       });
+      const postsPromise = getPosts({ page: 1, limit: POSTS_PER_PAGE });
 
-      // Promise to get posts if cache was empty
-      const fetchPostsPromise = allPosts.length === 0
-        ? getPosts({ page: 1, limit: POSTS_PER_PAGE })
-        : Promise.resolve(allPosts);
-      
       try {
-        // Fetch everything in parallel
-        const [session, loc, posts] = await Promise.all([fetchSessionPromise, fetchLocationPromise, fetchPostsPromise]);
+        const [session, loc, freshPosts] = await Promise.all([sessionPromise, locationPromise, postsPromise]);
         
+        // Update state with fresh data
         setSessionUser(session.user);
         setLocation(loc);
-
-        // Only update posts if we fetched them (i.e., cache was empty)
-        if (allPosts.length === 0 && posts.length > 0) {
-            setAllPosts(posts);
-            if (posts.length < POSTS_PER_PAGE) {
-              setHasMorePosts(false);
-            }
-        } else if (allPosts.length > 0 && allPosts.length < POSTS_PER_PAGE) {
-            setHasMorePosts(false);
-        }
-
+        setAllPosts(freshPosts); // This replaces cached data with fresh data
+        setCurrentPage(1);
+        setHasMorePosts(freshPosts.length === POSTS_PER_PAGE);
       } catch (error) {
-        console.error("Failed to load initial data:", error);
-        toast({ variant: 'destructive', title: 'Error', description: 'Could not load feed.' });
+        console.error("Failed to load fresh feed data:", error);
+        toast({ variant: 'destructive', title: 'Error', description: 'Could not refresh the feed.' });
       } finally {
         setIsLoading(false);
+        setInitialFetchComplete(true); // Signal that the first load is done and polling can begin.
       }
     };
     
     loadInitialData();
-  // We only want this effect to run once on mount. `allPosts.length` is used to decide if we need to fetch.
+  // We only want this effect to run once on mount.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -299,6 +284,11 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
 
   // Polling for new posts, now more bfcache-friendly.
   useEffect(() => {
+    // Only start polling after the very first data load is complete.
+    if (!initialFetchComplete) {
+        return;
+    }
+
     let intervalId: NodeJS.Timeout | null = null;
 
     const pollForNewPosts = async () => {
@@ -344,7 +334,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
         clearInterval(intervalId);
       }
     };
-  }, [latestPostIdClientKnows, newPulsesAvailable]);
+  }, [latestPostIdClientKnows, newPulsesAvailable, initialFetchComplete]);
 
 
   const filteredAndSortedPosts = useMemo(() => {
@@ -669,3 +659,5 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
 };
 
 export default PostFeedClient;
+
+    
