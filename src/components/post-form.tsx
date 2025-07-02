@@ -151,10 +151,13 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
     
+    const firstFile = files[0];
+    if (!firstFile) return;
+
     setFileError(null);
     clearAllMedia();
     
-    const currentFileType = files[0].type.startsWith('image/') ? 'image' : files[0].type.startsWith('video/') ? 'video' : null;
+    const currentFileType = firstFile.type.startsWith('image/') ? 'image' : firstFile.type.startsWith('video/') ? 'video' : null;
 
     if (!currentFileType) {
         setFileError('Invalid file type. Please select an image or video.');

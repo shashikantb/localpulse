@@ -18,7 +18,6 @@ const HomePage: FC = () => {
     <div className="flex flex-col items-center">
       <div className="container mx-auto w-full max-w-2xl space-y-8 p-4 sm:p-6 md:p-8">
         
-        {/* The PostComposer is now wrapped in its own Suspense boundary */}
         <Suspense fallback={<PostComposerSkeleton />}>
           <PostComposerWithSession />
         </Suspense>

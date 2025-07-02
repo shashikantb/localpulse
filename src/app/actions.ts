@@ -5,7 +5,7 @@ import * as db from '@/lib/db';
 import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 import { admin as firebaseAdmin } from '@/lib/firebase-admin';
-import { getSession } from './auth/actions';
+import { getSession } from '@/app/auth/actions';
 import { getGcsClient, getGcsBucketName } from '@/lib/gcs';
 
 
@@ -46,9 +46,10 @@ export async function getPosts(options?: { page: number; limit: number }): Promi
     
     return posts;
   } catch (error: any) {
-    console.error("Server action error fetching posts:", error);
-    // Throw a generic error to the client to avoid exposing implementation details
-    throw new Error('A server error occurred while fetching posts.');
+    console.error("Server action error fetching posts:", error.message);
+    // In production, we don't want to throw an error to the client here.
+    // Instead, we return an empty array and the client will show cached data or an empty state.
+    return [];
   }
 }
 
@@ -235,23 +236,22 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
     if (newPostData.authorId && (!user || user.id !== newPostData.authorId)) {
         return { error: 'Authentication mismatch. You can only post for yourself.' };
     }
-
-    let mediaUrl = newPostData.mediaUrl;
+    
+    let mediaUrls = newPostData.mediaUrls;
     let mediaType = newPostData.mediaType;
     let content = newPostData.content;
-
+    
     // If no media file was uploaded, check the text content for a YouTube link.
-    if (!mediaUrl) {
-      // This regex identifies YouTube watch URLs and short URLs, and extracts the 11-character video ID.
-      // It correctly handles URLs with or without http(s) and www, and additional query parameters.
-      const urlRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})[^\s]*/;
+    if (!mediaUrls || mediaUrls.length === 0) {
+      // This regex is now more robust, handling various URL formats and query parameters.
+      const urlRegex = /(?:https?:\/\/)?(?:www\.)?(?:m\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=|embed\/|v\/|shorts\/)?([a-zA-Z0-9_-]{11})(?:\S+)?/
       const match = content.match(urlRegex);
 
       if (match) {
           const youtubeId = match[1];   // The 11-character video ID is always in the first capturing group.
           const urlToRemove = match[0]; // The full matched URL.
 
-          mediaUrl = `https://www.youtube.com/embed/${youtubeId}`;
+          mediaUrls = [`https://www.youtube.com/embed/${youtubeId}`];
           mediaType = 'video';
           // Replace only the first occurrence of the URL to be safe, then trim whitespace.
           content = content.replace(urlToRemove, '').trim();
@@ -261,10 +261,10 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
     const cityName = await geocodeCoordinates(newPostData.latitude, newPostData.longitude);
 
     const postDataForDb: DbNewPost = {
-      content: content,
+      content: content, // Use potentially modified content
       latitude: newPostData.latitude,
       longitude: newPostData.longitude,
-      mediaurl: mediaUrl, // Use the final GCS URL or the parsed YouTube URL
+      mediaurls: mediaUrls,
       mediatype: mediaType,
       hashtags: newPostData.hashtags || [], 
       city: cityName,
@@ -353,8 +353,9 @@ export async function toggleLikePost(postId: number): Promise<{ post?: Post; err
     }
     return { error: 'Post not found or failed to update.' };
   } catch (error: any) {
-    console.error(`Server action error toggling like for post ${postId}:`, error);
-    return { error: error.message || `Failed to update like count for post ${postId} due to a server error.` };
+    // Fail silently on the client
+    console.error(`Server action error toggling like for post ${postId}:`, error.message);
+    return { error: 'Failed to update like count due to a server error.' };
   }
 }
 
@@ -370,13 +371,14 @@ export async function likePostAnonymously(postId: number): Promise<{ post?: Post
     }
     return { error: 'Post not found or failed to update.' };
   } catch (error: any) {
-    console.error(`Server action error liking post ${postId} anonymously:`, error);
-    return { error: error.message || `Failed to update like count for post ${postId} due to a server error.` };
+    // Fail silently on the client
+    console.error(`Server action error liking post ${postId} anonymously:`, error.message);
+    return { error: 'Failed to update like count due to a server error.' };
   }
 }
 
 
-export async function addComment(commentData: NewComment): Promise<Comment> {
+export async function addComment(commentData: NewComment): Promise<{ comment?: Comment; error?: string }> {
   try {
     const { user } = await getSession();
     const authorName = user ? user.name : 'PulseFan';
@@ -394,10 +396,11 @@ export async function addComment(commentData: NewComment): Promise<Comment> {
 
     revalidatePath('/');
     revalidatePath(`/posts/${commentData.postId}`);
-    return addedComment;
+    return { comment: addedComment };
   } catch (error: any) {
-    console.error(`Server action error adding comment to post ${commentData.postId}:`, error);
-    throw new Error(error.message || 'Failed to add comment via server action.');
+    // Fail silently on the client
+    console.error(`Server action error adding comment to post ${commentData.postId}:`, error.message);
+    return { error: 'Failed to add comment due to a server error.' };
   }
 }
 
