@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader } from '@/co
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import type { Post, User } from '@/lib/db-types';
 import { formatDistanceToNowStrict } from 'date-fns';
-import { MapPin, UserCircle, MessageCircle, Map, Share2, ThumbsUp, Tag, Eye, BellRing } from 'lucide-react';
+import { MapPin, UserCircle, MessageCircle, Map, Share2, ThumbsUp, Tag, Eye, BellRing, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toggleLikePost, recordPostView, likePostAnonymously } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -83,9 +83,23 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
   const [displayCommentCount, setDisplayCommentCount] = useState<number>(post.commentcount);
   const [showComments, setShowComments] = useState(false);
   const [currentOrigin, setCurrentOrigin] = useState('');
+  const [mediaError, setMediaError] = useState(false);
 
   const cardRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [wasViewed, setWasViewed] = useState(false);
+
+  useEffect(() => {
+    setMediaError(false);
+  }, [post.id]);
+  
+  const handleRetryVideo = () => {
+    if (videoRef.current) {
+        setMediaError(false);
+        videoRef.current.load();
+        videoRef.current.play().catch(e => console.error("Video retry failed:", e));
+    }
+  };
 
   useEffect(() => {
     // Only run view tracking if it's not the author's own post.
@@ -294,12 +308,24 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
                   className="w-full h-full"
                 />
               ) : (
-                 <video controls src={post.mediaurl} className="w-full h-full object-contain" />
+                 <video ref={videoRef} controls src={post.mediaurl} className={cn("w-full h-full object-contain", mediaError && "hidden")} onError={() => setMediaError(true)} />
               )
             )}
-             <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/50 text-white text-xs rounded-md backdrop-blur-sm">
-                {post.mediatype.charAt(0).toUpperCase() + post.mediatype.slice(1)}
-            </div>
+            {mediaError && (
+                <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center text-white p-4">
+                    <AlertTriangle className="w-8 h-8 mb-2 text-yellow-400" />
+                    <p className="text-sm text-center font-semibold mb-3">This video could not be loaded.</p>
+                    <Button onClick={handleRetryVideo} variant="secondary" size="sm">
+                        <RefreshCw className="w-4 h-4 mr-2"/>
+                        Retry
+                    </Button>
+                </div>
+            )}
+            {!mediaError && (
+                 <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/50 text-white text-xs rounded-md backdrop-blur-sm">
+                    {post.mediatype.charAt(0).toUpperCase() + post.mediatype.slice(1)}
+                </div>
+            )}
           </div>
         </div>
       )}

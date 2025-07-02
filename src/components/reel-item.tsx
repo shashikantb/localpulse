@@ -7,7 +7,7 @@ import dynamic from 'next/dynamic';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import type { Post, Comment as CommentType, User } from '@/lib/db-types';
 import { formatDistanceToNowStrict } from 'date-fns';
-import { UserCircle, MessageCircle, Share2, ThumbsUp, PlayCircle, VolumeX, Volume2 } from 'lucide-react';
+import { UserCircle, MessageCircle, Share2, ThumbsUp, PlayCircle, VolumeX, Volume2, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toggleLikePost, likePostAnonymously } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -50,6 +50,7 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
   const [currentOrigin, setCurrentOrigin] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isInternallyMuted, setIsInternallyMuted] = useState(true); // Default to muted for better autoplay
+  const [mediaError, setMediaError] = useState(false);
 
 
   useEffect(() => {
@@ -70,6 +71,7 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
     // Reset interaction states for the new reel
     setShowComments(false);
     setIsInternallyMuted(true);
+    setMediaError(false);
   }, [post.id, post.likecount, post.commentcount, post.isLikedByCurrentUser, sessionUser]);
 
 
@@ -101,6 +103,15 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
       videoElement.pause();
     }
   }, [isActive, post.mediatype, post.mediaurl, isInternallyMuted]);
+  
+  const handleRetryVideo = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent the main video tap handler from firing
+    if (videoRef.current) {
+        setMediaError(false);
+        videoRef.current.load();
+        videoRef.current.play().catch(err => console.error("Retry play failed", err));
+    }
+  };
 
   const handleLikeClick = async () => {
     if (isLiking) return;
@@ -219,15 +230,26 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
                   loop
                   playsInline // Important for iOS
                   preload="auto"
-                  className="w-full h-full object-contain"
+                  onError={() => setMediaError(true)}
+                  className={cn("w-full h-full object-contain", mediaError && "invisible")}
                 />
+                 {mediaError && (
+                    <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center text-white p-4 z-20">
+                        <AlertTriangle className="w-12 h-12 mb-3 text-yellow-400" />
+                        <p className="text-base font-semibold mb-4 text-center">This Reel could not be loaded.</p>
+                        <Button onClick={handleRetryVideo} variant="secondary">
+                            <RefreshCw className="w-4 h-4 mr-2"/>
+                            Try Again
+                        </Button>
+                    </div>
+                )}
                 <div 
                   className="absolute top-4 right-4 p-2 bg-black/50 rounded-full cursor-pointer z-10"
                   onClick={(e) => { e.stopPropagation(); handleVideoTap(); }}
                 >
                   {isInternallyMuted ? <VolumeX className="w-5 h-5 text-white" /> : <Volume2 className="w-5 h-5 text-white" />}
                 </div>
-                 {videoRef.current?.paused && isActive && (
+                 {videoRef.current?.paused && isActive && !mediaError && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
                         <PlayCircle className="w-16 h-16 text-white/50 backdrop-blur-sm rounded-full" />
                     </div>
