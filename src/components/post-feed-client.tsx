@@ -163,11 +163,10 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
         setLocation(loc);
         setAllPosts(freshPosts); // This replaces cached data with fresh data
         setCurrentPage(1);
-        setHasMore(freshPosts.length === POSTS_PER_PAGE);
+        setHasMorePosts(freshPosts.length === POSTS_PER_PAGE);
       } catch (error: any) {
         console.error("Silent background refresh failed:", error);
         // Only show a toast if the screen is blank (no cached posts).
-        // This prevents the error toast from appearing if the user is already viewing cached content.
         if (allPosts.length === 0) {
             toast({ 
               variant: 'destructive', 
