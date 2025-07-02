@@ -17,9 +17,13 @@ async function ReelsLoader() {
 
 const ReelsPage: FC = () => {
   return (
-    <Suspense fallback={<ReelsPageSkeleton />}>
-      <ReelsLoader />
-    </Suspense>
+    // This div ensures the ReelsViewer has a container with a defined height
+    // that fills the viewport below the sticky headers (each is h-14, total 7rem).
+    <div className="h-[calc(100svh-7rem)]">
+        <Suspense fallback={<ReelsPageSkeleton />}>
+          <ReelsLoader />
+        </Suspense>
+    </div>
   );
 };
 
