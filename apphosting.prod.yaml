@@ -1,4 +1,3 @@
-
 # Specifies the version of the App Hosting YAML schema.
 # For more information, visit https://cloud.google.com/app-hosting/docs/configuration#yaml-schema-versions
 # yamllint disable-line rule:comment-style
@@ -39,14 +38,14 @@ env:
 
 # Settings for the main web server that App Hosting provisions.
 # For more information, visit https://cloud.google.com/app-hosting/docs/configuration#servingconfig
-# servingConfig:
-  # staticAssets:
-  #   - path: /.next/static
-  #     headers:
-  #       Cache-Control: public, max-age=31536000, immutable
-  #   - path: /static
-  #     headers:
-  #       Cache-Control: public, max-age=31536000, immutable
+servingConfig:
+  staticAssets:
+    - path: /.next/static
+      headers:
+        Cache-Control: public, max-age=31536000, immutable
+    - path: /static
+      headers:
+        Cache-Control: public, max-age=31536000, immutable
   # routes:
   #   - type: FALLBACK
   #     path: / # Default route for Next.js dynamic rendering
