@@ -23,7 +23,7 @@ const signupSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters.'),
   email: z.string().email('Please enter a valid email address.'),
   password: z.string().min(8, 'Password must be at least 8 characters.'),
-  role: z.enum(['Business', 'Gorakshak', 'Janta'], { required_error: 'You must select a role.' }),
+  role: z.enum(['Business', 'Gorakshak', 'Public(जनता)'], { required_error: 'You must select a role.' }),
 });
 
 type SignupFormInputs = z.infer<typeof signupSchema>;
@@ -34,7 +34,7 @@ const SignupPage: FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
-  const [signupRole, setSignupRole] = useState<'Business' | 'Gorakshak' | 'Janta' | null>(null);
+  const [signupRole, setSignupRole] = useState<'Business' | 'Gorakshak' | 'Public(जनता)' | null>(null);
 
   const form = useForm<SignupFormInputs>({
     resolver: zodResolver(signupSchema),
@@ -53,7 +53,7 @@ const SignupPage: FC = () => {
       if (result.success) {
         setSignupRole(data.role);
         setIsSuccess(true);
-        if (data.role === 'Gorakshak' || data.role === 'Janta') {
+        if (data.role === 'Gorakshak' || data.role === 'Public(जनता)') {
             toast({
               title: 'Account Created!',
               description: 'Your account is active and ready to use. You can now log in.',
@@ -84,7 +84,7 @@ const SignupPage: FC = () => {
             </CardHeader>
             <CardContent>
                 <p className="text-muted-foreground">
-                    {signupRole === 'Gorakshak' || signupRole === 'Janta'
+                    {signupRole === 'Gorakshak' || signupRole === 'Public(जनता)'
                         ? 'Your account has been created and is ready to use. You can now log in.'
                         : 'Your account has been created and is awaiting approval from an administrator. You will be notified once your account is activated.'}
                 </p>
@@ -195,11 +195,11 @@ const SignupPage: FC = () => {
                         </FormItem>
                          <FormItem>
                           <FormControl>
-                            <RadioGroupItem value="Janta" id="role-janta" className="peer sr-only" />
+                            <RadioGroupItem value="Public(जनता)" id="role-public" className="peer sr-only" />
                           </FormControl>
-                          <Label htmlFor="role-janta" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer">
+                          <Label htmlFor="role-public" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer">
                             <User className="mb-3 h-6 w-6" />
-                            Janta
+                            Public(जनता)
                           </Label>
                         </FormItem>
                       </RadioGroup>

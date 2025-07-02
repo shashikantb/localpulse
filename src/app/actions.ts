@@ -2,7 +2,7 @@
 'use server';
 
 import * as db from '@/lib/db';
-import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats } from '@/lib/db-types';
+import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 import { admin as firebaseAdmin } from '@/lib/firebase-admin';
 import { getSession } from './auth/actions';
@@ -503,6 +503,16 @@ export async function toggleFollow(targetUserId: number): Promise<{ success: boo
     return { success: false, error: "An unexpected server error occurred." };
   }
 }
+
+export async function getFollowingList(userId: number): Promise<FollowUser[]> {
+  try {
+    return await db.getFollowingListDb(userId);
+  } catch (error) {
+    console.error(`Error fetching following list for user ${userId}:`, error);
+    return [];
+  }
+}
+
 
 // --- Mention Actions ---
 export async function searchUsers(query: string): Promise<User[]> {

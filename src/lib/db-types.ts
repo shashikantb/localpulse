@@ -1,5 +1,5 @@
 
-export type UserRole = 'Business' | 'Gorakshak' | 'Admin' | 'Janta';
+export type UserRole = 'Business' | 'Gorakshak' | 'Admin' | 'Public(जनता)';
 
 // Define the structure of a User for client-side use (omitting password)
 export interface User {
@@ -12,6 +12,13 @@ export interface User {
   profilepictureurl?: string | null;
 }
 
+// For displaying in the following list
+export interface FollowUser {
+    id: number;
+    name: string;
+    profilepictureurl?: string | null;
+}
+
 // Full user structure from DB, including password hash
 export interface UserWithPassword extends User {
   passwordhash: string;
@@ -21,7 +28,7 @@ export interface UserWithPassword extends User {
 export type NewUser = {
   name: string;
   email: string;
-  role: 'Business' | 'Gorakshak' | 'Janta';
+  role: 'Business' | 'Gorakshak' | 'Public(जनता)';
   passwordplaintext: string;
 };
 

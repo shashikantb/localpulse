@@ -5,7 +5,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import * as jose from 'jose';
 import bcrypt from 'bcryptjs';
-import { createUserDb, getUserByEmailDb, getUserByIdDb, updateUserProfilePictureDb } from '@/lib/db';
+import { createUserDb, getUserByEmailDb, getUserByIdDb, updateUserProfilePictureDb, updateUserNameDb } from '@/lib/db';
 import type { NewUser, User } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 import { cache } from 'react';
@@ -45,8 +45,8 @@ export async function signUp(newUser: NewUser): Promise<{ success: boolean; erro
       return { success: false, error: 'An account with this email already exists.' };
     }
 
-    // Gorakshak & Janta users are approved automatically. Business users are pending.
-    const status = newUser.role === 'Gorakshak' || newUser.role === 'Janta' ? 'approved' : 'pending';
+    // Gorakshak & Public(जनता) users are approved automatically. Business users are pending.
+    const status = newUser.role === 'Gorakshak' || newUser.role === 'Public(जनता)' ? 'approved' : 'pending';
 
     const user = await createUserDb({ ...newUser, email: emailLower }, status);
     if (user) {
@@ -141,5 +141,32 @@ export async function updateUserProfilePicture(imageUrl: string): Promise<{ succ
   } catch (error: any) {
     console.error(`Error updating profile picture for user ${user.id}:`, error);
     return { success: false, error: error.message || 'Failed to update profile picture.' };
+  }
+}
+
+export async function updateUsername(name: string): Promise<{ success: boolean; error?: string; user?: User }> {
+  const { user } = await getSession();
+  if (!user) {
+    return { success: false, error: 'You must be logged in to update your name.' };
+  }
+
+  if (!name || name.trim().length < 2) {
+    return { success: false, error: 'Name must be at least 2 characters long.' };
+  }
+  
+  if (name.trim().length > 50) {
+    return { success: false, error: 'Name cannot exceed 50 characters.' };
+  }
+
+  try {
+    const updatedUser = await updateUserNameDb(user.id, name.trim());
+    if (updatedUser) {
+      revalidatePath(`/users/${user.id}`);
+      revalidatePath('/', 'layout'); // To update the user-nav
+      return { success: true, user: updatedUser };
+    }
+    return { success: false, error: 'Failed to update username.' };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'An unknown error occurred.' };
   }
 }

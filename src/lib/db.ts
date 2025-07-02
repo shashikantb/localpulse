@@ -1,6 +1,6 @@
 
 import { Pool, type QueryResult } from 'pg';
-import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats } from './db-types';
+import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser } from './db-types';
 import bcrypt from 'bcryptjs';
 
 // Re-export db-types
@@ -63,7 +63,7 @@ async function initializeDbSchema(): Promise<void> {
         name VARCHAR(255) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
         passwordhash VARCHAR(255) NOT NULL,
-        role VARCHAR(50) NOT NULL CHECK (role IN ('Business', 'Gorakshak', 'Admin', 'Janta')),
+        role VARCHAR(50) NOT NULL CHECK (role IN ('Business', 'Gorakshak', 'Admin', 'Public(जनता)')),
         status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
         createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
@@ -628,6 +628,20 @@ export async function getUserByIdDb(id: number): Promise<User | null> {
     return result.rows[0] || null;
 }
 
+export async function updateUserNameDb(userId: number, name: string): Promise<User | null> {
+    const dbPool = getDbPool();
+    if (!dbPool) throw new Error("Database not configured.");
+    
+    const query = `
+      UPDATE users
+      SET name = $1
+      WHERE id = $2
+      RETURNING ${USER_COLUMNS_SANITIZED};
+    `;
+    const result: QueryResult<User> = await dbPool.query(query, [name, userId]);
+    return result.rows[0] || null;
+}
+
 export async function updateUserProfilePictureDb(userId: number, imageUrl: string): Promise<void> {
   const dbPool = getDbPool();
   if (!dbPool) throw new Error("Database not configured.");
@@ -755,6 +769,22 @@ export async function checkIfUserIsFollowingDb(followerId: number, followingId: 
   const result = await dbPool.query(query, [followerId, followingId]);
   return result.rowCount > 0;
 }
+
+export async function getFollowingListDb(userId: number): Promise<FollowUser[]> {
+  const dbPool = getDbPool();
+  if (!dbPool) return [];
+
+  const query = `
+    SELECT u.id, u.name, u.profilepictureurl
+    FROM user_followers f
+    JOIN users u ON f.following_id = u.id
+    WHERE f.follower_id = $1 AND u.status = 'approved'
+    ORDER BY u.name ASC;
+  `;
+  const result = await dbPool.query(query, [userId]);
+  return result.rows;
+}
+
 
 // --- Mention Functions ---
 

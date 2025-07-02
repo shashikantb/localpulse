@@ -5,7 +5,7 @@ import { getUserWithFollowInfo, getPostsByUserId } from '@/app/actions';
 import { getSession } from '@/app/auth/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
-import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, UserPlus, UserCheck as UserCheckIcon } from 'lucide-react';
+import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { PostCard } from '@/components/post-card';
 import type { User } from '@/lib/db-types';
@@ -13,6 +13,8 @@ import ProfilePictureUpdater from '@/components/profile-picture-updater';
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import FollowButton from '@/components/follow-button';
+import UsernameEditor from '@/components/username-editor';
+import FollowingListDialog from '@/components/following-list-dialog';
 
 
 interface UserProfilePageProps {
@@ -83,7 +85,17 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
 
             <div className="flex-1 space-y-2 text-center md:text-left">
               <div className="flex items-center justify-center md:justify-start gap-4">
-                  <h1 className="text-3xl font-bold text-foreground">{profileUser.name}</h1>
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-3xl font-bold text-foreground">{profileUser.name}</h1>
+                    {isOwnProfile && (
+                        <UsernameEditor currentName={profileUser.name}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary">
+                                <Edit className="h-4 w-4" />
+                                <span className="sr-only">Edit name</span>
+                            </Button>
+                        </UsernameEditor>
+                    )}
+                  </div>
                    {!isOwnProfile && (
                      <FollowButton targetUserId={profileUser.id} initialIsFollowing={isFollowing} />
                    )}
@@ -98,10 +110,12 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
                     <p className="text-xl font-bold text-foreground">{stats.followerCount}</p>
                     <p className="text-sm text-muted-foreground">Followers</p>
                   </div>
-                  <div className="text-center">
-                    <p className="text-xl font-bold text-foreground">{stats.followingCount}</p>
-                    <p className="text-sm text-muted-foreground">Following</p>
-                  </div>
+                  <FollowingListDialog userId={profileUser.id}>
+                    <div className="text-center cursor-pointer rounded-md p-1 hover:bg-muted">
+                        <p className="text-xl font-bold text-foreground">{stats.followingCount}</p>
+                        <p className="text-sm text-muted-foreground">Following</p>
+                    </div>
+                  </FollowingListDialog>
               </div>
               
               <Badge variant={profileUser.role === 'Business' ? 'secondary' : 'default'} className="capitalize">
