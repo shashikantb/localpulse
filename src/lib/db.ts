@@ -51,10 +51,16 @@ async function synchronizeAllSequences(client: any): Promise<void> {
 
   for (const table of tablesWithSerialId) {
     try {
-      // This query finds the highest ID in the table and resets the sequence counter
-      // to that value. It handles empty tables correctly by coalescing NULL to 0.
-      // The `true` argument ensures the next value will be max_id + 1.
-      const syncQuery = `SELECT setval(pg_get_serial_sequence('"${table}"', 'id'), COALESCE((SELECT MAX(id) FROM "${table}"), 0), true);`;
+      // This more robust query correctly handles empty tables.
+      // For empty tables, it sets the sequence to 1 and marks it as "not returned".
+      // For tables with data, it sets the sequence to the max ID and marks it as "returned".
+      const syncQuery = `
+        SELECT setval(
+          pg_get_serial_sequence('"${table}"', 'id'),
+          COALESCE(MAX(id), 1),
+          (MAX(id) IS NOT NULL)
+        ) FROM "${table}";
+      `;
       await client.query(syncQuery);
       console.log(` > Sequence for table '${table}' synchronized.`);
     } catch (err: any) {
