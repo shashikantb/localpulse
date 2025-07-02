@@ -243,21 +243,20 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
     
     // If no media file was uploaded, check the text content for a YouTube link.
     if (!mediaUrl) {
-        const youtubeWatchRegex = /(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})/;
-        const youtubeShortRegex = /(?:https?:\/\/)?youtu\.be\/([a-zA-Z0-9_-]{11})/;
-        
-        const urlInContent = content; // for clarity
-        const watchMatch = urlInContent.match(youtubeWatchRegex);
-        const shortMatch = urlInContent.match(youtubeShortRegex);
-        const youtubeId = watchMatch ? watchMatch[1] : (shortMatch ? shortMatch[1] : null);
+      // This regex identifies YouTube watch URLs and short URLs, and extracts the 11-character video ID.
+      // It correctly handles URLs with or without http(s) and www, and additional query parameters.
+      const urlRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})[^\s]*/;
+      const match = content.match(urlRegex);
 
-        if (youtubeId) {
-            mediaUrl = `https://www.youtube.com/embed/${youtubeId}`;
-            mediaType = 'video';
-            // Also remove the URL from the content text itself to avoid duplication.
-            const urlToRemove = watchMatch ? watchMatch[0] : shortMatch![0];
-            content = content.replace(urlToRemove, '').trim();
-        }
+      if (match) {
+          const youtubeId = match[1];   // The 11-character video ID is always in the first capturing group.
+          const urlToRemove = match[0]; // The full matched URL.
+
+          mediaUrl = `https://www.youtube.com/embed/${youtubeId}`;
+          mediaType = 'video';
+          // Replace only the first occurrence of the URL to be safe, then trim whitespace.
+          content = content.replace(urlToRemove, '').trim();
+      }
     }
 
     const cityName = await geocodeCoordinates(newPostData.latitude, newPostData.longitude);

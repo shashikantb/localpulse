@@ -236,14 +236,36 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
         return { error: 'Authentication mismatch. You can only post for yourself.' };
     }
 
+    let mediaUrl = newPostData.mediaUrl;
+    let mediaType = newPostData.mediaType;
+    let content = newPostData.content;
+
+    // If no media file was uploaded, check the text content for a YouTube link.
+    if (!mediaUrl) {
+      // This regex identifies YouTube watch URLs and short URLs, and extracts the 11-character video ID.
+      // It correctly handles URLs with or without http(s) and www, and additional query parameters.
+      const urlRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})[^\s]*/;
+      const match = content.match(urlRegex);
+
+      if (match) {
+          const youtubeId = match[1];   // The 11-character video ID is always in the first capturing group.
+          const urlToRemove = match[0]; // The full matched URL.
+
+          mediaUrl = `https://www.youtube.com/embed/${youtubeId}`;
+          mediaType = 'video';
+          // Replace only the first occurrence of the URL to be safe, then trim whitespace.
+          content = content.replace(urlToRemove, '').trim();
+      }
+    }
+
     const cityName = await geocodeCoordinates(newPostData.latitude, newPostData.longitude);
 
     const postDataForDb: DbNewPost = {
-      content: newPostData.content,
+      content: content,
       latitude: newPostData.latitude,
       longitude: newPostData.longitude,
-      mediaurl: newPostData.mediaUrl, // Use the final GCS URL from the client
-      mediatype: newPostData.mediaType,
+      mediaurl: mediaUrl, // Use the final GCS URL or the parsed YouTube URL
+      mediatype: mediaType,
       hashtags: newPostData.hashtags || [], 
       city: cityName,
       authorid: user ? user.id : null,
