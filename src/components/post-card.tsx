@@ -168,7 +168,6 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
             : await likePostAnonymously(post.id);
 
         if (result.error || !result.post) {
-            console.error("Failed to toggle like:", result.error);
             // Revert UI on failure
             setIsLikedByClient(originalLikeState);
             setDisplayLikeCount(originalLikeCount);
@@ -183,7 +182,6 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
             setIsLikedByClient(result.post.isLikedByCurrentUser || !sessionUser);
         }
     } catch (error) {
-        console.error("An unexpected server error occurred during like action:", error);
         // Revert UI on unexpected error
         setIsLikedByClient(originalLikeState);
         setDisplayLikeCount(originalLikeCount);
@@ -218,39 +216,99 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
     }
   };
 
-  const renderContentWithMentions = () => {
+  const renderContentWithMentionsAndLinks = () => {
     if (!post.content) return null;
 
-    if (!post.mentions || post.mentions.length === 0) {
+    // This regex finds standard URLs. It's safe because the server has already
+    // removed any YouTube URLs that are meant to be embedded as videos.
+    const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
+
+    // This regex finds mentions that were passed in the post data.
+    const mentionTexts = post.mentions?.map(m => `@${m.name}`) || [];
+    const mentionRegex = mentionTexts.length > 0
+      ? new RegExp(`(${mentionTexts.map(m => m.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')).join('|')})\\b`, 'g')
+      : null;
+
+    const contentParts = [];
+    let lastIndex = 0;
+
+    const allMatches = [];
+    // Find all URL matches
+    for (const match of post.content.matchAll(urlRegex)) {
+        allMatches.push({ type: 'url' as const, text: match[0], index: match.index! });
+    }
+    // Find all mention matches
+    if (mentionRegex) {
+        for (const match of post.content.matchAll(mentionRegex)) {
+            allMatches.push({ type: 'mention' as const, text: match[0], index: match.index! });
+        }
+    }
+
+    // Sort all found matches by their starting position in the text
+    allMatches.sort((a, b) => a.index - b.index);
+
+    // Filter out any overlapping matches (e.g., a mention inside a URL), keeping the first one.
+    const uniqueMatches = allMatches.filter((match, i, arr) => {
+        if (i === 0) return true;
+        const prevMatch = arr[i - 1];
+        return match.index >= prevMatch.index + prevMatch.text.length;
+    });
+
+    if (uniqueMatches.length === 0) {
       return <p className="text-foreground/90 leading-relaxed text-base whitespace-pre-wrap break-words">{post.content}</p>;
     }
 
-    // Escape mentions for regex and create a pattern that includes the '@'
-    const escapedMentionNames = post.mentions.map(m =>
-      m.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
-    );
-    const regex = new RegExp(`(@(?:${escapedMentionNames.join('|')}))\\b`, 'g');
-    const parts = post.content.split(regex);
+    // Build the array of React elements by slicing the text and inserting links/mentions
+    for (const match of uniqueMatches) {
+        // Add the plain text part before the current match
+        if (match.index > lastIndex) {
+            contentParts.push(post.content.substring(lastIndex, match.index));
+        }
+
+        // Add the matched element (URL link or Mention link)
+        if (match.type === 'url') {
+            const href = match.text.startsWith('www.') ? `https://${match.text}` : match.text;
+            contentParts.push(
+                <a
+                    key={`${match.type}-${match.index}`}
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-500 hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    {match.text}
+                </a>
+            );
+        } else if (match.type === 'mention') {
+            const mentionData = post.mentions?.find(m => `@${m.name}` === match.text);
+            if (mentionData) {
+                contentParts.push(
+                    <Link
+                        key={`${match.type}-${match.index}`}
+                        href={`/users/${mentionData.id}`}
+                        className="text-accent font-semibold hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {match.text}
+                    </Link>
+                );
+            } else {
+                contentParts.push(match.text); // Failsafe, should not happen
+            }
+        }
+        
+        lastIndex = match.index + match.text.length;
+    }
+
+    // Add any remaining plain text after the last match
+    if (lastIndex < post.content.length) {
+        contentParts.push(post.content.substring(lastIndex));
+    }
 
     return (
       <p className="text-foreground/90 leading-relaxed text-base whitespace-pre-wrap break-words">
-        {parts.map((part, index) => {
-          // Find the mention by checking if the part matches "@username"
-          const mention = post.mentions?.find(m => `@${m.name}` === part);
-          if (mention) {
-            return (
-              <Link
-                key={`${mention.id}-${index}`}
-                href={`/users/${mention.id}`}
-                className="text-accent font-semibold hover:underline"
-                onClick={(e) => e.stopPropagation()} // Prevent card click-through
-              >
-                {part} 
-              </Link>
-            );
-          }
-          return <React.Fragment key={index}>{part}</React.Fragment>;
-        })}
+        {contentParts.map((part, index) => <React.Fragment key={index}>{part}</React.Fragment>)}
       </p>
     );
   };
@@ -329,7 +387,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
       )}
 
       <CardContent className={`px-5 ${post.mediaurl ? 'pt-4' : 'pt-2'} pb-3`}>
-        {renderContentWithMentions()}
+        {renderContentWithMentionsAndLinks()}
       </CardContent>
 
       {post.hashtags && post.hashtags.length > 0 && ( /* Hashtags display remains the same */
@@ -398,5 +456,3 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
     </Card>
   );
 };
-
-    
