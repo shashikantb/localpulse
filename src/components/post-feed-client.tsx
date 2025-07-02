@@ -163,10 +163,11 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
         setLocation(loc);
         setAllPosts(freshPosts); // This replaces cached data with fresh data
         setCurrentPage(1);
-        setHasMorePosts(freshPosts.length === POSTS_PER_PAGE);
+        setHasMore(freshPosts.length === POSTS_PER_PAGE);
       } catch (error: any) {
-        console.error("Failed to load fresh feed data:", error); // Log for developers
-        // Only show a toast if the screen is blank (no cached posts)
+        console.error("Silent background refresh failed:", error);
+        // Only show a toast if the screen is blank (no cached posts).
+        // This prevents the error toast from appearing if the user is already viewing cached content.
         if (allPosts.length === 0) {
             toast({ 
               variant: 'destructive', 
@@ -174,7 +175,6 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
               description: 'Could not connect to the server. Please try again later.' 
             });
         }
-        // If there's cached content, we fail silently to avoid disturbing the user.
       } finally {
         setIsLoading(false);
         setInitialFetchComplete(true); // Signal that the first load is done and polling can begin.
