@@ -277,7 +277,6 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
         </div>
       </CardHeader>
 
-      {/* Media content remains the same */}
       {post.mediaurl && post.mediatype && (
         <div className="px-5 pb-0 pt-2">
           <div className="relative w-full aspect-[16/10] overflow-hidden rounded-lg border-2 border-border/50 shadow-inner bg-muted/50 group">
@@ -285,7 +284,18 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
               <Image src={post.mediaurl} alt="Post image" fill style={{ objectFit: "contain" }} sizes="(max-width: 768px) 100vw, 50vw" className="transition-transform duration-300 group-hover:scale-105" data-ai-hint="user generated content" priority={isFirst} />
             )}
             {post.mediatype === 'video' && (
-              <video controls src={post.mediaurl} className="w-full h-full object-contain" />
+              post.mediaurl.includes('youtube.com/embed') ? (
+                <iframe
+                  src={post.mediaurl}
+                  title="YouTube video player"
+                  frameBorder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                  className="w-full h-full"
+                />
+              ) : (
+                 <video controls src={post.mediaurl} className="w-full h-full object-contain" />
+              )
             )}
              <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/50 text-white text-xs rounded-md backdrop-blur-sm">
                 {post.mediatype.charAt(0).toUpperCase() + post.mediatype.slice(1)}

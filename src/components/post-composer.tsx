@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { FC } from 'react';
@@ -13,6 +14,19 @@ interface PostComposerProps {
   sessionUser: User | null;
   onPostSuccess: () => void;
 }
+
+const getYouTubeVideoId = (url: string): string | null => {
+  if (!url) return null;
+  // This regex handles youtu.be, /embed/, /v/, /watch?v=, and &v= formats
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+  const match = url.match(regExp);
+
+  if (match && match[2].length === 11) {
+    return match[2];
+  }
+  return null;
+};
+
 
 const PostComposer: FC<PostComposerProps> = ({ sessionUser, onPostSuccess }) => {
   const { toast } = useToast();
@@ -56,19 +70,46 @@ const PostComposer: FC<PostComposerProps> = ({ sessionUser, onPostSuccess }) => 
       toast({ variant: "destructive", title: "Location Error", description: errMessage });
       return;
     }
-    if (!content.trim()) {
+    // Content can be empty if there's a video link
+    if (!content.trim() && !getYouTubeVideoId(content)) {
       toast({ variant: "destructive", title: "Post Error", description: "Post content cannot be empty." });
       return;
     }
 
     setFormSubmitting(true);
+
+    let finalContent = content;
+    let finalMediaUrl = mediaUrl;
+    let finalMediaType = mediaType;
+    
+    // Check for YouTube link in the original content
+    const youtubeId = getYouTubeVideoId(content);
+        
+    if (youtubeId) {
+      finalMediaUrl = `https://www.youtube.com/embed/${youtubeId}`;
+      finalMediaType = 'video';
+      
+      // Remove the original YouTube link from the content to avoid redundancy
+      const urlRegex = /(?:https?:\/\/)?(?:www\.)?(?:m\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?(?:embed\/)?(?:v\/)?(?:u\/\w\/)?([^#&?\s]+)/g;
+      finalContent = content.replace(urlRegex, '').trim();
+
+      if (mediaUrl) { // If a file was uploaded AND a youtube link was found
+          toast({
+              title: "Media Priority",
+              description: "A YouTube link was found, so it will be used as the media for this post instead of the uploaded file.",
+              variant: "default",
+          });
+      }
+    }
+
+
     try {
       const postData: NewPost = {
-        content,
+        content: finalContent,
         latitude: location.latitude,
         longitude: location.longitude,
-        mediaUrl: mediaUrl,
-        mediaType: mediaType,
+        mediaUrl: finalMediaUrl,
+        mediaType: finalMediaType,
         hashtags: hashtags || [],
         authorId: sessionUser ? sessionUser.id : undefined,
         mentionedUserIds: mentionedUserIds || [],

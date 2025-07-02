@@ -75,7 +75,8 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
 
   useEffect(() => {
     const videoElement = videoRef.current;
-    if (!videoElement || post.mediatype !== 'video') {
+    // Do not control video if it's an iframe or not the active reel
+    if (!videoElement || post.mediatype !== 'video' || post.mediaurl?.includes('youtube.com/embed')) {
       return;
     }
 
@@ -97,10 +98,9 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
       }
     } else {
       // This reel is not active, just pause it.
-      // Do NOT reset currentTime, as this will interrupt buffering.
       videoElement.pause();
     }
-  }, [isActive, post.mediatype, isInternallyMuted]);
+  }, [isActive, post.mediatype, post.mediaurl, isInternallyMuted]);
 
   const handleLikeClick = async () => {
     if (isLiking) return;
@@ -183,6 +183,8 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
   const handleCommentPosted = (newComment: CommentType) => {
     setDisplayCommentCount(prev => prev + 1);
   };
+  
+  const isYouTubeVideo = post.mediaurl?.includes('youtube.com/embed');
 
   return (
     <div className="h-full w-full flex flex-col items-center justify-center bg-black relative text-white">
@@ -200,24 +202,37 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
         )}
         {post.mediatype === 'video' && post.mediaurl && (
           <>
-            <video
-              ref={videoRef}
-              src={post.mediaurl}
-              loop
-              playsInline // Important for iOS
-              preload="auto"
-              className="w-full h-full object-contain"
-            />
-            <div 
-              className="absolute top-4 right-4 p-2 bg-black/50 rounded-full cursor-pointer z-10"
-              onClick={(e) => { e.stopPropagation(); handleVideoTap(); }}
-            >
-              {isInternallyMuted ? <VolumeX className="w-5 h-5 text-white" /> : <Volume2 className="w-5 h-5 text-white" />}
-            </div>
-             {post.mediatype === 'video' && videoRef.current?.paused && isActive && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
-                    <PlayCircle className="w-16 h-16 text-white/50 backdrop-blur-sm rounded-full" />
+            {isYouTubeVideo ? (
+              <iframe
+                src={`${post.mediaurl}?autoplay=1&mute=1&playsinline=1&loop=1&playlist=${post.mediaurl.split('/').pop()}`}
+                title="YouTube video player"
+                frameBorder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+                className="w-full h-full object-contain"
+              />
+            ) : (
+              <>
+                <video
+                  ref={videoRef}
+                  src={post.mediaurl}
+                  loop
+                  playsInline // Important for iOS
+                  preload="auto"
+                  className="w-full h-full object-contain"
+                />
+                <div 
+                  className="absolute top-4 right-4 p-2 bg-black/50 rounded-full cursor-pointer z-10"
+                  onClick={(e) => { e.stopPropagation(); handleVideoTap(); }}
+                >
+                  {isInternallyMuted ? <VolumeX className="w-5 h-5 text-white" /> : <Volume2 className="w-5 h-5 text-white" />}
                 </div>
+                 {videoRef.current?.paused && isActive && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
+                        <PlayCircle className="w-16 h-16 text-white/50 backdrop-blur-sm rounded-full" />
+                    </div>
+                )}
+              </>
             )}
           </>
         )}
