@@ -164,9 +164,13 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
         setAllPosts(freshPosts); // This replaces cached data with fresh data
         setCurrentPage(1);
         setHasMorePosts(freshPosts.length === POSTS_PER_PAGE);
-      } catch (error) {
+      } catch (error: any) {
         console.error("Failed to load fresh feed data:", error);
-        toast({ variant: 'destructive', title: 'Error', description: 'Could not refresh the feed.' });
+        toast({ 
+          variant: 'destructive', 
+          title: 'Failed to Load Feed', 
+          description: error.message || 'Could not connect to the server. Please try again later.' 
+        });
       } finally {
         setIsLoading(false);
         setInitialFetchComplete(true); // Signal that the first load is done and polling can begin.
@@ -264,11 +268,11 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
       if (window) {
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
-    } catch (error) {
+    } catch (error: any) {
       toast({
         variant: "destructive",
         title: "Refresh Error",
-        description: "Could not refresh posts.",
+        description: error.message || "Could not refresh posts.",
       });
       setNewPulsesAvailable(true); // Re-enable button if refresh fails
     } finally {
@@ -429,9 +433,9 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
                 description: "No more pulses to show for now.",
             });
         }
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error loading more posts:", error);
-        toast({ variant: "destructive", title: "Fetch Error", description: "Could not load more posts." });
+        toast({ variant: "destructive", title: "Fetch Error", description: error.message || "Could not load more posts." });
     } finally {
         setIsLoadingMore(false);
     }
@@ -659,5 +663,3 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
 };
 
 export default PostFeedClient;
-
-    

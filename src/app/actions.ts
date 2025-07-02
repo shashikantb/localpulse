@@ -45,9 +45,10 @@ export async function getPosts(options?: { page: number; limit: number }): Promi
     }
     
     return posts;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Server action error fetching posts:", error);
-    return [];
+    // Re-throw the error to be caught by the client component
+    throw new Error(error.message || 'A server error occurred while fetching posts.');
   }
 }
 
