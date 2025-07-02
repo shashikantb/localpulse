@@ -79,12 +79,16 @@ const ReelsViewer: FC<{ sessionUser: User | null }> = ({ sessionUser }) => {
 
     } catch (error) {
       console.error("Error fetching reels:", error);
-      toast({ variant: "destructive", title: "Fetch Error", description: "Could not load reels." });
+      // Only show a toast if there are absolutely no reels to display.
+      // This prevents toasts on silent background revalidation failures.
+      if (reelPosts.length === 0) {
+        toast({ variant: "destructive", title: "Fetch Error", description: "Could not load reels." });
+      }
     } finally {
       setIsLoading(false);
       setIsLoadingMore(false);
     }
-  }, [toast, saveToCache, isLoadingMore, hasMore]);
+  }, [toast, saveToCache, isLoadingMore, hasMore, reelPosts.length]);
 
 
   // Effect for initial load and revalidation logic (Stale-While-Revalidate)
