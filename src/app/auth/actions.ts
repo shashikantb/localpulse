@@ -45,8 +45,8 @@ export async function signUp(newUser: NewUser): Promise<{ success: boolean; erro
       return { success: false, error: 'An account with this email already exists.' };
     }
 
-    // Gorakshak & Public(जनता) users are approved automatically. Business users are pending.
-    const status = newUser.role === 'Gorakshak' || newUser.role === 'Public(जनता)' ? 'approved' : 'pending';
+    // All users are now approved automatically.
+    const status = 'approved';
 
     const user = await createUserDb({ ...newUser, email: emailLower }, status);
     if (user) {

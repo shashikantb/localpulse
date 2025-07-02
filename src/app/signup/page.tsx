@@ -34,7 +34,6 @@ const SignupPage: FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
-  const [signupRole, setSignupRole] = useState<'Business' | 'Gorakshak' | 'Public(जनता)' | null>(null);
 
   const form = useForm<SignupFormInputs>({
     resolver: zodResolver(signupSchema),
@@ -51,19 +50,11 @@ const SignupPage: FC = () => {
     try {
       const result = await signUp({ ...data, passwordplaintext: data.password });
       if (result.success) {
-        setSignupRole(data.role);
         setIsSuccess(true);
-        if (data.role === 'Gorakshak' || data.role === 'Public(जनता)') {
-            toast({
-              title: 'Account Created!',
-              description: 'Your account is active and ready to use. You can now log in.',
-            });
-        } else {
-            toast({
-              title: 'Account Created!',
-              description: 'Your registration is submitted and is now pending admin approval.',
-            });
-        }
+        toast({
+          title: 'Account Created!',
+          description: 'Your account is active and ready to use. You can now log in.',
+        });
       } else {
         setError(result.error || 'Failed to create account.');
       }
@@ -84,9 +75,7 @@ const SignupPage: FC = () => {
             </CardHeader>
             <CardContent>
                 <p className="text-muted-foreground">
-                    {signupRole === 'Gorakshak' || signupRole === 'Public(जनता)'
-                        ? 'Your account has been created and is ready to use. You can now log in.'
-                        : 'Your account has been created and is awaiting approval from an administrator. You will be notified once your account is activated.'}
+                    {'Your account has been created and is ready to use. You can now log in.'}
                 </p>
             </CardContent>
             <CardFooter className="flex justify-center">
