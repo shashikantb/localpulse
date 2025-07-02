@@ -179,6 +179,55 @@ async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[
   }
 }
 
+async function sendNotificationForNewComment(comment: Comment, post: Post) {
+  try {
+    // Basic checks: ensure there is a post author and the commenter is not the author
+    if (!post.authorid) return;
+    
+    const { user: commenterUser } = await getSession();
+    if (commenterUser && commenterUser.id === post.authorid) {
+      return; // Don't send notifications for own comments
+    }
+
+    // Fetch the post author's device tokens
+    const authorDeviceTokens = await db.getDeviceTokensForUsersDb([post.authorid]);
+    if (authorDeviceTokens.length === 0) return;
+
+    // Construct and send the notification
+    const notificationPayload = {
+      notification: {
+        title: `${comment.author} commented on your pulse`,
+        body: comment.content.length > 100 ? `${comment.content.substring(0, 97)}...` : comment.content,
+      },
+      data: {
+        postId: String(post.id),
+      },
+      tokens: authorDeviceTokens,
+      android: {
+        priority: 'high' as const,
+      },
+    };
+
+    const response = await firebaseAdmin.messaging().sendEachForMulticast(notificationPayload);
+
+    // Clean up any failed tokens
+    if (response.failureCount > 0) {
+      const failedTokens: string[] = [];
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success) {
+          failedTokens.push(authorDeviceTokens[idx]);
+        }
+      });
+      console.error('List of tokens that failed for new comment notification:', failedTokens);
+      for (const token of failedTokens) {
+        await db.deleteDeviceTokenDb(token);
+      }
+    }
+  } catch (error) {
+    console.error('Error sending new comment notification:', error);
+  }
+}
+
 export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post; error?: string }> {
   try {
     const { user } = await getSession(); // user can be null
@@ -311,6 +360,16 @@ export async function addComment(commentData: NewComment): Promise<Comment> {
     const authorName = user ? user.name : 'PulseFan';
     
     const addedComment = await db.addCommentDb({ ...commentData, author: authorName });
+
+    // Fetch the post to notify its author
+    const post = await db.getPostByIdDb(commentData.postId);
+    if (post) {
+      // Don't block the client response, run notification in the background
+      sendNotificationForNewComment(addedComment, post).catch(err => {
+        console.error("Background task to send comment notification failed:", err);
+      });
+    }
+
     revalidatePath('/');
     revalidatePath(`/posts/${commentData.postId}`);
     return addedComment;
