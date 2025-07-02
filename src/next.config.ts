@@ -1,8 +1,35 @@
 
-import type {NextConfig} from 'next';
+import type { NextConfig } from 'next';
+
+const gcsBucketName = process.env.GCS_BUCKET_NAME;
+
+const remotePatterns: NextConfig['images']['remotePatterns'] = [
+  {
+    protocol: 'https',
+    hostname: 'picsum.photos',
+    port: '',
+    pathname: '/**',
+  },
+  {
+    protocol: 'https',
+    hostname: 'placehold.co',
+    port: '',
+    pathname: '/**',
+  },
+];
+
+if (gcsBucketName) {
+  remotePatterns.push({
+    protocol: 'https',
+    hostname: 'storage.googleapis.com',
+    port: '',
+    pathname: `/${gcsBucketName}/**`,
+  });
+}
+
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  productionBrowserSourceMaps: true,
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -11,20 +38,7 @@ const nextConfig: NextConfig = {
   },
   images: {
     formats: ['image/avif', 'image/webp'],
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'picsum.photos',
-        port: '',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'placehold.co',
-        port: '',
-        pathname: '/**',
-      },
-    ],
+    remotePatterns,
   },
 };
 

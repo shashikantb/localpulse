@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { FC } from 'react';
@@ -7,7 +6,7 @@ import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Zap } from 'lucide-react';
 import type { User } from '@/lib/db-types';
 
@@ -67,6 +66,9 @@ const PostComposerLoader: FC<PostComposerLoaderProps> = ({ sessionUser }) => {
                         <Zap className="w-7 h-7 mr-2 text-accent drop-shadow-sm" />
                         Share Your Pulse
                     </DialogTitle>
+                    <DialogDescription>
+                      Create and share a new post with your community. Add content, tags, and media.
+                    </DialogDescription>
                 </DialogHeader>
                 <PostComposer sessionUser={sessionUser} onPostSuccess={handlePostSuccess} />
             </DialogContent>
