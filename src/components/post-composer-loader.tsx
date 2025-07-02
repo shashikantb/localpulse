@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { FC } from 'react';
@@ -56,7 +57,7 @@ const PostComposerLoader: FC<PostComposerLoaderProps> = ({ sessionUser }) => {
                                 {sessionUser ? sessionUser.name.charAt(0).toUpperCase() : <Zap className="h-6 w-6" />}
                             </AvatarFallback>
                         </Avatar>
-                        <span className="text-muted-foreground text-lg">Share your pulse...</span>
+                        <span className="text-muted-foreground text-lg">Share your pulse (Post)</span>
                     </div>
                 </Button>
             </DialogTrigger>
