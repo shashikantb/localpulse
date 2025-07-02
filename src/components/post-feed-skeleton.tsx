@@ -23,9 +23,6 @@ export const PostFeedSkeleton = () => {
           <CardContent className="px-5 pb-5 space-y-2">
             <Skeleton className="h-4 w-full" />
             <Skeleton className="h-4 w-5/6" />
-             <div className="relative w-full aspect-[16/10] overflow-hidden rounded-lg mt-4">
-                <Skeleton className="h-full w-full" />
-            </div>
           </CardContent>
         </Card>
       ))}
