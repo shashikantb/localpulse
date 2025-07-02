@@ -44,6 +44,33 @@ function getDbPool(): Pool | null {
   return pool;
 }
 
+// Self-healing function to fix out-of-sync ID sequences
+async function synchronizeAllSequences(client: any): Promise<void> {
+  const tablesWithSerialId = ['users', 'posts', 'post_likes', 'comments', 'device_tokens'];
+  console.log('Synchronizing database sequences to prevent duplicate key errors...');
+
+  for (const table of tablesWithSerialId) {
+    try {
+      // This query finds the highest ID in the table and resets the sequence counter
+      // to that value. It handles empty tables correctly by coalescing NULL to 0.
+      // The `true` argument ensures the next value will be max_id + 1.
+      const syncQuery = `SELECT setval(pg_get_serial_sequence('"${table}"', 'id'), COALESCE((SELECT MAX(id) FROM "${table}"), 0), true);`;
+      await client.query(syncQuery);
+      console.log(` > Sequence for table '${table}' synchronized.`);
+    } catch (err: any) {
+      // This is expected to fail on a completely fresh DB setup before tables exist.
+      // We can safely ignore these specific errors.
+      if (err.code === '42P01') { // 42P01 is 'undefined_table'
+         console.warn(` > Could not find table '${table}' for sequence sync (expected on first run).`);
+      } else {
+        console.error(`Error synchronizing sequence for table '${table}': ${err.message}`);
+      }
+    }
+  }
+  console.log('Finished synchronizing sequences.');
+}
+
+
 // Function to initialize the database schema
 async function initializeDbSchema(): Promise<void> {
   const dbPool = getDbPool();
@@ -241,6 +268,11 @@ async function initializeDbSchema(): Promise<void> {
 
     await client.query('COMMIT');
     console.log('Database schema initialized successfully.');
+
+    // Run sequence synchronization as a separate step after the schema is confirmed.
+    // This makes the app resilient to manual data imports or restores that de-sync counters.
+    await synchronizeAllSequences(client);
+
   } catch (err: any) {
     await client.query('ROLLBACK');
     console.error('Failed to initialize database schema', err);
