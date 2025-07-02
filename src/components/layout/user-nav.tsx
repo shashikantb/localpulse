@@ -41,20 +41,20 @@ export const UserNav: FC = () => {
   };
   
   if (loading) {
-    return <Skeleton className="h-12 w-12 rounded-full sm:h-10 sm:w-10" />;
+    return <Skeleton className="h-10 w-10 rounded-full" />;
   }
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="relative h-12 w-12 rounded-full" aria-label="User menu">
+        <Button variant="ghost" className="relative h-10 w-10 rounded-full" aria-label="User menu">
           {user ? (
             <Avatar className="h-10 w-10">
               <AvatarImage src={user.profilepictureurl ?? undefined} alt={user.name} />
               <AvatarFallback>{user.name.charAt(0).toUpperCase()}</AvatarFallback>
             </Avatar>
           ) : (
-             <Menu className="h-7 w-7" />
+             <Menu className="h-6 w-6" />
           )}
         </Button>
       </DropdownMenuTrigger>

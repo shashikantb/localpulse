@@ -6,7 +6,6 @@ import { Toaster } from '@/components/ui/toaster';
 import Footer from '@/components/layout/footer';
 import { AppInstallPrompt } from '@/components/app-install-prompt';
 import Header from '@/components/layout/header';
-import BottomNavBar from '@/components/layout/bottom-nav-bar';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -32,11 +31,11 @@ export default function RootLayout({
       </head>
       <body className={`${geistSans.variable} antialiased bg-background text-foreground flex flex-col min-h-svh`}>
         <Header />
-        <div className="flex-grow pb-16 sm:pb-0"> {/* Add padding-bottom for mobile, remove for sm and up */}
+        <div className="flex-grow"> {/* Removed padding that compensated for the old bottom bar */}
           {children}
         </div>
         <Footer />
-        <BottomNavBar />
+        {/* The BottomNavBar has been removed to prevent content overlap */}
         <AppInstallPrompt />
         <Toaster />
       </body>
