@@ -565,7 +565,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
     )
   }
 
-  if (isLoading) {
+  if (isLoading && allPosts.length === 0) {
     return <PostFeedSkeleton />;
   }
 

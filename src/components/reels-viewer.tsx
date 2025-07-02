@@ -9,7 +9,7 @@ import type { Post, User } from '@/lib/db-types';
 import { getMediaPosts } from '@/app/actions';
 import { ReelItem } from '@/components/reel-item';
 import { Button } from '@/components/ui/button';
-import { ChevronUp, ChevronDown, Home, Loader2, Film } from 'lucide-react';
+import { ChevronUp, ChevronDown, Home, Loader2, Film, RefreshCw, Terminal } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { AlertDescription, AlertTitle, Alert } from '@/components/ui/alert';
 import { useSwipeable } from 'react-swipeable';
@@ -243,5 +243,3 @@ const ReelsViewer: FC<{ sessionUser: User | null }> = ({ sessionUser }) => {
 };
 
 export default ReelsViewer;
-
-    
