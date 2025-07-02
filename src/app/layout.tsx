@@ -11,6 +11,7 @@ import BottomNavBar from '@/components/layout/bottom-nav-bar';
 const geistSans = Geist({
   variable: '--font-geist-sans',
   subsets: ['latin'],
+  display: 'optional', // Prioritize performance by not blocking render for the font
 });
 
 export const metadata: Metadata = {
