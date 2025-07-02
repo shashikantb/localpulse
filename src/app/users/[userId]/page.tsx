@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import FollowButton from '@/components/follow-button';
 import UsernameEditor from '@/components/username-editor';
 import FollowingListDialog from '@/components/following-list-dialog';
+import LogoutButton from '@/components/logout-button';
 
 
 interface UserProfilePageProps {
@@ -96,8 +97,10 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
                         </UsernameEditor>
                     )}
                   </div>
-                   {!isOwnProfile && (
-                     <FollowButton targetUserId={profileUser.id} initialIsFollowing={isFollowing} />
+                   {isOwnProfile ? (
+                      <LogoutButton />
+                   ) : (
+                      <FollowButton targetUserId={profileUser.id} initialIsFollowing={isFollowing} />
                    )}
               </div>
 
