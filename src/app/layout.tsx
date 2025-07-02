@@ -6,8 +6,6 @@ import { Toaster } from '@/components/ui/toaster';
 import Footer from '@/components/layout/footer';
 import { AppInstallPrompt } from '@/components/app-install-prompt';
 import Header from '@/components/layout/header';
-import { getSession } from './auth/actions';
-import type { User } from '@/lib/db-types';
 import BottomNavBar from '@/components/layout/bottom-nav-bar';
 
 const geistSans = Geist({
@@ -20,14 +18,11 @@ export const metadata: Metadata = {
   description: 'Share and discover what\'s happening around you',
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Fetch session once in the root layout.
-  const { user } = await getSession();
-
   return (
     <html lang="en" className="h-full">
       <head>
@@ -35,14 +30,12 @@ export default async function RootLayout({
         {/* Next.js will populate this head based on metadata and other conventions */}
       </head>
       <body className={`${geistSans.variable} antialiased bg-background text-foreground flex flex-col min-h-svh`}>
-        {/* Pass the user session down to the header */}
-        <Header user={user} />
+        <Header />
         <div className="flex-grow pb-16 sm:pb-0"> {/* Add padding-bottom for mobile, remove for sm and up */}
           {children}
         </div>
         <Footer />
-        {/* Pass the user session down to the bottom nav bar */}
-        <BottomNavBar user={user} />
+        <BottomNavBar />
         <AppInstallPrompt />
         <Toaster />
       </body>

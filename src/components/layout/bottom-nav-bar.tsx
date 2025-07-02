@@ -6,7 +6,6 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, Film } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { User } from '@/lib/db-types';
 import dynamic from 'next/dynamic';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -25,17 +24,13 @@ const navItems = [
   { href: '/reels', label: 'Reels', icon: Film },
 ];
 
-interface BottomNavBarProps {
-  user: User | null;
-}
 
-
-const BottomNavBar: FC<BottomNavBarProps> = ({ user }) => {
+const BottomNavBar: FC = () => {
   const pathname = usePathname();
   const isMobile = useIsMobile();
   
-  // This component no longer fetches its own session state. It receives it via props.
-  // This ensures it is always in sync with the rest of the application.
+  // This component no longer receives session state via props.
+  // UserNav is a client component that will handle its own session logic.
 
   // During SSR or if not on a mobile device, render nothing.
   if (isMobile === undefined || !isMobile) {
@@ -63,7 +58,7 @@ const BottomNavBar: FC<BottomNavBarProps> = ({ user }) => {
       })}
       {/* Add the UserNav component directly into the bottom bar */}
       <div className="flex h-full items-center justify-center px-2">
-         {<UserNav user={user} />}
+         {<UserNav />}
       </div>
     </nav>
   );

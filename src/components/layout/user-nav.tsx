@@ -2,8 +2,9 @@
 'use client';
 
 import type { FC } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -17,28 +18,35 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { LogIn, LogOut, Menu, User, UserPlus } from 'lucide-react';
 import type { User as UserType } from '@/lib/db-types';
-import { logout } from '@/app/auth/actions';
+import { logout, getSession } from '@/app/auth/actions';
+import { Skeleton } from '@/components/ui/skeleton';
 
-interface UserNavProps {
-  user: UserType | null;
-}
-
-export const UserNav: FC<UserNavProps> = ({ user }) => {
+export const UserNav: FC = () => {
   const router = useRouter();
+  const pathname = usePathname();
+  const [user, setUser] = useState<UserType | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    getSession().then(session => {
+      setUser(session.user);
+      setLoading(false);
+    });
+  }, [pathname]); // Refetch session on every route change
 
   const handleLogout = async () => {
     await logout();
     router.refresh();
   };
+  
+  if (loading) {
+    return <Skeleton className="h-12 w-12 rounded-full sm:h-10 sm:w-10" />;
+  }
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        {/*
-          Making the button larger (48x48px) to ensure an easy-to-tap
-          touch target on mobile devices.
-          FIX: Added aria-label for accessibility.
-        */}
         <Button variant="ghost" className="relative h-12 w-12 rounded-full" aria-label="User menu">
           {user ? (
             <Avatar className="h-10 w-10">
