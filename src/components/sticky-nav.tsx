@@ -43,7 +43,7 @@ const StickyNav: FC = () => {
       name: 'Profile', 
       href: user ? `/users/${user.id}` : '/login', 
       icon: UserIcon, 
-      current: user ? pathname === `/users/${user.id}` : pathname === '/login' 
+      current: user ? pathname.startsWith(`/users/${user.id}`) : pathname === '/login' 
     }
   ];
 

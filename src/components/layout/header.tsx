@@ -2,17 +2,8 @@
 import type { FC } from 'react';
 import Link from 'next/link';
 import { Rss } from 'lucide-react';
-import dynamic from 'next/dynamic';
-import { Skeleton } from '@/components/ui/skeleton';
-
-// Dynamically import the user nav to code-split it from the main bundle.
-const HeaderUserNav = dynamic(() => import('./header-user-nav'), {
-  loading: () => <Skeleton className="h-10 w-10 rounded-full" />,
-});
 
 const Header: FC = () => {
-  // This component no longer fetches the session itself.
-  // HeaderUserNav is a client component that will handle session logic.
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 max-w-screen-2xl items-center px-4">
@@ -25,9 +16,7 @@ const Header: FC = () => {
           </Link>
         </div>
         <div className="flex flex-1 items-center justify-end space-x-2">
-          <nav className="hidden items-center sm:flex">
-            <HeaderUserNav />
-          </nav>
+          {/* User navigation has been moved to the sticky nav bar below */}
         </div>
       </div>
     </header>
