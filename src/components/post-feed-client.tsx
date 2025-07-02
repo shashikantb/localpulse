@@ -165,12 +165,16 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
         setCurrentPage(1);
         setHasMorePosts(freshPosts.length === POSTS_PER_PAGE);
       } catch (error: any) {
-        console.error("Failed to load fresh feed data:", error);
-        toast({ 
-          variant: 'destructive', 
-          title: 'Failed to Load Feed', 
-          description: error.message || 'Could not connect to the server. Please try again later.' 
-        });
+        console.error("Failed to load fresh feed data:", error); // Log for developers
+        // Only show a toast if the screen is blank (no cached posts)
+        if (allPosts.length === 0) {
+            toast({ 
+              variant: 'destructive', 
+              title: 'Failed to Load Feed', 
+              description: 'Could not connect to the server. Please try again later.' 
+            });
+        }
+        // If there's cached content, we fail silently to avoid disturbing the user.
       } finally {
         setIsLoading(false);
         setInitialFetchComplete(true); // Signal that the first load is done and polling can begin.
@@ -272,7 +276,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
       toast({
         variant: "destructive",
         title: "Refresh Error",
-        description: error.message || "Could not refresh posts.",
+        description: "Could not refresh posts. Please try again later.",
       });
       setNewPulsesAvailable(true); // Re-enable button if refresh fails
     } finally {
