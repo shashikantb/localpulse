@@ -165,6 +165,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
         setCurrentPage(1);
         setHasMorePosts(freshPosts.length === POSTS_PER_PAGE);
       } catch (error: any) {
+        // Silently fail but log the error
         console.error("Silent background refresh failed:", error);
       } finally {
         setIsLoading(false);
@@ -222,7 +223,8 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
             setNotificationPermissionStatus('granted');
             toast({ title: "Success!", description: "You are now set up for notifications."});
           } else {
-             toast({ variant: "destructive", title: "Registration Error", description: result.error || "Could not register for notifications." });
+             // Silently fail but log the error
+             console.error("Could not register for notifications:", result.error);
              setNotificationPermissionStatus('denied');
           }
         } else {
@@ -372,12 +374,25 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
             return 0;
         });
     } else if (location) { // Default logic for Business/anonymous users with location
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
         processedPosts.sort((a, b) => {
+            const isANew = new Date(a.createdat) > twentyFourHoursAgo;
+            const isBNew = new Date(b.createdat) > twentyFourHoursAgo;
+
+            // Prioritize new posts over old posts
+            if (isANew && !isBNew) return -1;
+            if (!isANew && isBNew) return 1;
+
+            // If both are in the same age group (both new or both old), sort by distance
             const distA = calculateDistance(location.latitude, location.longitude, a.latitude, a.longitude);
             const distB = calculateDistance(location.latitude, location.longitude, b.latitude, b.longitude);
-            if (Math.abs(distA - distB) < 0.1) {
+            
+            if (Math.abs(distA - distB) < 0.1) { // If distance is very similar
+                // sort by newest
                 return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
             }
+            // sort by distance
             return distA - distB;
         });
     } else { // Fallback if no location: sort by newest
@@ -409,10 +424,6 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
             }
         } else {
             setHasMorePosts(false);
-            toast({
-                title: "You've reached the end!",
-                description: "No more pulses to show for now.",
-            });
         }
     } catch (error: any) {
       // Don't show a toast for this, just log it.
@@ -644,5 +655,3 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
 };
 
 export default PostFeedClient;
-
-    
