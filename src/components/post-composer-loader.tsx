@@ -7,14 +7,14 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Zap, User as UserIcon } from 'lucide-react';
+import { Zap } from 'lucide-react';
 import type { User } from '@/lib/db-types';
 
 // The skeleton now represents the trigger button, not the full composer.
 export const PostComposerSkeleton = () => (
-  <div className="flex items-center space-x-4 p-3 rounded-xl border bg-card shadow-sm h-[68px]">
-    <Skeleton className="h-10 w-10 rounded-full" />
-    <Skeleton className="h-6 flex-1" />
+  <div className="flex items-center space-x-4 p-4 rounded-xl border bg-card shadow-sm h-[80px]">
+    <Skeleton className="h-12 w-12 rounded-full" />
+    <Skeleton className="h-8 flex-1" />
   </div>
 );
 
@@ -46,17 +46,17 @@ const PostComposerLoader: FC<PostComposerLoaderProps> = ({ sessionUser }) => {
     return (
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
-                <Button variant="outline" className="w-full h-auto justify-start p-3 rounded-xl shadow-lg hover:shadow-primary/20 bg-card/80 backdrop-blur-sm border-border/60 hover:border-primary/50 transition-all duration-300">
-                    <div className="flex items-center space-x-3 w-full">
-                        <Avatar className="h-10 w-10 border-2 border-primary/40">
+                <Button variant="outline" className="w-full h-auto justify-start p-4 rounded-xl shadow-lg hover:shadow-primary/20 bg-card/80 backdrop-blur-sm border-border/60 hover:border-primary/50 transition-all duration-300">
+                    <div className="flex items-center space-x-4 w-full">
+                        <Avatar className="h-12 w-12 border-2 border-primary/40">
                             {sessionUser?.profilepictureurl && (
                                 <AvatarImage src={sessionUser.profilepictureurl} alt={sessionUser.name} />
                             )}
-                            <AvatarFallback>
-                                <UserIcon className="h-5 w-5" />
+                            <AvatarFallback className="text-xl bg-primary/10 text-primary">
+                                {sessionUser ? sessionUser.name.charAt(0).toUpperCase() : <Zap className="h-6 w-6" />}
                             </AvatarFallback>
                         </Avatar>
-                        <span className="text-muted-foreground text-base">Share your pulse...</span>
+                        <span className="text-muted-foreground text-lg">Share your pulse...</span>
                     </div>
                 </Button>
             </DialogTrigger>
