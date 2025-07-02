@@ -272,16 +272,12 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Refresh Error",
-        description: "Could not refresh posts. Please try again later.",
-      });
+      console.error("Error refreshing posts:", error);
       setNewPulsesAvailable(true); // Re-enable button if refresh fails
     } finally {
       setIsLoadingMore(false);
     }
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
     if (allPosts.length > 0) {
@@ -438,7 +434,6 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
         }
     } catch (error: any) {
         console.error("Error loading more posts:", error);
-        toast({ variant: "destructive", title: "Fetch Error", description: error.message || "Could not load more posts." });
     } finally {
         setIsLoadingMore(false);
     }
