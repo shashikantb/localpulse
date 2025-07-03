@@ -126,7 +126,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
     setHasDetectedUrl(youtubeRegex.test(contentValue));
   }, [contentValue, youtubeRegex]);
 
-  const clearAllMedia = () => {
+  const clearAllMedia = React.useCallback(() => {
     selectedFiles.forEach(f => URL.revokeObjectURL(f.url));
     setSelectedFiles([]);
     setMediaType(null);
@@ -134,7 +134,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (imageCaptureInputRef.current) imageCaptureInputRef.current.value = '';
     if (videoCaptureInputRef.current) videoCaptureInputRef.current.value = '';
-  };
+  }, [selectedFiles]);
   
   const removeSelectedFile = (index: number) => {
     const fileToRemove = selectedFiles[index];
@@ -192,7 +192,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
     }
     setSelectedFiles(newPreviews);
 
- }, []);
+ }, [clearAllMedia]);
   
   React.useEffect(() => {
     if (!mentionQuery) {
