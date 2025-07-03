@@ -13,6 +13,8 @@ export async function adminLogin(username: string, password: string): Promise<{ 
     if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
       // In a real app, generate a secure token (e.g., JWT)
       const token = Buffer.from(`${username}:${password}`).toString('base64'); // Simple token for demo
+      const maxAgeInSeconds = 60 * 60 * 24; // 1 day
+      const expires = new Date(Date.now() + maxAgeInSeconds * 1000);
 
       cookies().set({
         name: ADMIN_COOKIE_NAME,
@@ -21,7 +23,7 @@ export async function adminLogin(username: string, password: string): Promise<{ 
         secure: process.env.NODE_ENV === 'production',
         path: '/',
         sameSite: 'strict',
-        maxAge: 60 * 60 * 24, // 1 day
+        expires: expires,
       });
       return { success: true };
     } else {

@@ -88,7 +88,6 @@ export async function login(email: string, password: string): Promise<{ success:
     cookies().set(USER_COOKIE_NAME, sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      maxAge: maxAgeInSeconds,
       expires: expires,
       sameSite: 'lax',
       path: '/',
