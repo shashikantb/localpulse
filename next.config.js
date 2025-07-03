@@ -1,9 +1,8 @@
-
-import type { NextConfig } from 'next';
+/** @type {import('next').NextConfig} */
 
 const gcsBucketName = process.env.GCS_BUCKET_NAME;
 
-const remotePatterns: NextConfig['images']['remotePatterns'] = [
+const remotePatterns = [
   {
     protocol: 'https',
     hostname: 'picsum.photos',
@@ -27,8 +26,7 @@ if (gcsBucketName) {
   });
 }
 
-
-const nextConfig: NextConfig = {
+const nextConfig = {
   productionBrowserSourceMaps: true,
   typescript: {
     ignoreBuildErrors: true,
@@ -42,4 +40,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+module.exports = nextConfig;
