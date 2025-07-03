@@ -126,18 +126,15 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
     setHasDetectedUrl(youtubeRegex.test(contentValue));
   }, [contentValue, youtubeRegex]);
 
-  const clearAllMedia = React.useCallback(() => {
-    // Use functional update to avoid stale state issues with selectedFiles
-    setSelectedFiles(currentFiles => {
-        currentFiles.forEach(f => URL.revokeObjectURL(f.url));
-        return []; // Return empty array to clear the state
-    });
+  const clearAllMedia = useCallback(() => {
+    selectedFiles.forEach(f => URL.revokeObjectURL(f.url));
+    setSelectedFiles([]);
     setMediaType(null);
     setFileError(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (imageCaptureInputRef.current) imageCaptureInputRef.current.value = '';
     if (videoCaptureInputRef.current) videoCaptureInputRef.current.value = '';
-  }, []); // Empty dependency array makes this function stable
+  }, [selectedFiles]);
   
   const removeSelectedFile = (index: number) => {
     const fileToRemove = selectedFiles[index];
@@ -195,7 +192,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
         newPreviews.push({ file: file, url: URL.createObjectURL(file) });
     }
     setSelectedFiles(newPreviews);
- };
+  };
   
   React.useEffect(() => {
     if (!mentionQuery) {
