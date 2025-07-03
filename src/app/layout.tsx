@@ -1,6 +1,6 @@
 
 import type { Metadata } from 'next';
-import { Geist } from 'next/font/google';
+import { GeistSans } from 'geist/font/sans';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 import Footer from '@/components/layout/footer';
@@ -9,11 +9,8 @@ import Header from '@/components/layout/header';
 import StickyNav from '@/components/sticky-nav';
 import { Providers } from './providers';
 
-const geistSans = Geist({
-  variable: '--font-geist-sans',
-  subsets: ['latin'],
-  display: 'optional', // Prioritize performance by not blocking render for the font
-});
+// The geist font package exports an object with the variable name pre-configured.
+// We just need to use it directly.
 
 export const metadata: Metadata = {
   title: 'LocalPulse',
@@ -31,7 +28,7 @@ export default function RootLayout({
         <meta charSet="UTF-8" />
         {/* Next.js will populate this head based on metadata and other conventions */}
       </head>
-      <body className={`${geistSans.variable} antialiased bg-background text-foreground flex flex-col min-h-svh`}>
+      <body className={`${GeistSans.variable} antialiased bg-background text-foreground flex flex-col min-h-svh`}>
         <Providers>
           <Header />
           <StickyNav />
