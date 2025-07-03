@@ -1,4 +1,5 @@
 
+
 import { Pool, type QueryResult } from 'pg';
 import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Status, Conversation, Message, NewMessage, ConversationParticipant } from './db-types';
 import bcrypt from 'bcryptjs';
@@ -1034,6 +1035,7 @@ export async function findOrCreateConversationDb(user1Id: number, user2Id: numbe
     try {
         await client.query('BEGIN');
         
+        // This query finds if a conversation already exists between the two users.
         const findQuery = `
             SELECT cp1.conversation_id
             FROM conversation_participants AS cp1
@@ -1048,10 +1050,12 @@ export async function findOrCreateConversationDb(user1Id: number, user2Id: numbe
             return findResult.rows[0].conversation_id;
         }
 
+        // If no conversation exists, create a new one.
         const createConvQuery = 'INSERT INTO conversations DEFAULT VALUES RETURNING id;';
         const convResult = await client.query(createConvQuery);
         const conversationId = convResult.rows[0].id;
 
+        // Add both users as participants to the new conversation.
         const addParticipantsQuery = `
             INSERT INTO conversation_participants (conversation_id, user_id) VALUES ($1, $2), ($1, $3);
         `;
@@ -1076,16 +1080,19 @@ export async function addMessageDb(newMessage: NewMessage): Promise<Message> {
     try {
         await client.query('BEGIN');
         
+        // Insert the new message
         const messageQuery = `
             INSERT INTO messages (conversation_id, sender_id, content) VALUES ($1, $2, $3) RETURNING *;
         `;
         const messageResult: QueryResult<Message> = await client.query(messageQuery, [newMessage.conversationId, newMessage.senderId, newMessage.content]);
         
+        // Update the conversation's last_message_at timestamp
         const updateConvQuery = `
             UPDATE conversations SET last_message_at = NOW() WHERE id = $1;
         `;
         await client.query(updateConvQuery, [newMessage.conversationId]);
 
+        // Increment the unread_count for the other participant
         const updateUnreadQuery = `
             UPDATE conversation_participants
             SET unread_count = unread_count + 1
@@ -1109,12 +1116,14 @@ export async function getMessagesForConversationDb(conversationId: number, userI
     const dbPool = getDbPool();
     if (!dbPool) return [];
 
+    // First, verify the user is part of this conversation to prevent unauthorized access.
     const checkQuery = 'SELECT 1 FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2';
     const checkResult = await dbPool.query(checkQuery, [conversationId, userId]);
     if (checkResult.rowCount === 0) {
         throw new Error("Access denied. User is not a participant in this conversation.");
     }
     
+    // Fetch all messages for the conversation.
     const messagesQuery = `
         SELECT * FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC;
     `;
@@ -1126,6 +1135,8 @@ export async function getConversationsForUserDb(userId: number): Promise<Convers
   const dbPool = getDbPool();
   if (!dbPool) return [];
 
+  // This query is designed to be robust. It joins the participants table to itself
+  // to find the "other" user in each of the current user's conversations.
   const query = `
     SELECT
         c.id,
