@@ -1135,8 +1135,6 @@ export async function getConversationsForUserDb(userId: number): Promise<Convers
   const dbPool = getDbPool();
   if (!dbPool) return [];
 
-  // This query is designed to be robust. It joins the participants table to itself
-  // to find the "other" user in each of the current user's conversations.
   const query = `
     SELECT
         c.id,
