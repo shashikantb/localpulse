@@ -5,8 +5,9 @@ import { getUserWithFollowInfo, getPostsByUserId, startChatAndRedirect } from '@
 import { getSession } from '@/app/auth/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
-import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, MessageSquare } from 'lucide-react';
+import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, MessageSquare, Settings } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
 import { PostCard } from '@/components/post-card';
 import type { User } from '@/lib/db-types';
 import ProfilePictureUpdater from '@/components/profile-picture-updater';
@@ -16,6 +17,7 @@ import FollowButton from '@/components/follow-button';
 import UsernameEditor from '@/components/username-editor';
 import FollowingListDialog from '@/components/following-list-dialog';
 import LogoutButton from '@/components/logout-button';
+import { ThemeSwitcher } from '@/components/theme-switcher';
 
 
 interface UserProfilePageProps {
@@ -143,6 +145,23 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
             </div>
           </CardHeader>
         </Card>
+
+        {isOwnProfile && (
+          <Card className="shadow-xl border border-border/60 rounded-xl bg-card/80 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Settings className="w-6 h-6 mr-2 text-primary" />
+                Settings
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <Label className="text-base">Theme</Label>
+                <ThemeSwitcher />
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="space-y-6">
             <h2 className="text-2xl font-bold text-primary pl-1 border-b-2 border-primary/30 pb-2">

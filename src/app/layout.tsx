@@ -7,6 +7,7 @@ import Footer from '@/components/layout/footer';
 import { AppInstallPrompt } from '@/components/app-install-prompt';
 import Header from '@/components/layout/header';
 import StickyNav from '@/components/sticky-nav';
+import { Providers } from './providers';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -25,20 +26,22 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full">
+    <html lang="en" className="h-full" suppressHydrationWarning>
       <head>
         <meta charSet="UTF-8" />
         {/* Next.js will populate this head based on metadata and other conventions */}
       </head>
       <body className={`${geistSans.variable} antialiased bg-background text-foreground flex flex-col min-h-svh`}>
-        <Header />
-        <StickyNav />
-        <main className="flex-grow">
-          {children}
-        </main>
-        <Footer />
-        <AppInstallPrompt />
-        <Toaster />
+        <Providers>
+          <Header />
+          <StickyNav />
+          <main className="flex-grow">
+            {children}
+          </main>
+          <Footer />
+          <AppInstallPrompt />
+          <Toaster />
+        </Providers>
       </body>
     </html>
   );
