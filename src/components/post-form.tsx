@@ -2,7 +2,7 @@
 'use client';
 
 import type { FC } from 'react';
-import React, { useState, useCallback, useEffect } from 'react';
+import React, from 'react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -122,11 +122,11 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   const contentValue = form.watch('content');
   const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/;
 
-  useEffect(() => {
+  React.useEffect(() => {
     setHasDetectedUrl(youtubeRegex.test(contentValue));
   }, [contentValue, youtubeRegex]);
 
-  const clearAllMedia = useCallback(() => {
+  const clearAllMedia = () => {
     selectedFiles.forEach(f => URL.revokeObjectURL(f.url));
     setSelectedFiles([]);
     setMediaType(null);
@@ -134,7 +134,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (imageCaptureInputRef.current) imageCaptureInputRef.current.value = '';
     if (videoCaptureInputRef.current) videoCaptureInputRef.current.value = '';
-  }, [selectedFiles]);
+  };
   
   const removeSelectedFile = (index: number) => {
     const fileToRemove = selectedFiles[index];
