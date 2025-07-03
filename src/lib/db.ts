@@ -425,7 +425,10 @@ export async function getMediaPostsDb(options: { limit: number; offset: number; 
       SELECT ${POST_COLUMNS_SANITIZED}
       FROM posts p
       LEFT JOIN users u ON p.authorid = u.id
-      WHERE p.mediaurls IS NOT NULL AND array_length(p.mediaurls, 1) > 0
+      WHERE 
+        p.mediaurls IS NOT NULL 
+        AND array_length(p.mediaurls, 1) > 0 
+        AND p.mediaurls[1] IS NOT NULL
       ORDER BY p.createdat DESC
       LIMIT $1 OFFSET $2
     `;
@@ -1211,4 +1214,5 @@ export async function getTotalUnreadMessagesDb(userId: number): Promise<number> 
 }
 
     
+
 
