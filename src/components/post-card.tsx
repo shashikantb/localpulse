@@ -92,6 +92,8 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
 
   // More robust check for YouTube URLs, not dependent on mediatype.
   const isYouTubeVideo = post.mediaurls?.[0]?.includes('youtube.com/embed');
+  const hasVisibleMedia = post.mediaurls && post.mediaurls.length > 0 && (isYouTubeVideo || ['image', 'video', 'gallery'].includes(post.mediatype || ''));
+
 
   useEffect(() => {
     setMediaError(false);
@@ -361,7 +363,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
         </div>
       </CardHeader>
 
-      {post.mediaurls && post.mediaurls.length > 0 && (
+      {hasVisibleMedia && (
         <div className="px-5 pb-0 pt-2">
           <div className="relative w-full aspect-[16/10] overflow-hidden rounded-lg border-2 border-border/50 shadow-inner bg-muted/50 group">
             {isYouTubeVideo ? (
@@ -422,7 +424,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
         </div>
       )}
 
-      <CardContent className={`px-5 ${post.mediaurls && post.mediaurls.length > 0 ? 'pt-4' : 'pt-2'} pb-3`}>
+      <CardContent className={`px-5 ${hasVisibleMedia ? 'pt-4' : 'pt-2'} pb-3`}>
         {renderContentWithMentionsAndLinks()}
       </CardContent>
 
