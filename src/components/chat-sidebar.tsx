@@ -12,6 +12,8 @@ import { cn } from '@/lib/utils';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { Skeleton } from './ui/skeleton';
 
+const POLLING_INTERVAL = 5000; // 5 seconds
+
 const ConversationItem = ({ conv }: { conv: Conversation }) => {
     const pathname = usePathname();
     const isActive = pathname === `/chat/${conv.id}`;
@@ -49,14 +51,25 @@ const ConversationItem = ({ conv }: { conv: Conversation }) => {
 const ChatSidebar = () => {
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const pathname = usePathname();
 
     useEffect(() => {
-        setIsLoading(true);
-        getConversations()
-            .then(setConversations)
-            .finally(() => setIsLoading(false));
-    }, [pathname]); // Refetch when navigating between chats
+        const fetchConversations = () => {
+            getConversations().then(setConversations);
+        };
+        
+        // Initial fetch
+        if (isLoading) {
+            getConversations()
+                .then(setConversations)
+                .finally(() => setIsLoading(false));
+        }
+            
+        // Set up polling
+        const intervalId = setInterval(fetchConversations, POLLING_INTERVAL);
+
+        // Cleanup
+        return () => clearInterval(intervalId);
+    }, [isLoading]); // Rerun if loading state changes (though it will only run once in practice)
 
     return (
         <div className="flex flex-col h-full bg-card">

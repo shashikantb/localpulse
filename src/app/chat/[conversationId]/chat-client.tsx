@@ -11,6 +11,7 @@ import { Send, User as UserIcon, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
+import { useToast } from '@/hooks/use-toast';
 
 interface ChatClientProps {
   initialMessages: Message[];
@@ -27,6 +28,7 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const intervalRef = useRef<NodeJS.Timeout>();
+  const { toast } = useToast();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -36,6 +38,11 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
   
   useEffect(() => {
     const fetchMessages = async () => {
+        // If a message is currently being sent, skip this poll cycle
+        // to avoid overwriting the optimistic UI update before we get a response.
+        if (isSending) {
+            return;
+        }
         try {
             const newMessages = await getMessages(conversationId);
             setMessages(newMessages);
@@ -51,7 +58,7 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
             clearInterval(intervalRef.current);
         }
     };
-  }, [conversationId]);
+  }, [conversationId, isSending]);
   
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -75,7 +82,13 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
     
     if (result.error || !result.message) {
       console.error('Failed to send message:', result.error);
-      setMessages(prev => prev.filter(m => m.id !== tempId)); // Revert optimistic update
+      // Revert optimistic update on failure
+      setMessages(prev => prev.filter(m => m.id !== tempId));
+      toast({
+        variant: 'destructive',
+        title: 'Message Not Sent',
+        description: result.error || 'Could not send the message. Please try again.',
+      });
     } else {
       // Replace optimistic message with the real one from the server
       setMessages(prev => prev.map(m => m.id === tempId ? result.message! : m));
