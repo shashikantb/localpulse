@@ -1109,39 +1109,23 @@ export async function getConversationsForUserDb(userId: number): Promise<Convers
   const dbPool = getDbPool();
   if (!dbPool) return [];
 
+  // This new query is more robust and avoids complex joins that were causing issues.
   const query = `
-    WITH last_messages AS (
-      SELECT
-        conversation_id,
-        content,
-        sender_id,
-        created_at,
-        ROW_NUMBER() OVER(PARTITION BY conversation_id ORDER BY created_at DESC) as rn
-      FROM messages
-    )
     SELECT
-      c.id,
-      c.created_at,
-      c.last_message_at,
-      p.user_id AS participant_id,
-      u.name AS participant_name,
-      u.profilepictureurl AS participant_profile_picture_url,
-      lm.content AS last_message_content,
-      lm.sender_id AS last_message_sender_id
+        c.id,
+        c.created_at,
+        c.last_message_at,
+        (SELECT user_id FROM conversation_participants WHERE conversation_id = c.id AND user_id != $1 LIMIT 1) AS participant_id,
+        (SELECT name FROM users WHERE id = (SELECT user_id FROM conversation_participants WHERE conversation_id = c.id AND user_id != $1 LIMIT 1)) AS participant_name,
+        (SELECT profilepictureurl FROM users WHERE id = (SELECT user_id FROM conversation_participants WHERE conversation_id = c.id AND user_id != $1 LIMIT 1)) AS participant_profile_picture_url,
+        (SELECT content FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_message_content,
+        (SELECT sender_id FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_message_sender_id
     FROM
-      conversation_participants AS cp
-    JOIN
-      conversations AS c ON cp.conversation_id = c.id
-    JOIN
-      conversation_participants AS p ON c.id = p.conversation_id AND p.user_id != cp.user_id
-    JOIN
-      users AS u ON p.user_id = u.id
-    LEFT JOIN
-      last_messages lm ON c.id = lm.conversation_id AND lm.rn = 1
+        conversations c
     WHERE
-      cp.user_id = $1
+        c.id IN (SELECT conversation_id FROM conversation_participants WHERE user_id = $1)
     ORDER BY
-      c.last_message_at DESC;
+        c.last_message_at DESC;
   `;
   const result: QueryResult<Conversation> = await dbPool.query(query, [userId]);
   return result.rows;
@@ -1160,5 +1144,3 @@ export async function getConversationPartnerDb(conversationId: number, currentUs
     const result = await dbPool.query(query, [conversationId, currentUserId]);
     return result.rows[0] || null;
 }
-
-    
