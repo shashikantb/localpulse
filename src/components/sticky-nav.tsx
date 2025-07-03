@@ -89,7 +89,7 @@ const StickyNav: FC = () => {
                     >
                     <item.icon className="h-5 w-5" />
                     <span>{item.name}</span>
-                    {item.badgeCount && item.badgeCount > 0 && (
+                    {item.badgeCount > 0 && (
                         <span className="absolute top-1 right-4 sm:right-auto sm:left-1/2 sm:ml-4 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-accent-foreground text-[10px] font-bold ring-2 ring-background">
                             {item.badgeCount > 9 ? '9+' : item.badgeCount}
                         </span>
