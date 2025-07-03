@@ -1024,23 +1024,20 @@ export async function findOrCreateConversationDb(user1Id: number, user2Id: numbe
     try {
         await client.query('BEGIN');
         
-        // More reliable way to find an existing conversation
         const findQuery = `
-            SELECT t1.conversation_id
-            FROM conversation_participants AS t1
-            INNER JOIN conversation_participants AS t2
-                ON t1.conversation_id = t2.conversation_id
-                AND t1.user_id = $1 AND t2.user_id = $2
+            SELECT conversation_id
+            FROM conversation_participants cp1
+            JOIN conversation_participants cp2 ON cp1.conversation_id = cp2.conversation_id
+            WHERE cp1.user_id = $1 AND cp2.user_id = $2
             LIMIT 1;
         `;
         const findResult = await client.query(findQuery, [user1Id, user2Id]);
 
         if (findResult.rows.length > 0) {
-            await client.query('COMMIT'); // Commit to release lock, even on find
+            await client.query('COMMIT');
             return findResult.rows[0].conversation_id;
         }
 
-        // If no conversation is found, proceed to create one
         const createConvQuery = 'INSERT INTO conversations DEFAULT VALUES RETURNING id;';
         const convResult = await client.query(createConvQuery);
         const conversationId = convResult.rows[0].id;
@@ -1095,7 +1092,6 @@ export async function getMessagesForConversationDb(conversationId: number, userI
     const dbPool = getDbPool();
     if (!dbPool) return [];
 
-    // First, verify the user is part of the conversation
     const checkQuery = 'SELECT 1 FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2';
     const checkResult = await dbPool.query(checkQuery, [conversationId, userId]);
     if (checkResult.rowCount === 0) {
@@ -1113,7 +1109,17 @@ export async function getConversationsForUserDb(userId: number): Promise<Convers
     const dbPool = getDbPool();
     if (!dbPool) return [];
 
+    // This robust query correctly fetches all conversations for a user.
     const query = `
+      WITH LastMessages AS (
+        SELECT
+          conversation_id,
+          content,
+          sender_id,
+          created_at,
+          ROW_NUMBER() OVER(PARTITION BY conversation_id ORDER BY created_at DESC) as rn
+        FROM messages
+      )
       SELECT
           c.id,
           c.created_at,
@@ -1121,8 +1127,8 @@ export async function getConversationsForUserDb(userId: number): Promise<Convers
           other_user.id AS participant_id,
           other_user.name AS participant_name,
           other_user.profilepictureurl AS participant_profile_picture_url,
-          last_msg.content AS last_message_content,
-          last_msg.sender_id AS last_message_sender_id
+          lm.content AS last_message_content,
+          lm.sender_id AS last_message_sender_id
       FROM
           conversation_participants cp
       JOIN
@@ -1132,14 +1138,7 @@ export async function getConversationsForUserDb(userId: number): Promise<Convers
       JOIN
           users other_user ON other_cp.user_id = other_user.id
       LEFT JOIN
-          (
-              SELECT
-                  conversation_id,
-                  content,
-                  sender_id,
-                  ROW_NUMBER() OVER(PARTITION BY conversation_id ORDER BY created_at DESC) as rn
-              FROM messages
-          ) last_msg ON c.id = last_msg.conversation_id AND last_msg.rn = 1
+          LastMessages lm ON c.id = lm.conversation_id AND lm.rn = 1
       WHERE
           cp.user_id = $1
       ORDER BY
