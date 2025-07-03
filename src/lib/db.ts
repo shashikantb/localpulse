@@ -1023,17 +1023,20 @@ export async function findOrCreateConversationDb(user1Id: number, user2Id: numbe
     const client = await dbPool.connect();
     try {
         await client.query('BEGIN');
-        // Find if a conversation already exists between these two users
+        
+        // Find if a conversation already exists between these two users (more robust query)
         const findQuery = `
             SELECT conversation_id
-            FROM conversation_participants cp1
-            JOIN conversation_participants cp2 ON cp1.conversation_id = cp2.conversation_id
-            WHERE cp1.user_id = $1 AND cp2.user_id = $2;
+            FROM conversation_participants
+            WHERE user_id IN ($1, $2)
+            GROUP BY conversation_id
+            HAVING COUNT(DISTINCT user_id) = 2
+            LIMIT 1;
         `;
         const findResult = await client.query(findQuery, [user1Id, user2Id]);
 
         if (findResult.rows.length > 0) {
-            await client.query('COMMIT');
+            await client.query('COMMIT'); // Commit the BEGIN transaction even if we didn't write anything
             return findResult.rows[0].conversation_id;
         }
 
