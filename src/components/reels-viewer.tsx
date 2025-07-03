@@ -149,10 +149,22 @@ const ReelsViewer: FC<{ sessionUser: User | null }> = ({ sessionUser }) => {
   const goToNextReel = useCallback(() => {
     setCurrentIndex(prevIndex => (prevIndex < reelPosts.length - 1 ? prevIndex + 1 : prevIndex));
   }, [reelPosts.length]);
+  
+  const handleRefresh = () => {
+    if (isLoading) return;
+    toast({ title: 'Refreshing Reels...', description: 'Fetching the latest content.' });
+    fetchAndCacheReels(1, false);
+  };
 
   const swipeHandlers = useSwipeable({
     onSwipedUp: () => { if (reelPosts.length > 1) goToNextReel(); },
-    onSwipedDown: () => { if (reelPosts.length > 1) goToPreviousReel(); },
+    onSwipedDown: () => {
+      if (currentIndex === 0) {
+        handleRefresh();
+      } else {
+        goToPreviousReel();
+      }
+    },
     preventScrollOnSwipe: true,
     trackMouse: true
   });
@@ -160,11 +172,17 @@ const ReelsViewer: FC<{ sessionUser: User | null }> = ({ sessionUser }) => {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'ArrowDown' || event.key === 'ArrowRight') goToNextReel();
-      else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') goToPreviousReel();
+      else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
+        if (currentIndex === 0) {
+          handleRefresh();
+        } else {
+          goToPreviousReel();
+        }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [goToNextReel, goToPreviousReel]);
+  }, [goToNextReel, goToPreviousReel, currentIndex]);
   
   if (isLoading && reelPosts.length === 0) {
     return <ReelsPageSkeleton />;
@@ -188,7 +206,7 @@ const ReelsViewer: FC<{ sessionUser: User | null }> = ({ sessionUser }) => {
     <div {...swipeHandlers} className="h-full w-full overflow-hidden flex flex-col bg-black touch-none">
       <div className="flex-grow relative w-full h-full overflow-hidden">
         {reelPosts.map((post, index) => {
-            if (Math.abs(index - currentIndex) > 1) return null;
+            if (Math.abs(index - currentIndex) > 2) return null; // Render current, next, and previous
 
             const getTransform = () => {
                 if (index < currentIndex) return 'translateY(-100%)';

@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useSwipeable } from 'react-swipeable';
 import {
   Sheet,
   SheetContent,
@@ -95,6 +96,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
   const [sessionUser, setSessionUser] = useState<User | null>(null);
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [isLoading, setIsLoading] = useState(allPosts.length === 0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [initialFetchComplete, setInitialFetchComplete] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [latestPostIdClientKnows, setLatestPostIdClientKnows] = useState<number>(0);
@@ -244,7 +246,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
 
 
   const refreshPosts = useCallback(async () => {
-    setIsLoadingMore(true);
+    setIsRefreshing(true);
     setNewPulsesAvailable(false);
     setNewPulsesCount(0);
     try {
@@ -259,7 +261,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
       console.error("Error refreshing posts:", error);
       setNewPulsesAvailable(true); // Re-enable button if refresh fails
     } finally {
-      setIsLoadingMore(false);
+      setIsRefreshing(false);
     }
   }, []);
 
@@ -450,6 +452,22 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
     toast({ title: "Refreshing Pulses...", description: "Fetching the latest vibes for you." });
     await refreshPosts();
   };
+  
+  const handleRefresh = async () => {
+    if (isLoading || isLoadingMore || isRefreshing) return;
+    toast({ title: "Refreshing Feed...", description: "Fetching the latest pulses for you." });
+    await refreshPosts();
+  };
+
+  const swipeHandlers = useSwipeable({
+    onSwipedDown: () => {
+      // Only refresh if scrolled to the very top of the page
+      if (window.scrollY === 0) {
+        handleRefresh();
+      }
+    },
+    trackMouse: true,
+  });
 
   const handleDistanceChange = (value: number[]) => {
     setDistanceFilterKm(value[0]);
@@ -590,7 +608,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
   }
 
   return (
-    <>
+    <div {...swipeHandlers}>
       <AlertDialog open={showTroubleshootingDialog} onOpenChange={setShowTroubleshootingDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -650,6 +668,12 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
               </SheetContent>
           </Sheet>
       </div>
+      
+      {isRefreshing && (
+        <div className="flex justify-center items-center py-4">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        </div>
+      )}
 
       <div className="space-y-6">
         {filteredAndSortedPosts.length > 0 ? (
@@ -679,7 +703,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
           <NoPostsContent />
         )}
       </div>
-    </>
+    </div>
   );
 };
 
