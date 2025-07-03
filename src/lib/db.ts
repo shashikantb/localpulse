@@ -1135,39 +1135,38 @@ export async function getConversationsForUserDb(userId: number): Promise<Convers
   const dbPool = getDbPool();
   if (!dbPool) return [];
 
+  // This query is designed to be more direct and less prone to complex join errors.
   const query = `
     SELECT
         c.id,
         c.created_at,
         c.last_message_at,
-        other_user.id AS participant_id,
-        other_user.name AS participant_name,
-        other_user.profilepictureurl AS participant_profile_picture_url,
-        m.content AS last_message_content,
-        m.sender_id AS last_message_sender_id,
-        my_participant_row.unread_count
+        p_other.user_id AS participant_id,
+        u_other.name AS participant_name,
+        u_other.profilepictureurl AS participant_profile_picture_url,
+        lm.content AS last_message_content,
+        lm.sender_id AS last_message_sender_id,
+        p_me.unread_count
     FROM
-        conversations c
+        conversation_participants AS p_me
     JOIN
-        conversation_participants my_participant_row ON c.id = my_participant_row.conversation_id
+        conversation_participants AS p_other ON p_me.conversation_id = p_other.conversation_id AND p_me.user_id != p_other.user_id
     JOIN
-        conversation_participants other_participant_row ON c.id = other_participant_row.conversation_id
+        conversations AS c ON p_me.conversation_id = c.id
     JOIN
-        users other_user ON other_participant_row.user_id = other_user.id
-    LEFT JOIN LATERAL
-        (
-            SELECT content, sender_id
-            FROM messages
-            WHERE conversation_id = c.id
-            ORDER BY created_at DESC
-            LIMIT 1
-        ) m ON TRUE
+        users AS u_other ON p_other.user_id = u_other.id
+    LEFT JOIN LATERAL (
+        SELECT content, sender_id FROM messages
+        WHERE conversation_id = c.id
+        ORDER BY created_at DESC
+        LIMIT 1
+    ) lm ON true
     WHERE
-        my_participant_row.user_id = $1
-        AND other_participant_row.user_id != $1
+        p_me.user_id = $1
     ORDER BY
         c.last_message_at DESC;
   `;
+  
   const result: QueryResult<Conversation> = await dbPool.query(query, [userId]);
   return result.rows;
 }
@@ -1211,3 +1210,5 @@ export async function getTotalUnreadMessagesDb(userId: number): Promise<number> 
     const result = await dbPool.query(query, [userId]);
     return parseInt(result.rows[0]?.total_unread, 10) || 0;
 }
+
+    
