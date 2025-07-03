@@ -148,3 +148,37 @@ export type NewStatus = {
   mediaUrl: string;
   mediaType: 'image' | 'video';
 };
+
+// --- Chat Types ---
+
+export interface Conversation {
+  id: number;
+  created_at: string;
+  last_message_at: string;
+  // Details of the other participant
+  participant_id: number;
+  participant_name: string;
+  participant_profile_picture_url?: string | null;
+  last_message_content?: string | null;
+  last_message_sender_id?: number | null;
+}
+
+export interface Message {
+  id: number;
+  conversation_id: number;
+  sender_id: number;
+  content: string;
+  created_at: string;
+}
+
+export interface NewMessage {
+    conversationId: number;
+    senderId: number;
+    content: string;
+}
+
+export interface ConversationParticipant {
+    id: number;
+    name: string;
+    profilepictureurl?: string | null;
+}

@@ -1,11 +1,11 @@
 
 import type { FC } from 'react';
 import { notFound } from 'next/navigation';
-import { getUserWithFollowInfo, getPostsByUserId } from '@/app/actions';
+import { getUserWithFollowInfo, getPostsByUserId, startChatAndRedirect } from '@/app/actions';
 import { getSession } from '@/app/auth/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
-import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit } from 'lucide-react';
+import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, MessageSquare } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { PostCard } from '@/components/post-card';
 import type { User } from '@/lib/db-types';
@@ -100,7 +100,17 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
                    {isOwnProfile ? (
                       <LogoutButton />
                    ) : (
-                      <FollowButton targetUserId={profileUser.id} initialIsFollowing={isFollowing} />
+                      <div className="flex items-center gap-2">
+                        <FollowButton targetUserId={profileUser.id} initialIsFollowing={isFollowing} />
+                        {sessionUser && (
+                            <form action={startChatAndRedirect}>
+                                <input type="hidden" name="otherUserId" value={profileUser.id} />
+                                <Button type="submit" variant="outline" size="sm">
+                                    <MessageSquare className="mr-2 h-4 w-4" /> Message
+                                </Button>
+                            </form>
+                        )}
+                      </div>
                    )}
               </div>
 

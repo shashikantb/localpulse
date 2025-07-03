@@ -1,6 +1,6 @@
 
 import { Pool, type QueryResult } from 'pg';
-import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Status } from './db-types';
+import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Status, Conversation, Message, NewMessage, ConversationParticipant } from './db-types';
 import bcrypt from 'bcryptjs';
 
 // Re-export db-types
@@ -46,7 +46,7 @@ function getDbPool(): Pool | null {
 
 // Self-healing function to fix out-of-sync ID sequences
 async function synchronizeAllSequences(client: any): Promise<void> {
-  const tablesWithSerialId = ['users', 'posts', 'post_likes', 'comments', 'device_tokens', 'statuses'];
+  const tablesWithSerialId = ['users', 'posts', 'post_likes', 'comments', 'device_tokens', 'statuses', 'conversations', 'messages'];
   console.log('Synchronizing database sequences to prevent duplicate key errors...');
 
   for (const table of tablesWithSerialId) {
@@ -298,6 +298,32 @@ async function initializeDbSchema(): Promise<void> {
         await client.query('ALTER TABLE device_tokens ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE CASCADE;');
     }
 
+    // --- Chat Tables ---
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS conversations (
+        id SERIAL PRIMARY KEY,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        last_message_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS conversation_participants (
+        conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        PRIMARY KEY (conversation_id, user_id)
+      );
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS messages (
+        id SERIAL PRIMARY KEY,
+        conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        content TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
 
     // --- Indexes for performance ---
     await client.query('CREATE INDEX IF NOT EXISTS idx_posts_createdat ON posts (createdat DESC)');
@@ -316,6 +342,10 @@ async function initializeDbSchema(): Promise<void> {
     await client.query('CREATE INDEX IF NOT EXISTS idx_device_tokens_user_id ON device_tokens (user_id);');
     await client.query('CREATE INDEX IF NOT EXISTS idx_statuses_user_id_created_at ON statuses (user_id, created_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_statuses_created_at ON statuses (created_at DESC)');
+    // --- Chat Indexes ---
+    await client.query('CREATE INDEX IF NOT EXISTS idx_conversations_last_message_at ON conversations(last_message_at DESC)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_conversation_participants_user_id ON conversation_participants(user_id)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_messages_conversation_id_created_at ON messages(conversation_id, created_at DESC)');
 
 
     await client.query('COMMIT');
@@ -981,4 +1011,146 @@ export async function getStatusesForFeedDb(userId: number): Promise<UserWithStat
   });
   
   return finalResult;
+}
+
+
+// --- Chat Functions ---
+
+export async function findOrCreateConversationDb(user1Id: number, user2Id: number): Promise<number> {
+    const dbPool = getDbPool();
+    if (!dbPool) throw new Error("Database not configured.");
+
+    const client = await dbPool.connect();
+    try {
+        await client.query('BEGIN');
+        // Find if a conversation already exists between these two users
+        const findQuery = `
+            SELECT conversation_id
+            FROM conversation_participants cp1
+            JOIN conversation_participants cp2 ON cp1.conversation_id = cp2.conversation_id
+            WHERE cp1.user_id = $1 AND cp2.user_id = $2;
+        `;
+        const findResult = await client.query(findQuery, [user1Id, user2Id]);
+
+        if (findResult.rows.length > 0) {
+            await client.query('COMMIT');
+            return findResult.rows[0].conversation_id;
+        }
+
+        // If not, create a new conversation
+        const createConvQuery = 'INSERT INTO conversations DEFAULT VALUES RETURNING id;';
+        const convResult = await client.query(createConvQuery);
+        const conversationId = convResult.rows[0].id;
+
+        // Add both participants to the conversation
+        const addParticipantsQuery = `
+            INSERT INTO conversation_participants (conversation_id, user_id) VALUES ($1, $2), ($1, $3);
+        `;
+        await client.query(addParticipantsQuery, [conversationId, user1Id, user2Id]);
+
+        await client.query('COMMIT');
+        return conversationId;
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error("Error in findOrCreateConversationDb:", error);
+        throw error;
+    } finally {
+        client.release();
+    }
+}
+
+export async function addMessageDb(newMessage: NewMessage): Promise<Message> {
+    const dbPool = getDbPool();
+    if (!dbPool) throw new Error("Database not configured.");
+    
+    const client = await dbPool.connect();
+    try {
+        await client.query('BEGIN');
+        
+        const messageQuery = `
+            INSERT INTO messages (conversation_id, sender_id, content) VALUES ($1, $2, $3) RETURNING *;
+        `;
+        const messageResult: QueryResult<Message> = await client.query(messageQuery, [newMessage.conversationId, newMessage.senderId, newMessage.content]);
+        
+        const updateConvQuery = `
+            UPDATE conversations SET last_message_at = NOW() WHERE id = $1;
+        `;
+        await client.query(updateConvQuery, [newMessage.conversationId]);
+
+        await client.query('COMMIT');
+        return messageResult.rows[0];
+
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error("Error in addMessageDb:", error);
+        throw error;
+    } finally {
+        client.release();
+    }
+}
+
+export async function getMessagesForConversationDb(conversationId: number, userId: number): Promise<Message[]> {
+    const dbPool = getDbPool();
+    if (!dbPool) return [];
+
+    // First, verify the user is part of the conversation
+    const checkQuery = 'SELECT 1 FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2';
+    const checkResult = await dbPool.query(checkQuery, [conversationId, userId]);
+    if (checkResult.rowCount === 0) {
+        throw new Error("Access denied. User is not a participant in this conversation.");
+    }
+    
+    const messagesQuery = `
+        SELECT * FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC;
+    `;
+    const messagesResult: QueryResult<Message> = await dbPool.query(messagesQuery, [conversationId]);
+    return messagesResult.rows;
+}
+
+export async function getConversationsForUserDb(userId: number): Promise<Conversation[]> {
+    const dbPool = getDbPool();
+    if (!dbPool) return [];
+
+    const query = `
+      WITH LastMessages AS (
+        SELECT
+            conversation_id,
+            content,
+            sender_id,
+            ROW_NUMBER() OVER(PARTITION BY conversation_id ORDER BY created_at DESC) as rn
+        FROM messages
+      )
+      SELECT
+          c.id,
+          c.created_at,
+          c.last_message_at,
+          other_participant.user_id as participant_id,
+          u.name as participant_name,
+          u.profilepictureurl as participant_profile_picture_url,
+          lm.content as last_message_content,
+          lm.sender_id as last_message_sender_id
+      FROM conversations c
+      JOIN conversation_participants cp ON c.id = cp.conversation_id
+      JOIN conversation_participants other_participant ON c.id = other_participant.conversation_id AND other_participant.user_id != $1
+      JOIN users u ON other_participant.user_id = u.id
+      LEFT JOIN LastMessages lm ON c.id = lm.conversation_id AND lm.rn = 1
+      WHERE cp.user_id = $1
+      ORDER BY c.last_message_at DESC;
+    `;
+
+    const result: QueryResult<Conversation> = await dbPool.query(query, [userId]);
+    return result.rows;
+}
+
+export async function getConversationPartnerDb(conversationId: number, currentUserId: number): Promise<ConversationParticipant | null> {
+    const dbPool = getDbPool();
+    if (!dbPool) return null;
+
+    const query = `
+        SELECT u.id, u.name, u.profilepictureurl FROM users u
+        JOIN conversation_participants cp ON u.id = cp.user_id
+        WHERE cp.conversation_id = $1 AND cp.user_id != $2;
+    `;
+    const result = await dbPool.query(query, [conversationId, currentUserId]);
+    return result.rows[0] || null;
 }

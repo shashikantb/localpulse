@@ -2,11 +2,12 @@
 'use server';
 
 import * as db from '@/lib/db';
-import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus } from '@/lib/db-types';
+import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus, Conversation, Message, ConversationParticipant } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 import { admin as firebaseAdmin } from '@/lib/firebase-admin';
 import { getSession } from '@/app/auth/actions';
 import { getGcsClient, getGcsBucketName } from '@/lib/gcs';
+import { redirect } from 'next/navigation';
 
 
 async function geocodeCoordinates(latitude: number, longitude: number): Promise<string | null> {
@@ -396,6 +397,7 @@ export async function addComment(commentData: NewComment): Promise<{ comment?: C
 
     revalidatePath('/');
     revalidatePath(`/posts/${commentData.postId}`);
+    revalidatePath(`/chat`);
     return { comment: addedComment };
   } catch (error: any) {
     // Fail silently on the client
@@ -647,4 +649,74 @@ export async function getStatusesForFeed(): Promise<UserWithStatuses[]> {
     console.error('Error fetching statuses for feed:', error);
     return [];
   }
+}
+
+// --- Chat Actions ---
+
+export async function startChatAndRedirect(formData: FormData): Promise<void> {
+  const { user } = await getSession();
+  if (!user) redirect('/login');
+
+  const otherUserIdRaw = formData.get('otherUserId');
+  if (!otherUserIdRaw) return;
+  const otherUserId = parseInt(otherUserIdRaw as string, 10);
+  if (isNaN(otherUserId) || otherUserId === user.id) return;
+  
+  try {
+    const conversationId = await db.findOrCreateConversationDb(user.id, otherUserId);
+    revalidatePath('/chat');
+    redirect(`/chat/${conversationId}`);
+  } catch(error) {
+    console.error('Failed to start chat:', error);
+    // You might want to redirect to an error page or show a toast
+  }
+}
+
+export async function getConversations(): Promise<Conversation[]> {
+  const { user } = await getSession();
+  if (!user) return [];
+  try {
+    return await db.getConversationsForUserDb(user.id);
+  } catch (error) {
+    console.error("Server action error fetching conversations:", error);
+    return [];
+  }
+}
+
+export async function getMessages(conversationId: number): Promise<Message[]> {
+  const { user } = await getSession();
+  if (!user) return [];
+  try {
+    return await db.getMessagesForConversationDb(conversationId, user.id);
+  } catch (error) {
+    console.error(`Server action error fetching messages for conversation ${conversationId}:`, error);
+    return [];
+  }
+}
+
+export async function sendMessage(conversationId: number, content: string): Promise<{ message?: Message; error?: string }> {
+  const { user } = await getSession();
+  if (!user) return { error: 'You must be logged in to send messages.' };
+
+  try {
+    const message = await db.addMessageDb({
+      conversationId,
+      senderId: user.id,
+      content,
+    });
+    revalidatePath(`/chat/${conversationId}`);
+    revalidatePath('/chat'); // To update the sidebar
+    return { message };
+  } catch (error: any) {
+    return { error: 'Failed to send message due to a server error.' };
+  }
+}
+
+export async function getConversationPartner(conversationId: number, currentUserId: number): Promise<ConversationParticipant | null> {
+    try {
+        return await db.getConversationPartnerDb(conversationId, currentUserId);
+    } catch (error) {
+        console.error(`Server action error fetching partner for conversation ${conversationId}:`, error);
+        return null;
+    }
 }
