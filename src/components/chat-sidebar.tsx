@@ -24,7 +24,7 @@ const ConversationItem = ({ conv }: { conv: Conversation }) => {
                 isActive ? "bg-primary/10" : ""
             )}
         >
-            <Avatar className="h-12 w-12 border-2",
+            <Avatar className="h-12 w-12 border-2"
              style={{ borderColor: isActive ? 'hsl(var(--primary))' : 'transparent' }}
             >
                 <AvatarImage src={conv.participant_profile_picture_url || undefined} alt={conv.participant_name} />
