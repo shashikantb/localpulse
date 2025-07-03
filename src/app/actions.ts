@@ -8,7 +8,6 @@ import { admin as firebaseAdmin } from '@/lib/firebase-admin';
 import { getSession } from '@/app/auth/actions';
 import { getGcsClient, getGcsBucketName } from '@/lib/gcs';
 import { redirect } from 'next/navigation';
-import { deletePostDb } from '@/lib/db';
 
 
 async function geocodeCoordinates(latitude: number, longitude: number): Promise<string | null> {
@@ -301,7 +300,7 @@ export async function deleteUserPost(postId: number): Promise<{ success: boolean
     return { success: false, error: 'You must be logged in to delete a post.' };
   }
 
-  const postToDelete = await getPostByIdDb(postId);
+  const postToDelete = await db.getPostByIdDb(postId);
   if (!postToDelete) {
     return { success: false, error: 'Post not found.' };
   }
@@ -311,7 +310,7 @@ export async function deleteUserPost(postId: number): Promise<{ success: boolean
   }
 
   try {
-    await deletePostDb(postId);
+    await db.deletePostDb(postId);
     revalidatePath('/');
     revalidatePath(`/users/${user.id}`);
     return { success: true };
