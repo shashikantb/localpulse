@@ -6,7 +6,7 @@ import type { FC } from 'react';
 import { User, Plus } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import StatusUploader from './status-uploader';
 import StatusViewer from './status-viewer';
 import type { UserWithStatuses, User as SessionUserType } from '@/lib/db-types';
