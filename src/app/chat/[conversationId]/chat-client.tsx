@@ -27,8 +27,15 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
   const [newMessage, setNewMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const intervalRef = useRef<NodeJS.Timeout>();
   const { toast } = useToast();
+
+  // Use a ref to track the sending state inside the polling interval
+  // to avoid re-creating the interval on every state change.
+  const isSendingRef = useRef(isSending);
+  isSendingRef.current = isSending;
+  
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -37,28 +44,33 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
   useEffect(scrollToBottom, [messages]);
   
   useEffect(() => {
+    let isMounted = true;
     const fetchMessages = async () => {
-        // If a message is currently being sent, skip this poll cycle
-        // to avoid overwriting the optimistic UI update before we get a response.
-        if (isSending) {
+        // If a message is currently being sent, skip this poll cycle.
+        // This prevents a race condition where the poll fetches data
+        // before our optimistic update's corresponding message has been
+        // saved to the database.
+        if (isSendingRef.current) {
             return;
         }
         try {
             const newMessages = await getMessages(conversationId);
-            setMessages(newMessages);
+            // Only update state if the component is still mounted and data has changed.
+            if (isMounted && JSON.stringify(messagesRef.current) !== JSON.stringify(newMessages)) {
+                setMessages(newMessages);
+            }
         } catch (error) {
             console.error("Failed to fetch new messages:", error);
         }
     };
     
-    intervalRef.current = setInterval(fetchMessages, POLLING_INTERVAL);
+    const intervalId = setInterval(fetchMessages, POLLING_INTERVAL);
 
     return () => {
-        if(intervalRef.current) {
-            clearInterval(intervalRef.current);
-        }
+        isMounted = false;
+        clearInterval(intervalId);
     };
-  }, [conversationId, isSending]);
+  }, [conversationId]);
   
 
   const handleSendMessage = async (e: React.FormEvent) => {

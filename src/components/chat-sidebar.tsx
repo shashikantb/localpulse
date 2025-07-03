@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { getConversations } from '@/app/actions';
@@ -51,25 +51,40 @@ const ConversationItem = ({ conv }: { conv: Conversation }) => {
 const ChatSidebar = () => {
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const conversationsRef = useRef(conversations);
+    conversationsRef.current = conversations;
 
     useEffect(() => {
-        const fetchConversations = () => {
-            getConversations().then(setConversations);
-        };
+        let isMounted = true;
         
+        const fetchAndSetConversations = async () => {
+            try {
+                const convos = await getConversations();
+                if (isMounted) {
+                    // A simple check to avoid needless re-renders if data is the same
+                    if (JSON.stringify(conversationsRef.current) !== JSON.stringify(convos)) {
+                        setConversations(convos);
+                    }
+                }
+            } catch (error) {
+                console.error("Failed to fetch conversations:", error);
+            } finally {
+                if (isMounted) setIsLoading(false);
+            }
+        };
+
         // Initial fetch
-        if (isLoading) {
-            getConversations()
-                .then(setConversations)
-                .finally(() => setIsLoading(false));
-        }
-            
+        fetchAndSetConversations();
+
         // Set up polling
-        const intervalId = setInterval(fetchConversations, POLLING_INTERVAL);
+        const intervalId = setInterval(fetchAndSetConversations, POLLING_INTERVAL);
 
         // Cleanup
-        return () => clearInterval(intervalId);
-    }, [isLoading]); // Rerun if loading state changes (though it will only run once in practice)
+        return () => {
+            isMounted = false;
+            clearInterval(intervalId);
+        };
+    }, []); // Empty dependency array ensures this runs once on mount.
 
     return (
         <div className="flex flex-col h-full bg-card">
