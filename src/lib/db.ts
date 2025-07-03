@@ -59,11 +59,9 @@ async function synchronizeAllSequences(client: any): Promise<void> {
         ) FROM "${table}";
       `;
       await client.query(syncQuery);
-      console.log(` > Sequence for table '${table}' synchronized.`);
     } catch (err: any) {
-      if (err.code === '42P01') { 
-         console.warn(` > Could not find table '${table}' for sequence sync (expected on first run).`);
-      } else {
+      // This is expected on first run when tables don't exist yet, so we don't log an error.
+      if (err.code !== '42P01') { 
         console.error(`Error synchronizing sequence for table '${table}': ${err.message}`);
       }
     }
@@ -76,7 +74,7 @@ async function synchronizeAllSequences(client: any): Promise<void> {
 async function initializeDbSchema(): Promise<void> {
   const dbPool = getDbPool();
   if (!dbPool) {
-    console.log("Skipping DB schema initialization: POSTGRES_URL is not set.");
+    // console.log("Skipping DB schema initialization: POSTGRES_URL is not set.");
     return;
   }
 
@@ -94,11 +92,10 @@ async function initializeDbSchema(): Promise<void> {
         passwordhash VARCHAR(255) NOT NULL,
         role VARCHAR(50) NOT NULL CHECK (role IN ('Business', 'Gorakshak', 'Admin', 'Public(जनता)')),
         status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
-        createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        profilepictureurl TEXT
       );
     `);
-    const profilePicColRes = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='profilepictureurl';`);
-    if (profilePicColRes.rowCount === 0) await client.query('ALTER TABLE users ADD COLUMN profilepictureurl TEXT;');
     
     // Posts Table
     await client.query(`
@@ -148,7 +145,7 @@ async function initializeDbSchema(): Promise<void> {
     await client.query('CREATE EXTENSION IF NOT EXISTS cube');
     await client.query('CREATE EXTENSION IF NOT EXISTS earthdistance');
     await client.query('CREATE INDEX IF NOT EXISTS posts_geo_idx ON posts USING gist (ll_to_earth(latitude, longitude))');
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_posts_media ON posts (createdat DESC) WHERE mediaurls IS NOT NULL AND array_length(mediaurls, 1) > 0`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_posts_media ON posts (createdat DESC) WHERE mediaurls IS NOT NULL AND array_length(mediaurls, 1) > 0 AND mediaurls[1] IS NOT NULL`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_users_role_id ON users(role, id)`);
     await client.query('CREATE INDEX IF NOT EXISTS idx_post_likes_user_post ON post_likes (user_id, post_id)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_followers_follower_id ON user_followers (follower_id)');
@@ -1264,5 +1261,3 @@ export async function getTotalUnreadMessagesDb(userId: number): Promise<number> 
       client.release();
     }
 }
-
-    
