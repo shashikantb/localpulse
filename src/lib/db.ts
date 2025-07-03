@@ -1106,46 +1106,45 @@ export async function getMessagesForConversationDb(conversationId: number, userI
 }
 
 export async function getConversationsForUserDb(userId: number): Promise<Conversation[]> {
-    const dbPool = getDbPool();
-    if (!dbPool) return [];
+  const dbPool = getDbPool();
+  if (!dbPool) return [];
 
-    // This robust query correctly fetches all conversations for a user.
-    const query = `
-      WITH LastMessages AS (
-        SELECT
-          conversation_id,
-          content,
-          sender_id,
-          created_at,
-          ROW_NUMBER() OVER(PARTITION BY conversation_id ORDER BY created_at DESC) as rn
-        FROM messages
-      )
+  const query = `
+    WITH LastMessages AS (
       SELECT
-          c.id,
-          c.created_at,
-          c.last_message_at,
-          other_user.id AS participant_id,
-          other_user.name AS participant_name,
-          other_user.profilepictureurl AS participant_profile_picture_url,
-          lm.content AS last_message_content,
-          lm.sender_id AS last_message_sender_id
-      FROM
-          conversation_participants cp
-      JOIN
-          conversations c ON cp.conversation_id = c.id
-      JOIN
-          conversation_participants other_cp ON c.id = other_cp.conversation_id AND other_cp.user_id != $1
-      JOIN
-          users other_user ON other_cp.user_id = other_user.id
-      LEFT JOIN
-          LastMessages lm ON c.id = lm.conversation_id AND lm.rn = 1
-      WHERE
-          cp.user_id = $1
-      ORDER BY
-          c.last_message_at DESC;
-    `;
-    const result: QueryResult<Conversation> = await dbPool.query(query, [userId]);
-    return result.rows;
+        conversation_id,
+        content,
+        sender_id,
+        created_at,
+        ROW_NUMBER() OVER(PARTITION BY conversation_id ORDER BY created_at DESC) as rn
+      FROM messages
+    )
+    SELECT
+        c.id,
+        c.created_at,
+        c.last_message_at,
+        other_user.id AS participant_id,
+        other_user.name AS participant_name,
+        other_user.profilepictureurl AS participant_profile_picture_url,
+        lm.content AS last_message_content,
+        lm.sender_id AS last_message_sender_id
+    FROM
+        conversation_participants cp
+    JOIN
+        conversations c ON cp.conversation_id = c.id
+    JOIN
+        conversation_participants other_cp ON c.id = other_cp.conversation_id AND other_cp.user_id != $1
+    JOIN
+        users other_user ON other_cp.user_id = other_user.id
+    LEFT JOIN
+        LastMessages lm ON c.id = lm.conversation_id AND lm.rn = 1
+    WHERE
+        cp.user_id = $1
+    ORDER BY
+        c.last_message_at DESC;
+  `;
+  const result: QueryResult<Conversation> = await dbPool.query(query, [userId]);
+  return result.rows;
 }
 
 
