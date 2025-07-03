@@ -126,7 +126,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
     setHasDetectedUrl(youtubeRegex.test(contentValue));
   }, [contentValue, youtubeRegex]);
 
-  const clearAllMedia = React.useCallback(() => {
+  const clearAllMedia = () => {
     setSelectedFiles(currentFiles => {
       currentFiles.forEach(f => URL.revokeObjectURL(f.url));
       return [];
@@ -136,31 +136,32 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (imageCaptureInputRef.current) imageCaptureInputRef.current.value = '';
     if (videoCaptureInputRef.current) videoCaptureInputRef.current.value = '';
-  }, []);
+  };
   
-  const removeSelectedFile = React.useCallback((index: number) => {
+  const removeSelectedFile = (indexToRemove: number) => {
     setSelectedFiles(currentFiles => {
-      const fileToRemove = currentFiles[index];
+      const fileToRemove = currentFiles[indexToRemove];
       if (fileToRemove) {
         URL.revokeObjectURL(fileToRemove.url);
       }
-      const newFiles = currentFiles.filter((_, i) => i !== index);
+      const newFiles = currentFiles.filter((_, i) => i !== indexToRemove);
       if (newFiles.length === 0) {
         setMediaType(null);
       }
       return newFiles;
     });
-  }, []);
+  };
 
-
-  const handleFileChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
     
     const firstFile = files[0];
     if (!firstFile) return;
 
-    clearAllMedia();
+    // We call a function that is NOT memoized to clear media.
+    // This avoids any stale state issues with useCallback.
+    clearAllMedia(); 
     
     const currentFileType = firstFile.type.startsWith('image/') ? 'image' : firstFile.type.startsWith('video/') ? 'video' : null;
 
@@ -196,7 +197,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
         newPreviews.push({ file: file, url: URL.createObjectURL(file) });
     }
     setSelectedFiles(newPreviews);
-  }, [clearAllMedia]);
+  };
   
   React.useEffect(() => {
     if (!mentionQuery) {
@@ -534,5 +535,3 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
     </Form>
   );
 };
-
-    
