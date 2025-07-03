@@ -1,5 +1,5 @@
 
-import type { FC, PropsWithChildren, Suspense } from 'react';
+import React, { type FC, type PropsWithChildren, Suspense } from 'react';
 import ChatSidebar from '@/components/chat-sidebar';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -21,9 +21,9 @@ const ChatLayout: FC<PropsWithChildren> = ({ children }) => {
   return (
     <div className="flex h-[calc(100vh-7rem)] border-t">
       <aside className="w-full md:w-80 lg:w-96 border-r flex-col hidden md:flex">
-        <React.Suspense fallback={<ChatSidebarSkeleton />}>
+        <Suspense fallback={<ChatSidebarSkeleton />}>
            <ChatSidebar />
-        </React.Suspense>
+        </Suspense>
       </aside>
       <main className="flex-1 flex flex-col">
         {children}
