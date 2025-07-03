@@ -1114,31 +1114,31 @@ export async function getConversationsForUserDb(userId: number): Promise<Convers
     const dbPool = getDbPool();
     if (!dbPool) return [];
 
+    // This revised query is more direct and less prone to complex join issues.
+    // It finds conversations where the user is a participant, then explicitly fetches
+    // the other participant's details and the last message using subqueries.
     const query = `
-      WITH LastMessages AS (
         SELECT
-            conversation_id,
-            content,
-            sender_id,
-            ROW_NUMBER() OVER(PARTITION BY conversation_id ORDER BY created_at DESC) as rn
-        FROM messages
-      )
-      SELECT
-          c.id,
-          c.created_at,
-          c.last_message_at,
-          other_participant.user_id as participant_id,
-          u.name as participant_name,
-          u.profilepictureurl as participant_profile_picture_url,
-          lm.content as last_message_content,
-          lm.sender_id as last_message_sender_id
-      FROM conversations c
-      JOIN conversation_participants cp ON c.id = cp.conversation_id
-      JOIN conversation_participants other_participant ON c.id = other_participant.conversation_id AND other_participant.user_id != $1
-      JOIN users u ON other_participant.user_id = u.id
-      LEFT JOIN LastMessages lm ON c.id = lm.conversation_id AND lm.rn = 1
-      WHERE cp.user_id = $1
-      ORDER BY c.last_message_at DESC;
+            c.id,
+            c.created_at,
+            c.last_message_at,
+            other_p.user_id as participant_id,
+            other_u.name as participant_name,
+            other_u.profilepictureurl as participant_profile_picture_url,
+            (SELECT content FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_message_content,
+            (SELECT sender_id FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_message_sender_id
+        FROM
+            conversations c
+        JOIN
+            conversation_participants this_p ON c.id = this_p.conversation_id
+        JOIN
+            conversation_participants other_p ON c.id = other_p.conversation_id
+        JOIN
+            users other_u ON other_p.user_id = other_u.id
+        WHERE
+            this_p.user_id = $1 AND other_p.user_id != $1
+        ORDER BY
+            c.last_message_at DESC;
     `;
 
     const result: QueryResult<Conversation> = await dbPool.query(query, [userId]);
