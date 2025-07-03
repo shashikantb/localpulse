@@ -9,13 +9,26 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader } from '@/co
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import type { Post, User } from '@/lib/db-types';
 import { formatDistanceToNowStrict } from 'date-fns';
-import { MapPin, UserCircle, MessageCircle, Map, Share2, ThumbsUp, Tag, Eye, BellRing, AlertTriangle, RefreshCw, ChevronLeft, ChevronRight, Image as ImageIcon } from 'lucide-react';
+import { MapPin, UserCircle, MessageCircle, Map, Share2, ThumbsUp, Tag, Eye, BellRing, AlertTriangle, RefreshCw, ChevronLeft, ChevronRight, Image as ImageIcon, MoreHorizontal, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { toggleLikePost, recordPostView, likePostAnonymously } from '@/app/actions';
+import { toggleLikePost, recordPostView, likePostAnonymously, deleteUserPost } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 
 const CommentSectionSkeleton = () => (
   <div className="px-5 pb-4 border-t border-border/30 pt-4 bg-muted/20 space-y-4">
@@ -76,6 +89,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
   const distance = userLocation ? calculateDistance(userLocation.latitude, userLocation.longitude, post.latitude, post.longitude) : null;
   
   const authorName = post.authorname || 'Anonymous Pulsar';
+  const isOwnPost = sessionUser?.id === post.authorid;
 
   const [isLikedByClient, setIsLikedByClient] = useState(false);
   const [displayLikeCount, setDisplayLikeCount] = useState<number>(post.likecount);
@@ -194,6 +208,23 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
         setDisplayLikeCount(originalLikeCount);
     } finally {
         setIsLiking(false);
+    }
+  };
+  
+  const handleDelete = async () => {
+    const result = await deleteUserPost(post.id);
+    if (result.success) {
+      toast({
+        title: 'Post Deleted',
+        description: 'Your post has been successfully removed.',
+      });
+      // The revalidatePath in the action will handle the refresh.
+    } else {
+      toast({
+        variant: 'destructive',
+        title: 'Error Deleting Post',
+        description: result.error,
+      });
     }
   };
 
@@ -361,66 +392,133 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
                 </p>
             )}
         </div>
+        <div className="ml-auto">
+          {isOwnPost && (
+            <AlertDialog>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                    <span className="sr-only">Post options</span>
+                    <MoreHorizontal className="h-5 w-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <AlertDialogTrigger asChild>
+                    <DropdownMenuItem className="text-destructive focus:text-destructive cursor-pointer" onSelect={(e) => e.preventDefault()}>
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete Post
+                    </DropdownMenuItem>
+                  </AlertDialogTrigger>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This action cannot be undone. This will permanently delete your post and all its data.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">
+                    Yes, delete post
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+        </div>
       </CardHeader>
 
       {hasVisibleMedia && (
         <div className="px-5 pb-0 pt-2">
-          <div className="relative w-full aspect-[16/10] overflow-hidden rounded-lg border-2 border-border/50 shadow-inner bg-muted/50 group">
-            {isYouTubeVideo ? (
-                <iframe
-                    src={post.mediaurls[0]}
-                    title="YouTube video player"
-                    frameBorder="0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    allowFullScreen
-                    className="w-full h-full"
-                ></iframe>
-            ) : post.mediatype === 'image' ? (
-                <Image src={post.mediaurls[0]} alt="Post image" fill style={{ objectFit: "contain" }} sizes="(max-width: 768px) 100vw, 50vw" className="transition-transform duration-300 group-hover:scale-105" data-ai-hint="user generated content" priority={isFirst} />
-            ) : post.mediatype === 'gallery' ? (
-                 <>
-                    <Image src={post.mediaurls[currentImageIndex]} alt={`Post image ${currentImageIndex + 1}`} fill style={{ objectFit: "contain" }} sizes="(max-width: 768px) 100vw, 50vw" className="transition-opacity duration-300" data-ai-hint="user generated content" priority={isFirst} />
-                    {post.mediaurls.length > 1 && (
-                        <>
-                            <div className="absolute top-1/2 left-2 -translate-y-1/2">
-                                <Button variant="secondary" size="icon" onClick={(e) => { e.stopPropagation(); prevImage(); }} className="h-8 w-8 rounded-full opacity-60 group-hover:opacity-100 transition-opacity">
-                                    <ChevronLeft className="h-5 w-5" />
-                                </Button>
-                            </div>
-                            <div className="absolute top-1/2 right-2 -translate-y-1/2">
-                                <Button variant="secondary" size="icon" onClick={(e) => { e.stopPropagation(); nextImage(); }} className="h-8 w-8 rounded-full opacity-60 group-hover:opacity-100 transition-opacity">
-                                    <ChevronRight className="h-5 w-5" />
-                                </Button>
-                            </div>
-                            <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/60 text-white text-xs rounded-md backdrop-blur-sm">
-                                <ImageIcon className="w-3 h-3 mr-1 inline-block" />
-                                {currentImageIndex + 1} / {post.mediaurls.length}
-                            </div>
-                        </>
-                    )}
-                </>
-            ) : post.mediatype === 'video' ? (
-              <>
-                 <video ref={videoRef} controls src={post.mediaurls[0]} className={cn("w-full h-full object-contain", mediaError && "hidden")} onError={() => setMediaError(true)} />
-                 {mediaError && (
-                    <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center text-white p-4">
-                        <AlertTriangle className="w-8 h-8 mb-2 text-yellow-400" />
-                        <p className="text-sm text-center font-semibold mb-3">This video could not be loaded.</p>
-                        <Button onClick={handleRetryVideo} variant="secondary" size="sm">
-                            <RefreshCw className="w-4 h-4 mr-2"/>
-                            Retry
-                        </Button>
-                    </div>
-                )}
-              </>
-            ) : null}
-            
-            {(post.mediatype === 'video' || post.mediatype === 'image') && !isYouTubeVideo && (
-                <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/50 text-white text-xs rounded-md backdrop-blur-sm">
-                    {post.mediatype.charAt(0).toUpperCase() + post.mediatype.slice(1)}
+           <Dialog>
+             <DialogTrigger asChild>
+                <div className="relative w-full aspect-[16/10] overflow-hidden rounded-lg border-2 border-border/50 shadow-inner bg-muted/50 group cursor-pointer">
+                  {isYouTubeVideo ? (
+                      <iframe
+                          src={post.mediaurls[0]}
+                          title="YouTube video player"
+                          frameBorder="0"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                          allowFullScreen
+                          className="w-full h-full pointer-events-none"
+                      ></iframe>
+                  ) : post.mediatype === 'image' ? (
+                      <Image src={post.mediaurls[0]} alt="Post image" fill style={{ objectFit: "contain" }} sizes="(max-width: 768px) 100vw, 50vw" className="transition-transform duration-300 group-hover:scale-105" data-ai-hint="user generated content" priority={isFirst} />
+                  ) : post.mediatype === 'gallery' ? (
+                      <>
+                          <Image src={post.mediaurls[currentImageIndex]} alt={`Post image ${currentImageIndex + 1}`} fill style={{ objectFit: "contain" }} sizes="(max-width: 768px) 100vw, 50vw" className="transition-opacity duration-300" data-ai-hint="user generated content" priority={isFirst} />
+                          {post.mediaurls.length > 1 && (
+                              <>
+                                  <div className="absolute top-1/2 left-2 -translate-y-1/2 z-10">
+                                      <Button variant="secondary" size="icon" onClick={(e) => { e.stopPropagation(); prevImage(); }} className="h-8 w-8 rounded-full opacity-60 group-hover:opacity-100 transition-opacity">
+                                          <ChevronLeft className="h-5 w-5" />
+                                      </Button>
+                                  </div>
+                                  <div className="absolute top-1/2 right-2 -translate-y-1/2 z-10">
+                                      <Button variant="secondary" size="icon" onClick={(e) => { e.stopPropagation(); nextImage(); }} className="h-8 w-8 rounded-full opacity-60 group-hover:opacity-100 transition-opacity">
+                                          <ChevronRight className="h-5 w-5" />
+                                      </Button>
+                                  </div>
+                                  <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/60 text-white text-xs rounded-md backdrop-blur-sm">
+                                      <ImageIcon className="w-3 h-3 mr-1 inline-block" />
+                                      {currentImageIndex + 1} / {post.mediaurls.length}
+                                  </div>
+                              </>
+                          )}
+                      </>
+                  ) : post.mediatype === 'video' ? (
+                    <>
+                      <video ref={videoRef} controls src={post.mediaurls[0]} className={cn("w-full h-full object-contain pointer-events-none", mediaError && "hidden")} onError={() => setMediaError(true)} />
+                      {mediaError && (
+                          <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center text-white p-4">
+                              <AlertTriangle className="w-8 h-8 mb-2 text-yellow-400" />
+                              <p className="text-sm text-center font-semibold mb-3">This video could not be loaded.</p>
+                              <Button onClick={handleRetryVideo} variant="secondary" size="sm">
+                                  <RefreshCw className="w-4 h-4 mr-2"/>
+                                  Retry
+                              </Button>
+                          </div>
+                      )}
+                    </>
+                  ) : null}
+                  
+                  {(post.mediatype === 'video' || post.mediatype === 'image') && !isYouTubeVideo && (
+                      <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/50 text-white text-xs rounded-md backdrop-blur-sm">
+                          {post.mediatype.charAt(0).toUpperCase() + post.mediatype.slice(1)}
+                      </div>
+                  )}
                 </div>
-            )}
-          </div>
+              </DialogTrigger>
+              <DialogContent className="max-w-5xl w-[95vw] h-[90vh] p-2 bg-black/80 border-none flex items-center justify-center">
+                  {isYouTubeVideo ? (
+                    <iframe src={post.mediaurls[0]} title="YouTube video player" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen className="w-full h-full max-w-4xl aspect-video"></iframe>
+                  ) : post.mediatype === 'image' ? (
+                    <Image src={post.mediaurls[0]} alt="Post image" fill style={{ objectFit: "contain" }} sizes="90vw" />
+                  ) : post.mediatype === 'gallery' ? (
+                    <div className="relative w-full h-full">
+                      <Image src={post.mediaurls[currentImageIndex]} alt={`Post image ${currentImageIndex + 1}`} fill style={{ objectFit: "contain" }} sizes="90vw" />
+                      {post.mediaurls.length > 1 && (
+                        <>
+                          <div className="absolute top-1/2 left-2 -translate-y-1/2">
+                              <Button variant="secondary" size="icon" onClick={(e) => { e.stopPropagation(); prevImage(); }} className="h-10 w-10 rounded-full opacity-70 hover:opacity-100 transition-opacity">
+                                  <ChevronLeft className="h-6 w-6" />
+                              </Button>
+                          </div>
+                          <div className="absolute top-1/2 right-2 -translate-y-1/2">
+                              <Button variant="secondary" size="icon" onClick={(e) => { e.stopPropagation(); nextImage(); }} className="h-10 w-10 rounded-full opacity-70 hover:opacity-100 transition-opacity">
+                                  <ChevronRight className="h-6 w-6" />
+                              </Button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ) : post.mediatype === 'video' ? (
+                    <video controls autoPlay src={post.mediaurls[0]} className="w-full h-full object-contain" />
+                  ) : null}
+              </DialogContent>
+           </Dialog>
         </div>
       )}
 

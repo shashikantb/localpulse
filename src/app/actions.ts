@@ -8,6 +8,7 @@ import { admin as firebaseAdmin } from '@/lib/firebase-admin';
 import { getSession } from '@/app/auth/actions';
 import { getGcsClient, getGcsBucketName } from '@/lib/gcs';
 import { redirect } from 'next/navigation';
+import { deletePostDb } from '@/lib/db';
 
 
 async function geocodeCoordinates(latitude: number, longitude: number): Promise<string | null> {
@@ -291,6 +292,32 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
   } catch (error: any) {
     console.error("Server action error adding post:", error);
     return { error: error.message || 'Failed to add post due to an unknown server error.' };
+  }
+}
+
+export async function deleteUserPost(postId: number): Promise<{ success: boolean; error?: string }> {
+  const { user } = await getSession();
+  if (!user) {
+    return { success: false, error: 'You must be logged in to delete a post.' };
+  }
+
+  const postToDelete = await getPostByIdDb(postId);
+  if (!postToDelete) {
+    return { success: false, error: 'Post not found.' };
+  }
+
+  if (postToDelete.authorid !== user.id) {
+    return { success: false, error: 'You are not authorized to delete this post.' };
+  }
+
+  try {
+    await deletePostDb(postId);
+    revalidatePath('/');
+    revalidatePath(`/users/${user.id}`);
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error deleting post:', error);
+    return { success: false, error: 'Failed to delete post due to a server error.' };
   }
 }
 
