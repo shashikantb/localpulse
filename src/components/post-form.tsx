@@ -126,18 +126,6 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
     setHasDetectedUrl(youtubeRegex.test(contentValue));
   }, [contentValue, youtubeRegex]);
 
-  const clearAllMedia = () => {
-    setSelectedFiles(currentFiles => {
-      currentFiles.forEach(f => URL.revokeObjectURL(f.url));
-      return [];
-    });
-    setMediaType(null);
-    setFileError(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-    if (imageCaptureInputRef.current) imageCaptureInputRef.current.value = '';
-    if (videoCaptureInputRef.current) videoCaptureInputRef.current.value = '';
-  };
-  
   const removeSelectedFile = (indexToRemove: number) => {
     setSelectedFiles(currentFiles => {
       const fileToRemove = currentFiles[indexToRemove];
@@ -153,50 +141,61 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setFileError(null);
+
     const files = event.target.files;
-    if (!files || files.length === 0) return;
+    if (!files || files.length === 0) {
+        setSelectedFiles(prev => {
+            prev.forEach(f => URL.revokeObjectURL(f.url));
+            return [];
+        });
+        setMediaType(null);
+        return;
+    }
     
     const firstFile = files[0];
-    if (!firstFile) return;
-
-    // We call a function that is NOT memoized to clear media.
-    // This avoids any stale state issues with useCallback.
-    clearAllMedia(); 
-    
     const currentFileType = firstFile.type.startsWith('image/') ? 'image' : firstFile.type.startsWith('video/') ? 'video' : null;
 
     if (!currentFileType) {
         setFileError('Invalid file type. Please select an image or video.');
+        event.target.value = '';
         return;
     }
 
     if (currentFileType === 'video' && files.length > 1) {
         setFileError('You can only upload one video at a time.');
+        event.target.value = '';
         return;
     }
     
     if (currentFileType === 'image' && files.length > MAX_IMAGE_COUNT) {
         setFileError(`You can select a maximum of ${MAX_IMAGE_COUNT} images.`);
+        event.target.value = '';
         return;
     }
-    
-    setMediaType(currentFileType);
 
     const newPreviews: FilePreview[] = [];
     for (const file of Array.from(files)) {
         if (currentFileType === 'image' && file.size > MAX_IMAGE_UPLOAD_LIMIT) {
             setFileError(`Image "${file.name}" is too large. Max size: ${Math.round(MAX_IMAGE_UPLOAD_LIMIT / 1024 / 1024)}MB.`);
-            clearAllMedia();
+            event.target.value = '';
+            newPreviews.forEach(p => URL.revokeObjectURL(p.url));
             return;
         }
         if (currentFileType === 'video' && file.size > MAX_VIDEO_UPLOAD_LIMIT) {
             setFileError(`Video is too large. Max size: ${Math.round(MAX_VIDEO_UPLOAD_LIMIT / 1024 / 1024)}MB.`);
-            clearAllMedia();
+            event.target.value = '';
+            newPreviews.forEach(p => URL.revokeObjectURL(p.url));
             return;
         }
         newPreviews.push({ file: file, url: URL.createObjectURL(file) });
     }
-    setSelectedFiles(newPreviews);
+
+    setSelectedFiles(prevFiles => {
+      prevFiles.forEach(f => URL.revokeObjectURL(f.url));
+      return newPreviews;
+    });
+    setMediaType(currentFileType);
   };
   
   React.useEffect(() => {
@@ -280,7 +279,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
         } catch (error: any) {
           console.error("A critical error occurred during the upload process:", error);
           toast({ variant: 'destructive', title: 'Upload Failed', description: error.message });
-          return; // Stop form submission on upload failure
+          return;
         } finally {
           setIsUploading(false);
         }
@@ -289,7 +288,11 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
       }
       
       form.reset();
-      clearAllMedia();
+      setSelectedFiles(prev => {
+        prev.forEach(f => URL.revokeObjectURL(f.url));
+        return [];
+      });
+      setMediaType(null);
       setTaggedUsers([]);
   };
 
@@ -482,7 +485,15 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
                         </div>
                     ))}
                 </div>
-                <Button type="button" variant="ghost" size="sm" onClick={clearAllMedia} className="w-full text-destructive">
+                 <Button type="button" variant="ghost" size="sm" onClick={(e) => {
+                     e.preventDefault();
+                     setSelectedFiles(prev => {
+                       prev.forEach(f => URL.revokeObjectURL(f.url));
+                       return [];
+                     });
+                     setMediaType(null);
+                     if (fileInputRef.current) fileInputRef.current.value = "";
+                 }} className="w-full text-destructive">
                     <XCircle className="mr-2 h-4 w-4" /> Clear All
                 </Button>
             </div>
