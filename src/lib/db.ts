@@ -1022,52 +1022,42 @@ export async function findOrCreateConversationDb(user1Id: number, user2Id: numbe
 
     const client = await dbPool.connect();
     try {
-        // First, perform a read-only check to see if a conversation already exists.
+        await client.query('BEGIN');
+        
+        // More reliable way to find an existing conversation
         const findQuery = `
-            SELECT conversation_id
-            FROM conversation_participants
-            WHERE user_id IN ($1, $2)
-            GROUP BY conversation_id
-            HAVING COUNT(DISTINCT user_id) = 2
+            SELECT t1.conversation_id
+            FROM conversation_participants AS t1
+            INNER JOIN conversation_participants AS t2
+                ON t1.conversation_id = t2.conversation_id
+                AND t1.user_id = $1 AND t2.user_id = $2
             LIMIT 1;
         `;
         const findResult = await client.query(findQuery, [user1Id, user2Id]);
 
         if (findResult.rows.length > 0) {
-            // If it exists, we're done. Release the client and return the ID.
-            client.release();
+            await client.query('COMMIT'); // Commit to release lock, even on find
             return findResult.rows[0].conversation_id;
         }
 
-        // If no conversation is found, proceed to create one within a transaction.
-        await client.query('BEGIN');
-        
-        // Create the new conversation entry.
+        // If no conversation is found, proceed to create one
         const createConvQuery = 'INSERT INTO conversations DEFAULT VALUES RETURNING id;';
         const convResult = await client.query(createConvQuery);
         const conversationId = convResult.rows[0].id;
 
-        // Add both users as participants.
         const addParticipantsQuery = `
             INSERT INTO conversation_participants (conversation_id, user_id) VALUES ($1, $2), ($1, $3);
         `;
         await client.query(addParticipantsQuery, [conversationId, user1Id, user2Id]);
 
-        // Commit the transaction.
         await client.query('COMMIT');
         return conversationId;
     } catch (error) {
-        // If any part of the write transaction fails, roll it back.
         await client.query('ROLLBACK');
         console.error("Error in findOrCreateConversationDb transaction:", error);
         throw error;
     } finally {
-        // Ensure the client is always released back to the pool, unless it was already released.
-        // The 'await client.query' calls might throw before client.release() is called in the happy path.
-        // This check prevents trying to release a client that's already been released.
-        if (!client.isReleased) {
-           client.release();
-        }
+       client.release();
     }
 }
 
@@ -1123,45 +1113,42 @@ export async function getConversationsForUserDb(userId: number): Promise<Convers
     const dbPool = getDbPool();
     if (!dbPool) return [];
 
-    // This query uses a Common Table Expression (CTE) to be more robust and readable.
-    // It first gets the last message for each conversation, then joins that with participant info.
     const query = `
-      WITH last_messages AS (
-          SELECT
-              conversation_id,
-              content,
-              sender_id,
-              created_at,
-              ROW_NUMBER() OVER(PARTITION BY conversation_id ORDER BY created_at DESC) as rn
-          FROM messages
-      )
       SELECT
           c.id,
           c.created_at,
           c.last_message_at,
-          other_p.user_id AS participant_id,
-          other_u.name AS participant_name,
-          other_u.profilepictureurl AS participant_profile_picture_url,
-          lm.content AS last_message_content,
-          lm.sender_id AS last_message_sender_id
+          other_user.id AS participant_id,
+          other_user.name AS participant_name,
+          other_user.profilepictureurl AS participant_profile_picture_url,
+          last_msg.content AS last_message_content,
+          last_msg.sender_id AS last_message_sender_id
       FROM
-          conversation_participants AS self_p
+          conversation_participants cp
       JOIN
-          conversations AS c ON self_p.conversation_id = c.id
+          conversations c ON cp.conversation_id = c.id
       JOIN
-          conversation_participants AS other_p ON c.id = other_p.conversation_id AND other_p.user_id != self_p.user_id
+          conversation_participants other_cp ON c.id = other_cp.conversation_id AND other_cp.user_id != $1
       JOIN
-          users AS other_u ON other_p.user_id = other_u.id
+          users other_user ON other_cp.user_id = other_user.id
       LEFT JOIN
-          last_messages lm ON c.id = lm.conversation_id AND lm.rn = 1
+          (
+              SELECT
+                  conversation_id,
+                  content,
+                  sender_id,
+                  ROW_NUMBER() OVER(PARTITION BY conversation_id ORDER BY created_at DESC) as rn
+              FROM messages
+          ) last_msg ON c.id = last_msg.conversation_id AND last_msg.rn = 1
       WHERE
-          self_p.user_id = $1
+          cp.user_id = $1
       ORDER BY
           c.last_message_at DESC;
     `;
     const result: QueryResult<Conversation> = await dbPool.query(query, [userId]);
     return result.rows;
 }
+
 
 export async function getConversationPartnerDb(conversationId: number, currentUserId: number): Promise<ConversationParticipant | null> {
     const dbPool = getDbPool();
@@ -1175,5 +1162,3 @@ export async function getConversationPartnerDb(conversationId: number, currentUs
     const result = await dbPool.query(query, [conversationId, currentUserId]);
     return result.rows[0] || null;
 }
-
-    
