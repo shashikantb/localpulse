@@ -1109,40 +1109,30 @@ export async function getConversationsForUserDb(userId: number): Promise<Convers
   const dbPool = getDbPool();
   if (!dbPool) return [];
 
+  // This rewritten query is more robust and standard for this type of data retrieval.
+  // It avoids the complexity of the previous CTEs which seemed to have an edge-case failure.
   const query = `
-    WITH LastMessages AS (
-      SELECT
-        conversation_id,
-        content,
-        sender_id,
-        created_at,
-        ROW_NUMBER() OVER(PARTITION BY conversation_id ORDER BY created_at DESC) as rn
-      FROM messages
-    ),
-    UserConversations AS (
-        SELECT conversation_id from conversation_participants WHERE user_id = $1
-    )
     SELECT
-        c.id,
-        c.created_at,
-        c.last_message_at,
-        other_user.id AS participant_id,
-        other_user.name AS participant_name,
-        other_user.profilepictureurl AS participant_profile_picture_url,
-        lm.content AS last_message_content,
-        lm.sender_id AS last_message_sender_id
+      c.id,
+      c.created_at,
+      c.last_message_at,
+      p.user_id AS participant_id,
+      u.name AS participant_name,
+      u.profilepictureurl AS participant_profile_picture_url,
+      (SELECT content FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_message_content,
+      (SELECT sender_id FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_message_sender_id
     FROM
-        UserConversations uc
+      conversation_participants AS cp
     JOIN
-        conversations c ON uc.conversation_id = c.id
+      conversations AS c ON cp.conversation_id = c.id
     JOIN
-        conversation_participants other_cp ON uc.conversation_id = other_cp.conversation_id AND other_cp.user_id != $1
+      conversation_participants AS p ON c.id = p.conversation_id AND p.user_id != cp.user_id
     JOIN
-        users other_user ON other_cp.user_id = other_user.id
-    LEFT JOIN
-        LastMessages lm ON uc.conversation_id = lm.conversation_id AND lm.rn = 1
+      users AS u ON p.user_id = u.id
+    WHERE
+      cp.user_id = $1
     ORDER BY
-        c.last_message_at DESC;
+      c.last_message_at DESC;
   `;
   const result: QueryResult<Conversation> = await dbPool.query(query, [userId]);
   return result.rows;
