@@ -127,14 +127,17 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   }, [contentValue, youtubeRegex]);
 
   const clearAllMedia = React.useCallback(() => {
-    selectedFiles.forEach(f => URL.revokeObjectURL(f.url));
-    setSelectedFiles([]);
+    // Use functional update to avoid stale state issues with selectedFiles
+    setSelectedFiles(currentFiles => {
+        currentFiles.forEach(f => URL.revokeObjectURL(f.url));
+        return []; // Return empty array to clear the state
+    });
     setMediaType(null);
     setFileError(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (imageCaptureInputRef.current) imageCaptureInputRef.current.value = '';
     if (videoCaptureInputRef.current) videoCaptureInputRef.current.value = '';
-  }, [selectedFiles]);
+  }, []); // Empty dependency array makes this function stable
   
   const removeSelectedFile = (index: number) => {
     const fileToRemove = selectedFiles[index];
@@ -147,15 +150,16 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   };
 
 
-  const handleFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
     
     const firstFile = files[0];
     if (!firstFile) return;
 
-    setFileError(null);
+    // We clear previous media to start fresh with the new selection.
     clearAllMedia();
+    setFileError(null);
     
     const currentFileType = firstFile.type.startsWith('image/') ? 'image' : firstFile.type.startsWith('video/') ? 'video' : null;
 
@@ -191,8 +195,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
         newPreviews.push({ file: file, url: URL.createObjectURL(file) });
     }
     setSelectedFiles(newPreviews);
-
- }, [clearAllMedia]);
+ };
   
   React.useEffect(() => {
     if (!mentionQuery) {
