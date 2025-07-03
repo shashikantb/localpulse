@@ -1160,3 +1160,6 @@ export async function getConversationPartnerDb(conversationId: number, currentUs
     const result = await dbPool.query(query, [conversationId, currentUserId]);
     return result.rows[0] || null;
 }
+
+
+    
