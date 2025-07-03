@@ -1140,11 +1140,11 @@ export async function getConversationsForUserDb(userId: number): Promise<Convers
         c.id,
         c.created_at,
         c.last_message_at,
-        other_user.id as participant_id,
-        other_user.name as participant_name,
-        other_user.profilepictureurl as participant_profile_picture_url,
-        (SELECT content FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_content,
-        (SELECT sender_id FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_sender_id,
+        other_user.id AS participant_id,
+        other_user.name AS participant_name,
+        other_user.profilepictureurl AS participant_profile_picture_url,
+        m.content AS last_message_content,
+        m.sender_id AS last_message_sender_id,
         my_participant_row.unread_count
     FROM
         conversations c
@@ -1154,8 +1154,17 @@ export async function getConversationsForUserDb(userId: number): Promise<Convers
         conversation_participants other_participant_row ON c.id = other_participant_row.conversation_id
     JOIN
         users other_user ON other_participant_row.user_id = other_user.id
+    LEFT JOIN LATERAL
+        (
+            SELECT content, sender_id
+            FROM messages
+            WHERE conversation_id = c.id
+            ORDER BY created_at DESC
+            LIMIT 1
+        ) m ON TRUE
     WHERE
-        my_participant_row.user_id = $1 AND other_participant_row.user_id != $1
+        my_participant_row.user_id = $1
+        AND other_participant_row.user_id != $1
     ORDER BY
         c.last_message_at DESC;
   `;
