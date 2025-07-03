@@ -1135,7 +1135,6 @@ export async function getConversationsForUserDb(userId: number): Promise<Convers
   const dbPool = getDbPool();
   if (!dbPool) return [];
 
-  // This query is designed to be more direct and less prone to complex join errors.
   const query = `
     SELECT
         c.id,
