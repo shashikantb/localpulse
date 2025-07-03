@@ -1118,6 +1118,9 @@ export async function getConversationsForUserDb(userId: number): Promise<Convers
         created_at,
         ROW_NUMBER() OVER(PARTITION BY conversation_id ORDER BY created_at DESC) as rn
       FROM messages
+    ),
+    UserConversations AS (
+        SELECT conversation_id from conversation_participants WHERE user_id = $1
     )
     SELECT
         c.id,
@@ -1129,17 +1132,15 @@ export async function getConversationsForUserDb(userId: number): Promise<Convers
         lm.content AS last_message_content,
         lm.sender_id AS last_message_sender_id
     FROM
-        conversation_participants cp
+        UserConversations uc
     JOIN
-        conversations c ON cp.conversation_id = c.id
+        conversations c ON uc.conversation_id = c.id
     JOIN
-        conversation_participants other_cp ON c.id = other_cp.conversation_id AND other_cp.user_id != $1
+        conversation_participants other_cp ON uc.conversation_id = other_cp.conversation_id AND other_cp.user_id != $1
     JOIN
         users other_user ON other_cp.user_id = other_user.id
     LEFT JOIN
-        LastMessages lm ON c.id = lm.conversation_id AND lm.rn = 1
-    WHERE
-        cp.user_id = $1
+        LastMessages lm ON uc.conversation_id = lm.conversation_id AND lm.rn = 1
     ORDER BY
         c.last_message_at DESC;
   `;
@@ -1160,6 +1161,3 @@ export async function getConversationPartnerDb(conversationId: number, currentUs
     const result = await dbPool.query(query, [conversationId, currentUserId]);
     return result.rows[0] || null;
 }
-
-
-    
