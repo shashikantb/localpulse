@@ -2,7 +2,7 @@
 'use client';
 
 import type { FC } from 'react';
-import React, from 'react';
+import React from 'react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -95,7 +95,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
   const [selectedFiles, setSelectedFiles] = React.useState<FilePreview[]>([]);
   const [mediaType, setMediaType] = React.useState<'image' | 'video' | null>(null);
   const [isUploading, setIsUploading] = React.useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadProgress, setUploadProgress] = React.useState(0);
   const [fileError, setFileError] = React.useState<string | null>(null);
   const [showCameraOptions, setShowCameraOptions] = React.useState(false);
   
