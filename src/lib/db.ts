@@ -1127,31 +1127,28 @@ export async function getConversationsForUserDb(userId: number): Promise<Convers
   if (!dbPool) return [];
 
   const query = `
-    WITH LastMessages AS (
-        SELECT
-            conversation_id,
-            content,
-            sender_id,
-            created_at,
-            ROW_NUMBER() OVER(PARTITION BY conversation_id ORDER BY created_at DESC) as rn
-        FROM messages
-    )
     SELECT
         c.id,
         c.created_at,
         c.last_message_at,
-        other_participant.id AS participant_id,
-        other_participant.name AS participant_name,
-        other_participant.profilepictureurl AS participant_profile_picture_url,
-        lm.content AS last_message_content,
-        lm.sender_id AS last_message_sender_id,
-        cp_current.unread_count
-    FROM conversations c
-    JOIN conversation_participants cp_current ON c.id = cp_current.conversation_id AND cp_current.user_id = $1
-    JOIN conversation_participants cp_other ON c.id = cp_other.conversation_id AND cp_other.user_id != $1
-    JOIN users other_participant ON cp_other.user_id = other_participant.id
-    LEFT JOIN LastMessages lm ON c.id = lm.conversation_id AND lm.rn = 1
-    ORDER BY c.last_message_at DESC;
+        other_user.id as participant_id,
+        other_user.name as participant_name,
+        other_user.profilepictureurl as participant_profile_picture_url,
+        (SELECT content FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_content,
+        (SELECT sender_id FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_sender_id,
+        my_participant_row.unread_count
+    FROM
+        conversations c
+    JOIN
+        conversation_participants my_participant_row ON c.id = my_participant_row.conversation_id
+    JOIN
+        conversation_participants other_participant_row ON c.id = other_participant_row.conversation_id
+    JOIN
+        users other_user ON other_participant_row.user_id = other_user.id
+    WHERE
+        my_participant_row.user_id = $1 AND other_participant_row.user_id != $1
+    ORDER BY
+        c.last_message_at DESC;
   `;
   const result: QueryResult<Conversation> = await dbPool.query(query, [userId]);
   return result.rows;
