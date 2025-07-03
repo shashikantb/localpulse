@@ -126,3 +126,25 @@ export interface UserFollowStats {
   followerCount: number;
   followingCount: number;
 }
+
+// --- Status (Story) Types ---
+
+export interface Status {
+  id: number;
+  media_url: string;
+  media_type: 'image' | 'video';
+  created_at: string;
+}
+
+export interface UserWithStatuses {
+  userId: number;
+  userName: string;
+  userProfilePictureUrl?: string | null;
+  statuses: Status[];
+}
+
+export type NewStatus = {
+  userId: number;
+  mediaUrl: string;
+  mediaType: 'image' | 'video';
+};

@@ -1,6 +1,6 @@
 
 import { Pool, type QueryResult } from 'pg';
-import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser } from './db-types';
+import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Status } from './db-types';
 import bcrypt from 'bcryptjs';
 
 // Re-export db-types
@@ -46,7 +46,7 @@ function getDbPool(): Pool | null {
 
 // Self-healing function to fix out-of-sync ID sequences
 async function synchronizeAllSequences(client: any): Promise<void> {
-  const tablesWithSerialId = ['users', 'posts', 'post_likes', 'comments', 'device_tokens'];
+  const tablesWithSerialId = ['users', 'posts', 'post_likes', 'comments', 'device_tokens', 'statuses'];
   console.log('Synchronizing database sequences to prevent duplicate key errors...');
 
   for (const table of tablesWithSerialId) {
@@ -215,6 +215,17 @@ async function initializeDbSchema(): Promise<void> {
       );
     `);
 
+    // Statuses Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS statuses (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        media_url TEXT NOT NULL,
+        media_type VARCHAR(10) NOT NULL CHECK (media_type IN ('image', 'video')),
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
 
     // Visitor Stats Table - Robust check to prevent transaction errors
     const tableExistsRes = await client.query(`
@@ -303,6 +314,8 @@ async function initializeDbSchema(): Promise<void> {
     await client.query('CREATE INDEX IF NOT EXISTS idx_followers_following_id ON user_followers (following_id)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_post_mentions_post_id ON post_mentions (post_id)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_device_tokens_user_id ON device_tokens (user_id);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_statuses_user_id_created_at ON statuses (user_id, created_at DESC)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_statuses_created_at ON statuses (created_at DESC)');
 
 
     await client.query('COMMIT');
@@ -896,4 +909,76 @@ export async function getMentionsForPostsDb(postIds: number[]): Promise<Map<numb
     mentionsMap.get(post_id)!.push({ id, name });
   }
   return mentionsMap;
+}
+
+// --- Status (Story) Functions ---
+
+export async function addStatusDb(newStatus: NewStatus): Promise<void> {
+  const dbPool = getDbPool();
+  if (!dbPool) throw new Error("Database not configured.");
+
+  const query = 'INSERT INTO statuses (user_id, media_url, media_type) VALUES ($1, $2, $3)';
+  await dbPool.query(query, [newStatus.userId, newStatus.mediaUrl, newStatus.mediaType]);
+}
+
+export async function getStatusesForFeedDb(userId: number): Promise<UserWithStatuses[]> {
+  const dbPool = getDbPool();
+  if (!dbPool) return [];
+
+  const followingQuery = 'SELECT following_id FROM user_followers WHERE follower_id = $1';
+  const followingResult = await dbPool.query(followingQuery, [userId]);
+  const followingIds = followingResult.rows.map(r => r.following_id);
+  
+  const userIdsToFetch = [userId, ...followingIds];
+  if (userIdsToFetch.length === 0) return [];
+
+  const query = `
+    SELECT 
+      s.id,
+      s.media_url,
+      s.media_type,
+      s.created_at,
+      u.id as user_id,
+      u.name as user_name,
+      u.profilepictureurl as user_profile_picture_url
+    FROM statuses s
+    JOIN users u ON s.user_id = u.id
+    WHERE s.user_id = ANY($1::int[])
+    AND s.created_at >= NOW() - INTERVAL '24 hours'
+    ORDER BY u.id, s.created_at ASC;
+  `;
+
+  const result: QueryResult<Status & { user_id: number; user_name: string; user_profile_picture_url: string | null }> = await dbPool.query(query, [userIdsToFetch]);
+  
+  const usersWithStatuses = new Map<number, UserWithStatuses>();
+  
+  for (const row of result.rows) {
+    if (!usersWithStatuses.has(row.user_id)) {
+      usersWithStatuses.set(row.user_id, {
+        userId: row.user_id,
+        userName: row.user_name,
+        userProfilePictureUrl: row.user_profile_picture_url,
+        statuses: [],
+      });
+    }
+    usersWithStatuses.get(row.user_id)!.statuses.push({
+      id: row.id,
+      media_url: row.media_url,
+      media_type: row.media_type,
+      created_at: row.created_at,
+    });
+  }
+  
+  const finalResult = Array.from(usersWithStatuses.values());
+  
+  finalResult.sort((a, b) => {
+    if (a.userId === userId) return -1;
+    if (b.userId === userId) return 1;
+    // For other users, you might want to sort them by who has the newest status
+    const aLatest = new Date(a.statuses[a.statuses.length - 1].created_at).getTime();
+    const bLatest = new Date(b.statuses[b.statuses.length - 1].created_at).getTime();
+    return bLatest - aLatest;
+  });
+  
+  return finalResult;
 }

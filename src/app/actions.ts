@@ -2,7 +2,7 @@
 'use server';
 
 import * as db from '@/lib/db';
-import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser } from '@/lib/db-types';
+import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 import { admin as firebaseAdmin } from '@/lib/firebase-admin';
 import { getSession } from '@/app/auth/actions';
@@ -608,6 +608,43 @@ export async function searchUsers(query: string): Promise<User[]> {
     return await db.searchUsersDb(query, user?.id);
   } catch (error) {
     console.error("Server action error searching users:", error);
+    return [];
+  }
+}
+
+// --- Status (Story) Actions ---
+
+export async function addStatus(mediaUrl: string, mediaType: 'image' | 'video'): Promise<{ success: boolean; error?: string }> {
+  const { user } = await getSession();
+  if (!user) {
+    return { success: false, error: 'You must be logged in to post a status.' };
+  }
+  
+  try {
+    const newStatus: NewStatus = {
+      userId: user.id,
+      mediaUrl,
+      mediaType,
+    };
+    await db.addStatusDb(newStatus);
+    revalidatePath('/'); // Revalidate home page to show new status
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error adding status:', error);
+    return { success: false, error: error.message || 'Failed to post status.' };
+  }
+}
+
+export async function getStatusesForFeed(): Promise<UserWithStatuses[]> {
+  const { user } = await getSession();
+  if (!user) {
+    return [];
+  }
+  
+  try {
+    return await db.getStatusesForFeedDb(user.id);
+  } catch (error) {
+    console.error('Error fetching statuses for feed:', error);
     return [];
   }
 }
