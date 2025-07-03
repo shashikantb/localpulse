@@ -655,21 +655,28 @@ export async function getStatusesForFeed(): Promise<UserWithStatuses[]> {
 
 export async function startChatAndRedirect(formData: FormData): Promise<void> {
   const { user } = await getSession();
-  if (!user) redirect('/login');
+  if (!user) {
+    redirect('/login');
+  }
 
   const otherUserIdRaw = formData.get('otherUserId');
-  if (!otherUserIdRaw) return;
-  const otherUserId = parseInt(otherUserIdRaw as string, 10);
-  if (isNaN(otherUserId) || otherUserId === user.id) return;
-  
-  try {
-    const conversationId = await db.findOrCreateConversationDb(user.id, otherUserId);
-    revalidatePath('/chat');
-    redirect(`/chat/${conversationId}`);
-  } catch(error) {
-    console.error('Failed to start chat:', error);
-    // You might want to redirect to an error page or show a toast
+  if (!otherUserIdRaw) {
+    console.error("startChatAndRedirect: otherUserId is missing from form data.");
+    return;
   }
+  
+  const otherUserId = parseInt(otherUserIdRaw as string, 10);
+  if (isNaN(otherUserId) || otherUserId === user.id) {
+    return;
+  }
+  
+  // By removing the try/catch, any error from the database will now
+  // bubble up and be displayed as a Next.js error page, which is
+  // more informative than silently failing.
+  const conversationId = await db.findOrCreateConversationDb(user.id, otherUserId);
+  
+  revalidatePath('/chat');
+  redirect(`/chat/${conversationId}`);
 }
 
 export async function getConversations(): Promise<Conversation[]> {
@@ -720,3 +727,5 @@ export async function getConversationPartner(conversationId: number, currentUser
         return null;
     }
 }
+
+    
