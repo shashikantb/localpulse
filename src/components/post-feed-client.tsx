@@ -322,6 +322,48 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
       }
     };
   }, [latestPostIdClientKnows, newPulsesAvailable, initialFetchComplete]);
+  
+  const handleLoadMore = useCallback(async () => {
+    if (isLoadingMore || !hasMorePosts) return;
+
+    setIsLoadingMore(true);
+    const nextPage = currentPage + 1;
+    try {
+        const newPosts = await getPosts({ page: nextPage, limit: POSTS_PER_PAGE });
+        if (newPosts.length > 0) {
+            setAllPosts(prevPosts => {
+                const existingIds = new Set(prevPosts.map(p => p.id));
+                const uniqueNewPosts = newPosts.filter(p => !existingIds.has(p.id));
+                return [...prevPosts, ...uniqueNewPosts];
+            });
+            setCurrentPage(nextPage);
+            if (newPosts.length < POSTS_PER_PAGE) {
+                setHasMorePosts(false);
+            }
+        } else {
+            setHasMorePosts(false);
+        }
+    } catch (error: any) {
+      console.error("Error loading more posts:", error.message);
+    } finally {
+        setIsLoadingMore(false);
+    }
+  }, [currentPage, hasMorePosts, isLoadingMore]);
+
+
+  const observer = useRef<IntersectionObserver>();
+  const loaderRef = useCallback((node: HTMLDivElement | null) => {
+    if (isLoadingMore) return;
+    if (observer.current) observer.current.disconnect();
+
+    observer.current = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && hasMorePosts) {
+        handleLoadMore();
+      }
+    });
+
+    if (node) observer.current.observe(node);
+  }, [isLoadingMore, hasMorePosts, handleLoadMore]);
 
 
   const filteredAndSortedPosts = useMemo(() => {
@@ -407,30 +449,6 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
   const handleLoadNewPulses = async () => {
     toast({ title: "Refreshing Pulses...", description: "Fetching the latest vibes for you." });
     await refreshPosts();
-  };
-  
-  const handleLoadMore = async () => {
-    if (isLoadingMore || !hasMorePosts) return; 
-
-    setIsLoadingMore(true);
-    const nextPage = currentPage + 1;
-    try {
-        const newPosts = await getPosts({ page: nextPage, limit: POSTS_PER_PAGE });
-        if (newPosts.length > 0) {
-            setAllPosts(prevPosts => [...prevPosts, ...newPosts]);
-            setCurrentPage(nextPage);
-            if (newPosts.length < POSTS_PER_PAGE) {
-                setHasMorePosts(false);
-            }
-        } else {
-            setHasMorePosts(false);
-        }
-    } catch (error: any) {
-      // Don't show a toast for this, just log it.
-      console.error("Error loading more posts:", error.message);
-    } finally {
-        setIsLoadingMore(false);
-    }
   };
 
   const handleDistanceChange = (value: number[]) => {
@@ -636,15 +654,26 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
       <div className="space-y-6">
         {filteredAndSortedPosts.length > 0 ? (
             <>
-            {filteredAndSortedPosts.map((post, index) => (
-                <PostCard key={post.id} post={post} userLocation={location} sessionUser={sessionUser} isFirst={index === 0} />
-            ))}
-            {hasMorePosts && (
-                <Button onClick={handleLoadMore} variant="outline" className="w-full mt-6 py-3 text-lg shadow-md hover:shadow-lg transition-shadow bg-card hover:bg-muted" disabled={isLoadingMore}>
-                   {isLoadingMore ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <ListPlus className="mr-2 h-5 w-5" /> }
-                    Load More Pulses
-                </Button>
-            )}
+              {filteredAndSortedPosts.map((post, index) => (
+                  <PostCard key={post.id} post={post} userLocation={location} sessionUser={sessionUser} isFirst={index === 0} />
+              ))}
+              
+              {/* Sentinel loader to trigger infinite scroll */}
+              <div ref={loaderRef} className="h-1 w-full" />
+              
+              {isLoadingMore && (
+                <div className="flex justify-center items-center py-6">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              )}
+
+              {!hasMorePosts && filteredAndSortedPosts.length > 0 && (
+                <div className="text-center text-muted-foreground py-10">
+                  <Zap className="mx-auto h-12 w-12 mb-4 opacity-50" />
+                  <p className="font-semibold">You've reached the end of the line!</p>
+                  <p className="text-sm">No more pulses to show for now.</p>
+                </div>
+              )}
             </>
         ) : (
           <NoPostsContent />
