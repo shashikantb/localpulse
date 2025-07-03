@@ -17,6 +17,7 @@ const POLLING_INTERVAL = 5000; // 5 seconds
 const ConversationItem = ({ conv }: { conv: Conversation }) => {
     const pathname = usePathname();
     const isActive = pathname === `/chat/${conv.id}`;
+    const showUnread = conv.unread_count > 0 && !isActive;
 
     return (
         <Link
@@ -34,14 +35,25 @@ const ConversationItem = ({ conv }: { conv: Conversation }) => {
             </Avatar>
             <div className="flex-1 overflow-hidden">
                 <div className="flex justify-between items-baseline">
-                    <p className="font-semibold truncate">{conv.participant_name}</p>
-                    <p className="text-xs text-muted-foreground flex-shrink-0">
-                        {conv.last_message_at ? formatDistanceToNowStrict(new Date(conv.last_message_at), { addSuffix: true }) : ''}
+                    <p className={cn("font-semibold truncate", showUnread ? "text-primary" : "")}>
+                        {conv.participant_name}
                     </p>
+                    {conv.last_message_at && (
+                        <p className="text-xs text-muted-foreground flex-shrink-0">
+                            {formatDistanceToNowStrict(new Date(conv.last_message_at), { addSuffix: true })}
+                        </p>
+                    )}
                 </div>
-                <p className="text-sm text-muted-foreground truncate">
-                    {conv.last_message_content || 'No messages yet.'}
-                </p>
+                <div className="flex justify-between items-center mt-0.5">
+                    <p className={cn("text-sm text-muted-foreground truncate", showUnread ? "font-bold text-foreground" : "")}>
+                        {conv.last_message_content || 'No messages yet.'}
+                    </p>
+                    {showUnread && (
+                        <span className="flex-shrink-0 ml-2 h-5 w-5 bg-accent text-accent-foreground text-xs font-bold flex items-center justify-center rounded-full">
+                            {conv.unread_count > 9 ? '9+' : conv.unread_count}
+                        </span>
+                    )}
+                </div>
             </div>
         </Link>
     )

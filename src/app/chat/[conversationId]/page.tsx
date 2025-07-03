@@ -1,5 +1,5 @@
 
-import { getMessages, getConversationPartner } from '@/app/actions';
+import { getMessages, getConversationPartner, markConversationAsRead } from '@/app/actions';
 import { getSession } from '@/app/auth/actions';
 import { notFound, redirect } from 'next/navigation';
 import ChatClient from './chat-client';
@@ -21,6 +21,7 @@ export default async function ConversationPage({ params }: { params: { conversat
   const [initialMessages, partner] = await Promise.all([
     getMessages(conversationId),
     getConversationPartner(conversationId, sessionUser.id),
+    markConversationAsRead(conversationId) // Mark as read on load
   ]);
 
   if (!partner) {

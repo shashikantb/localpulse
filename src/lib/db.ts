@@ -311,9 +311,19 @@ async function initializeDbSchema(): Promise<void> {
       CREATE TABLE IF NOT EXISTS conversation_participants (
         conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        unread_count INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (conversation_id, user_id)
       );
     `);
+    // Add unread_count column if it doesn't exist (migration for existing dbs)
+    const unreadCountColRes = await client.query(`
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name='conversation_participants' AND column_name='unread_count';
+    `);
+    if (unreadCountColRes.rowCount === 0) {
+        await client.query('ALTER TABLE conversation_participants ADD COLUMN unread_count INTEGER NOT NULL DEFAULT 0;');
+    }
+
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS messages (
@@ -1025,9 +1035,9 @@ export async function findOrCreateConversationDb(user1Id: number, user2Id: numbe
         await client.query('BEGIN');
         
         const findQuery = `
-            SELECT conversation_id
-            FROM conversation_participants cp1
-            JOIN conversation_participants cp2 ON cp1.conversation_id = cp2.conversation_id
+            SELECT cp1.conversation_id
+            FROM conversation_participants AS cp1
+            JOIN conversation_participants AS cp2 ON cp1.conversation_id = cp2.conversation_id
             WHERE cp1.user_id = $1 AND cp2.user_id = $2
             LIMIT 1;
         `;
@@ -1076,6 +1086,13 @@ export async function addMessageDb(newMessage: NewMessage): Promise<Message> {
         `;
         await client.query(updateConvQuery, [newMessage.conversationId]);
 
+        const updateUnreadQuery = `
+            UPDATE conversation_participants
+            SET unread_count = unread_count + 1
+            WHERE conversation_id = $1 AND user_id != $2;
+        `;
+        await client.query(updateUnreadQuery, [newMessage.conversationId, newMessage.senderId]);
+
         await client.query('COMMIT');
         return messageResult.rows[0];
 
@@ -1109,23 +1126,32 @@ export async function getConversationsForUserDb(userId: number): Promise<Convers
   const dbPool = getDbPool();
   if (!dbPool) return [];
 
-  // This new query is more robust and avoids complex joins that were causing issues.
   const query = `
+    WITH LastMessages AS (
+        SELECT
+            conversation_id,
+            content,
+            sender_id,
+            created_at,
+            ROW_NUMBER() OVER(PARTITION BY conversation_id ORDER BY created_at DESC) as rn
+        FROM messages
+    )
     SELECT
         c.id,
         c.created_at,
         c.last_message_at,
-        (SELECT user_id FROM conversation_participants WHERE conversation_id = c.id AND user_id != $1 LIMIT 1) AS participant_id,
-        (SELECT name FROM users WHERE id = (SELECT user_id FROM conversation_participants WHERE conversation_id = c.id AND user_id != $1 LIMIT 1)) AS participant_name,
-        (SELECT profilepictureurl FROM users WHERE id = (SELECT user_id FROM conversation_participants WHERE conversation_id = c.id AND user_id != $1 LIMIT 1)) AS participant_profile_picture_url,
-        (SELECT content FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_message_content,
-        (SELECT sender_id FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_message_sender_id
-    FROM
-        conversations c
-    WHERE
-        c.id IN (SELECT conversation_id FROM conversation_participants WHERE user_id = $1)
-    ORDER BY
-        c.last_message_at DESC;
+        other_participant.id AS participant_id,
+        other_participant.name AS participant_name,
+        other_participant.profilepictureurl AS participant_profile_picture_url,
+        lm.content AS last_message_content,
+        lm.sender_id AS last_message_sender_id,
+        cp_current.unread_count
+    FROM conversations c
+    JOIN conversation_participants cp_current ON c.id = cp_current.conversation_id AND cp_current.user_id = $1
+    JOIN conversation_participants cp_other ON c.id = cp_other.conversation_id AND cp_other.user_id != $1
+    JOIN users other_participant ON cp_other.user_id = other_participant.id
+    LEFT JOIN LastMessages lm ON c.id = lm.conversation_id AND lm.rn = 1
+    ORDER BY c.last_message_at DESC;
   `;
   const result: QueryResult<Conversation> = await dbPool.query(query, [userId]);
   return result.rows;
@@ -1143,4 +1169,30 @@ export async function getConversationPartnerDb(conversationId: number, currentUs
     `;
     const result = await dbPool.query(query, [conversationId, currentUserId]);
     return result.rows[0] || null;
+}
+
+
+export async function markConversationAsReadDb(conversationId: number, userId: number): Promise<void> {
+    const dbPool = getDbPool();
+    if (!dbPool) return;
+
+    const query = `
+        UPDATE conversation_participants
+        SET unread_count = 0
+        WHERE conversation_id = $1 AND user_id = $2;
+    `;
+    await dbPool.query(query, [conversationId, userId]);
+}
+
+export async function getTotalUnreadMessagesDb(userId: number): Promise<number> {
+    const dbPool = getDbPool();
+    if (!dbPool) return 0;
+    
+    const query = `
+        SELECT SUM(unread_count) as total_unread
+        FROM conversation_participants
+        WHERE user_id = $1;
+    `;
+    const result = await dbPool.query(query, [userId]);
+    return parseInt(result.rows[0]?.total_unread, 10) || 0;
 }

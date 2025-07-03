@@ -8,6 +8,7 @@ import { usePathname } from 'next/navigation';
 import { Home, Film, User as UserIcon, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getSession } from '@/app/auth/actions';
+import { getUnreadMessageCount } from '@/app/actions';
 import type { User } from '@/lib/db-types';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -22,24 +23,41 @@ const LoadingSkeleton: FC = () => (
     </div>
 );
 
+const UNREAD_POLL_INTERVAL = 15000; // 15 seconds
 
 const StickyNav: FC = () => {
   const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
 
+  // Effect to fetch initial session and unread count
   useEffect(() => {
-    // Client-side effect to fetch session data for dynamic link generation
     getSession().then(session => {
       setUser(session.user);
+      if (session.user) {
+        getUnreadMessageCount().then(setUnreadCount);
+      }
       setLoading(false);
     });
   }, [pathname]); // Re-fetch session data if the path changes
 
+  // Effect to poll for unread messages
+  useEffect(() => {
+    if (!user) return; // Only poll if user is logged in
+    
+    const intervalId = setInterval(() => {
+        getUnreadMessageCount().then(setUnreadCount);
+    }, UNREAD_POLL_INTERVAL);
+
+    return () => clearInterval(intervalId);
+  }, [user]);
+
+
   const navItems = [
     { name: 'Home', href: '/', icon: Home, current: pathname === '/' },
     { name: 'Reels', href: '/reels', icon: Film, current: pathname === '/reels' },
-    { name: 'Chat', href: '/chat', icon: MessageSquare, current: pathname.startsWith('/chat'), requiresAuth: true },
+    { name: 'Chat', href: '/chat', icon: MessageSquare, current: pathname.startsWith('/chat'), requiresAuth: true, badgeCount: unreadCount },
     { 
       name: 'Profile', 
       href: user ? `/users/${user.id}` : '/login', 
@@ -62,7 +80,7 @@ const StickyNav: FC = () => {
                     key={item.name}
                     href={item.href}
                     className={cn(
-                        'flex h-full w-full flex-row items-center justify-center space-x-2 border-b-2 px-4 text-sm font-medium transition-colors sm:flex-col sm:space-x-0 sm:space-y-1 sm:pt-2',
+                        'relative flex h-full w-full flex-row items-center justify-center space-x-2 border-b-2 px-4 text-sm font-medium transition-colors sm:flex-col sm:space-x-0 sm:space-y-1 sm:pt-2',
                         item.current
                         ? 'border-primary text-primary'
                         : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'
@@ -71,6 +89,11 @@ const StickyNav: FC = () => {
                     >
                     <item.icon className="h-5 w-5" />
                     <span>{item.name}</span>
+                    {item.badgeCount && item.badgeCount > 0 && (
+                        <span className="absolute top-1 right-4 sm:right-auto sm:left-1/2 sm:ml-4 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-accent-foreground text-[10px] font-bold ring-2 ring-background">
+                            {item.badgeCount > 9 ? '9+' : item.badgeCount}
+                        </span>
+                    )}
                     </Link>
                 )
             })}

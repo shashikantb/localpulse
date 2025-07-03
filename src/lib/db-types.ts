@@ -161,6 +161,7 @@ export interface Conversation {
   participant_profile_picture_url?: string | null;
   last_message_content?: string | null;
   last_message_sender_id?: number | null;
+  unread_count: number;
 }
 
 export interface Message {

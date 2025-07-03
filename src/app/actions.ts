@@ -728,4 +728,24 @@ export async function getConversationPartner(conversationId: number, currentUser
     }
 }
 
-    
+export async function getUnreadMessageCount(): Promise<number> {
+    const { user } = await getSession();
+    if (!user) return 0;
+    try {
+        return await db.getTotalUnreadMessagesDb(user.id);
+    } catch (error) {
+        console.error("Server action error fetching unread message count:", error);
+        return 0;
+    }
+}
+
+export async function markConversationAsRead(conversationId: number): Promise<void> {
+    const { user } = await getSession();
+    if (!user) return;
+    try {
+        await db.markConversationAsReadDb(conversationId, user.id);
+        revalidatePath('/chat'); // Revalidate sidebar and nav badge
+    } catch (error) {
+        console.error(`Server action error marking conversation ${conversationId} as read:`, error);
+    }
+}
