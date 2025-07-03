@@ -44,32 +44,6 @@ function getDbPool(): Pool | null {
   return pool;
 }
 
-// Self-healing function to fix out-of-sync ID sequences
-async function synchronizeAllSequences(client: any): Promise<void> {
-  const tablesWithSerialId = ['users', 'posts', 'post_likes', 'comments', 'device_tokens', 'statuses', 'conversations', 'messages'];
-  console.log('Synchronizing database sequences to prevent duplicate key errors...');
-
-  for (const table of tablesWithSerialId) {
-    try {
-      const syncQuery = `
-        SELECT setval(
-          pg_get_serial_sequence('"${table}"', 'id'),
-          COALESCE(MAX(id), 1),
-          (MAX(id) IS NOT NULL)
-        ) FROM "${table}";
-      `;
-      await client.query(syncQuery);
-    } catch (err: any) {
-      // This is expected on first run when tables don't exist yet, so we don't log an error.
-      if (err.code !== '42P01') { 
-        console.error(`Error synchronizing sequence for table '${table}': ${err.message}`);
-      }
-    }
-  }
-  console.log('Finished synchronizing sequences.');
-}
-
-
 // Function to initialize the database schema
 async function initializeDbSchema(): Promise<void> {
   const dbPool = getDbPool();
@@ -160,8 +134,6 @@ async function initializeDbSchema(): Promise<void> {
 
     await client.query('COMMIT');
     console.log('Database schema initialized successfully.');
-
-    await synchronizeAllSequences(client);
 
   } catch (err: any) {
     await client.query('ROLLBACK');
