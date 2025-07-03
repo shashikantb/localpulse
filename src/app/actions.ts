@@ -670,9 +670,6 @@ export async function startChatAndRedirect(formData: FormData): Promise<void> {
     return;
   }
   
-  // By removing the try/catch, any error from the database will now
-  // bubble up and be displayed as a Next.js error page, which is
-  // more informative than silently failing.
   const conversationId = await db.findOrCreateConversationDb(user.id, otherUserId);
   
   revalidatePath('/chat');
@@ -701,6 +698,48 @@ export async function getMessages(conversationId: number): Promise<Message[]> {
   }
 }
 
+async function sendChatNotification(conversationId: number, sender: User, content: string) {
+  try {
+    const partner = await db.getConversationPartnerDb(conversationId, sender.id);
+    if (!partner) return;
+
+    const deviceTokens = await db.getDeviceTokensForUsersDb([partner.id]);
+    if (deviceTokens.length === 0) return;
+
+    const notificationPayload = {
+      notification: {
+        title: `New message from ${sender.name}`,
+        body: content.length > 100 ? `${content.substring(0, 97)}...` : content,
+      },
+      data: {
+        conversationId: String(conversationId),
+        type: 'chat_message',
+      },
+      tokens: deviceTokens,
+      android: {
+        priority: 'high' as const,
+      },
+    };
+
+    const response = await firebaseAdmin.messaging().sendEachForMulticast(notificationPayload);
+
+    if (response.failureCount > 0) {
+      const failedTokens: string[] = [];
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success) {
+          failedTokens.push(deviceTokens[idx]);
+        }
+      });
+      console.error('List of tokens that failed for chat notification:', failedTokens);
+      for (const token of failedTokens) {
+        await db.deleteDeviceTokenDb(token);
+      }
+    }
+  } catch (error) {
+    console.error('Error sending chat notification:', error);
+  }
+}
+
 export async function sendMessage(conversationId: number, content: string): Promise<{ message?: Message; error?: string }> {
   const { user } = await getSession();
   if (!user) return { error: 'You must be logged in to send messages.' };
@@ -711,6 +750,12 @@ export async function sendMessage(conversationId: number, content: string): Prom
       senderId: user.id,
       content,
     });
+    
+    // Send notification in the background without blocking the response
+    sendChatNotification(conversationId, user, content).catch(err => {
+        console.error("Background task to send chat notification failed:", err);
+    });
+
     revalidatePath(`/chat/${conversationId}`);
     revalidatePath('/chat'); // To update the sidebar
     return { message };
