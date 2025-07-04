@@ -88,6 +88,156 @@ interface PostFeedClientProps {
   initialPosts: Post[];
 }
 
+// --- Helper Components ---
+
+const FilterSheetContent = ({
+  distanceFilterKm,
+  showAnyDistance,
+  handleDistanceChange,
+  location,
+  isLoadingMore,
+  filterHashtags,
+  handleHashtagFilterChange,
+  resetAllFilters,
+}: {
+  distanceFilterKm: number;
+  showAnyDistance: boolean;
+  handleDistanceChange: (value: number[]) => void;
+  location: { latitude: number; longitude: number } | null;
+  isLoadingMore: boolean;
+  filterHashtags: string[];
+  handleHashtagFilterChange: (tag: string, checked: boolean) => void;
+  resetAllFilters: () => void;
+}) => {
+  return (
+    <>
+      <SheetHeader>
+        <SheetTitle className="flex items-center"><Filter className="w-5 h-5 mr-2 text-accent" /> Filter Pulses</SheetTitle>
+        <SheetDescription>
+          Adjust filters to find relevant pulses. Your current location is used for distance.
+        </SheetDescription>
+      </SheetHeader>
+      <ScrollArea className="h-[calc(100vh-16rem)] pr-3">
+        <div className="space-y-6 py-4">
+          <div className="space-y-3">
+            <Label htmlFor="distance-filter-slider" className="text-muted-foreground flex justify-between items-center">
+              <span>Max Distance:</span>
+              <span className="font-semibold text-primary">
+                {showAnyDistance ? "Any Distance" : `${distanceFilterKm} km`}
+              </span>
+            </Label>
+            <Slider
+              id="distance-filter-slider"
+              min={1}
+              max={101}
+              step={1}
+              value={[distanceFilterKm]}
+              onValueChange={handleDistanceChange}
+              disabled={!location || isLoadingMore}
+              aria-label="Distance filter"
+            />
+            {!location && <p className="text-xs text-destructive mt-1">Enable location services to use distance filter.</p>}
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-muted-foreground flex items-center mb-1">
+              <Tag className="w-4 h-4 mr-1.5 text-primary" />
+              Filter by Hashtags:
+            </Label>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="w-full justify-between" disabled={isLoadingMore}>
+                  <span>Select Hashtags ({filterHashtags.length || 0} selected)</span>
+                  <ChevronDown className="ml-2 h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-[calc(var(--radix-dropdown-menu-trigger-width)_-_2px)] max-h-80 overflow-y-auto">
+                {HASHTAG_CATEGORIES.map((category, catIndex) => (
+                  <DropdownMenuGroup key={category.name}>
+                    <DropdownMenuLabel>{category.name}</DropdownMenuLabel>
+                    {category.hashtags.map((tag) => (
+                      <DropdownMenuCheckboxItem
+                        key={tag}
+                        checked={filterHashtags.includes(tag)}
+                        onCheckedChange={(checked) => handleHashtagFilterChange(tag, !!checked)}
+                        disabled={isLoadingMore}
+                      >
+                        {tag}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                    {catIndex < HASHTAG_CATEGORIES.length - 1 && <DropdownMenuSeparator />}
+                  </DropdownMenuGroup>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          <Button
+              variant="outline"
+              onClick={resetAllFilters}
+              disabled={isLoadingMore && (showAnyDistance && filterHashtags.length === 0)}
+              className="w-full"
+          >
+              Reset All Filters
+          </Button>
+        </div>
+      </ScrollArea>
+      <SheetFooter className="mt-4 border-t pt-4">
+        <SheetClose asChild>
+          <Button variant="outline">Close</Button>
+        </SheetClose>
+      </SheetFooter>
+    </>
+  );
+};
+
+const NotificationButtonContent = ({
+  notificationPermissionStatus,
+}: {
+  notificationPermissionStatus: 'default' | 'loading' | 'granted' | 'denied';
+}) => {
+  switch (notificationPermissionStatus) {
+    case 'loading':
+      return <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> <span className="hidden sm:inline">Checking...</span></>;
+    case 'granted':
+      return <><BellRing className="w-5 h-5 mr-2 text-green-500" /> <span className="hidden sm:inline">Subscribed</span></>;
+    case 'denied':
+      return <><BellOff className="w-5 h-5 mr-2 text-destructive" /> <span className="hidden sm:inline">Setup Failed</span></>;
+    case 'default':
+    default:
+      return <><Bell className="w-5 h-5 mr-2" /> <span className="hidden sm:inline">Notifications</span></>;
+  }
+};
+
+const NoPostsContent = ({
+  isLoading,
+  activeFilterCount,
+}: {
+  isLoading: boolean;
+  activeFilterCount: number;
+}) => {
+  if (isLoading) return null; // Don't show this if we are still loading
+
+  const hasFilters = activeFilterCount > 0;
+
+  return (
+    <Card className="text-center py-16 rounded-xl shadow-xl border border-border/40 bg-card/80 backdrop-blur-sm">
+      <CardContent className="flex flex-col items-center">
+        <Zap className="mx-auto h-20 w-20 text-muted-foreground/30 mb-6" />
+        <p className="text-2xl text-muted-foreground font-semibold">The air is quiet here...</p>
+        {hasFilters ? (
+          <p className="text-md text-muted-foreground/80 mt-2">No pulses found for your current filters. Try adjusting them!</p>
+        ) : (
+          <p className="text-md text-muted-foreground/80 mt-2">No pulses found nearby. Be the first to post!</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
+
+// --- Main Component ---
+
 const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
   const { toast } = useToast();
   
@@ -401,126 +551,11 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
     setFilterHashtags([]);
   };
 
-  const FilterSheetContent = () => (
-    <>
-      <SheetHeader>
-        <SheetTitle className="flex items-center"><Filter className="w-5 h-5 mr-2 text-accent" /> Filter Pulses</SheetTitle>
-        <SheetDescription>
-          Adjust filters to find relevant pulses. Your current location is used for distance.
-        </SheetDescription>
-      </SheetHeader>
-      <ScrollArea className="h-[calc(100vh-16rem)] pr-3">
-        <div className="space-y-6 py-4">
-          <div className="space-y-3">
-            <Label htmlFor="distance-filter-slider" className="text-muted-foreground flex justify-between items-center">
-              <span>Max Distance:</span>
-              <span className="font-semibold text-primary">
-                {showAnyDistance ? "Any Distance" : `${distanceFilterKm} km`}
-              </span>
-            </Label>
-            <Slider
-              id="distance-filter-slider"
-              min={1}
-              max={101} 
-              step={1}
-              value={[distanceFilterKm]} 
-              onValueChange={handleDistanceChange} 
-              disabled={!location || isLoadingMore}
-              aria-label="Distance filter"
-            />
-            {!location && <p className="text-xs text-destructive mt-1">Enable location services to use distance filter.</p>}
-          </div>
-
-          <div className="space-y-3">
-            <Label className="text-muted-foreground flex items-center mb-1">
-              <Tag className="w-4 h-4 mr-1.5 text-primary" />
-              Filter by Hashtags:
-            </Label>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="w-full justify-between" disabled={isLoadingMore}>
-                  <span>Select Hashtags ({filterHashtags.length || 0} selected)</span>
-                  <ChevronDown className="ml-2 h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-[calc(var(--radix-dropdown-menu-trigger-width)_-_2px)] max-h-80 overflow-y-auto">
-                {HASHTAG_CATEGORIES.map((category, catIndex) => (
-                  <DropdownMenuGroup key={category.name}>
-                    <DropdownMenuLabel>{category.name}</DropdownMenuLabel>
-                    {category.hashtags.map((tag) => (
-                      <DropdownMenuCheckboxItem
-                        key={tag}
-                        checked={filterHashtags.includes(tag)}
-                        onCheckedChange={(checked) => handleHashtagFilterChange(tag, !!checked)}
-                        disabled={isLoadingMore}
-                      >
-                        {tag}
-                      </DropdownMenuCheckboxItem>
-                    ))}
-                    {catIndex < HASHTAG_CATEGORIES.length - 1 && <DropdownMenuSeparator />}
-                  </DropdownMenuGroup>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-
-          <Button
-              variant="outline"
-              onClick={resetAllFilters}
-              disabled={isLoadingMore && (showAnyDistance && filterHashtags.length === 0)}
-              className="w-full"
-          >
-              Reset All Filters
-          </Button>
-        </div>
-      </ScrollArea>
-      <SheetFooter className="mt-4 border-t pt-4">
-        <SheetClose asChild>
-          <Button variant="outline">Close</Button>
-        </SheetClose>
-      </SheetFooter>
-    </>
-  );
-
-  const activeFilterCount = (filterHashtags.length > 0 ? 1 : 0) + (!showAnyDistance ? 1 : 0);
-  
-  const NotificationButtonContent = () => {
-    switch(notificationPermissionStatus) {
-        case 'loading':
-            return <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> <span className="hidden sm:inline">Checking...</span></>;
-        case 'granted':
-            return <><BellRing className="w-5 h-5 mr-2 text-green-500" /> <span className="hidden sm:inline">Subscribed</span></>;
-        case 'denied':
-            return <><BellOff className="w-5 h-5 mr-2 text-destructive" /> <span className="hidden sm:inline">Setup Failed</span></>;
-        case 'default':
-        default:
-             return <><Bell className="w-5 h-5 mr-2" /> <span className="hidden sm:inline">Notifications</span></>;
-    }
-  };
-  
-  const NoPostsContent = () => {
-    if (isLoading) return null; // Don't show this if we are still loading
-
-    const hasFilters = activeFilterCount > 0;
-    
-    return (
-       <Card className="text-center py-16 rounded-xl shadow-xl border border-border/40 bg-card/80 backdrop-blur-sm">
-            <CardContent className="flex flex-col items-center">
-                <Zap className="mx-auto h-20 w-20 text-muted-foreground/30 mb-6" />
-                <p className="text-2xl text-muted-foreground font-semibold">The air is quiet here...</p>
-                 {hasFilters ? (
-                    <p className="text-md text-muted-foreground/80 mt-2">No pulses found for your current filters. Try adjusting them!</p>
-                ) : (
-                    <p className="text-md text-muted-foreground/80 mt-2">No pulses found nearby. Be the first to post!</p>
-                )}
-            </CardContent>
-        </Card>
-    )
-  }
-
   if (isLoading && allPosts.length === 0) {
     return <PostFeedSkeleton />;
   }
+  
+  const activeFilterCount = (filterHashtags.length > 0 ? 1 : 0) + (!showAnyDistance ? 1 : 0);
 
   return (
     <div {...swipeHandlers}>
@@ -543,7 +578,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
                 </p>
               </div>
             </AlertDialogDescription>
-          </AlertDialogFooter>
+          </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>I'll check later</AlertDialogCancel>
             <AlertDialogAction onClick={() => {
@@ -562,7 +597,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
               disabled={notificationPermissionStatus === 'loading'}
               aria-label="Toggle Notifications"
           >
-              <NotificationButtonContent />
+              <NotificationButtonContent notificationPermissionStatus={notificationPermissionStatus} />
           </Button>
           <Sheet>
               <SheetTrigger asChild>
@@ -572,7 +607,16 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
                   </Button>
               </SheetTrigger>
               <SheetContent className="bg-card/95 backdrop-blur-md border-border w-full sm:max-w-md flex flex-col">
-                  <FilterSheetContent />
+                  <FilterSheetContent 
+                    distanceFilterKm={distanceFilterKm}
+                    showAnyDistance={showAnyDistance}
+                    handleDistanceChange={handleDistanceChange}
+                    location={location}
+                    isLoadingMore={isLoadingMore}
+                    filterHashtags={filterHashtags}
+                    handleHashtagFilterChange={handleHashtagFilterChange}
+                    resetAllFilters={resetAllFilters}
+                  />
               </SheetContent>
           </Sheet>
       </div>
@@ -608,7 +652,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
               )}
             </>
         ) : (
-          <NoPostsContent />
+          <NoPostsContent isLoading={isLoading} activeFilterCount={activeFilterCount} />
         )}
       </div>
     </div>
