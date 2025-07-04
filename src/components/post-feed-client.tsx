@@ -4,7 +4,7 @@
 import type { FC } from 'react';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { Post, User } from '@/lib/db-types';
-import { getPosts, registerDeviceToken, checkForNewerPosts } from '@/app/actions';
+import { getPosts, registerDeviceToken } from '@/app/actions';
 import { getSession } from '@/app/auth/actions';
 import { PostCard } from '@/components/post-card';
 import { PostFeedSkeleton } from './post-feed-skeleton';
@@ -60,7 +60,6 @@ declare global {
 }
 
 const POSTS_PER_PAGE = 5;
-const NEW_POST_POLL_INTERVAL = 30000;
 const POSTS_CACHE_KEY = 'localpulse-posts-cache';
 const CACHE_VERSION = 'v1.1'; // Increment to invalidate old cache structures
 
@@ -97,11 +96,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [isLoading, setIsLoading] = useState(allPosts.length === 0);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [initialFetchComplete, setInitialFetchComplete] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [latestPostIdClientKnows, setLatestPostIdClientKnows] = useState<number>(0);
-  const [newPulsesAvailable, setNewPulsesAvailable] = useState(false);
-  const [newPulsesCount, setNewPulsesCount] = useState(0);
   const [hasMorePosts, setHasMorePosts] = useState<boolean>(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [distanceFilterKm, setDistanceFilterKm] = useState<number>(101); 
@@ -171,7 +166,6 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
         console.error("Silent background refresh failed:", error);
       } finally {
         setIsLoading(false);
-        setInitialFetchComplete(true); // Signal that the first load is done and polling can begin.
       }
     };
     
@@ -247,8 +241,6 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
 
   const refreshPosts = useCallback(async () => {
     setIsRefreshing(true);
-    setNewPulsesAvailable(false);
-    setNewPulsesCount(0);
     try {
       const newInitialPosts = await getPosts({ page: 1, limit: POSTS_PER_PAGE });
       setAllPosts(newInitialPosts);
@@ -259,71 +251,10 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
       }
     } catch (error: any) {
       console.error("Error refreshing posts:", error);
-      setNewPulsesAvailable(true); // Re-enable button if refresh fails
     } finally {
       setIsRefreshing(false);
     }
   }, []);
-
-  useEffect(() => {
-    if (allPosts.length > 0) {
-        setLatestPostIdClientKnows(allPosts.reduce((max, p) => p.id > max ? p.id : max, 0));
-    }
-  }, [allPosts]);
-
-  // Polling for new posts, now more bfcache-friendly.
-  useEffect(() => {
-    // Only start polling after the very first data load is complete.
-    if (!initialFetchComplete) {
-        return;
-    }
-
-    let intervalId: NodeJS.Timeout | null = null;
-
-    const pollForNewPosts = async () => {
-      try {
-        const result = await checkForNewerPosts(latestPostIdClientKnows);
-        if (result.hasNewerPosts) {
-          setNewPulsesAvailable(true);
-          setNewPulsesCount(result.count);
-          // Once we know there are new posts, we can stop polling.
-          if (intervalId) clearInterval(intervalId);
-          intervalId = null;
-        }
-      } catch (error) {
-        console.warn("Polling for new posts failed:", error);
-      }
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        // Tab is hidden, clear the interval to stop polling.
-        if (intervalId) clearInterval(intervalId);
-        intervalId = null;
-      } else {
-        // Tab is visible, start a new interval if one isn't already running.
-        if (!newPulsesAvailable) { // Don't restart polling if we already found new posts
-            pollForNewPosts(); // Poll immediately
-            if (intervalId === null) {
-              intervalId = setInterval(pollForNewPosts, NEW_POST_POLL_INTERVAL);
-            }
-        }
-      }
-    };
-
-    // Run on initial mount
-    handleVisibilityChange();
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    // Cleanup function
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
-    };
-  }, [latestPostIdClientKnows, newPulsesAvailable, initialFetchComplete]);
   
   const handleLoadMore = useCallback(async () => {
     if (isLoadingMore || !hasMorePosts) return;
@@ -417,26 +348,16 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
             }
             return 0;
         });
-    } else if (location) { // Default logic for Business/anonymous users with location
-        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-
+    } else if (location) { // Default logic for Business/public/anonymous users with location
         processedPosts.sort((a, b) => {
-            const isANew = new Date(a.createdat) > twentyFourHoursAgo;
-            const isBNew = new Date(b.createdat) > twentyFourHoursAgo;
-
-            // Prioritize new posts over old posts
-            if (isANew && !isBNew) return -1;
-            if (!isANew && isBNew) return 1;
-
-            // If both are in the same age group (both new or both old), sort by distance
             const distA = calculateDistance(location.latitude, location.longitude, a.latitude, a.longitude);
             const distB = calculateDistance(location.latitude, location.longitude, b.latitude, b.longitude);
             
-            if (Math.abs(distA - distB) < 0.1) { // If distance is very similar
-                // sort by newest
+            // If distance is very similar, sort by newest
+            if (Math.abs(distA - distB) < 0.1) { 
                 return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
             }
-            // sort by distance
+            // Primarily sort by distance
             return distA - distB;
         });
     } else { // Fallback if no location: sort by newest
@@ -446,12 +367,6 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
     return processedPosts;
 
   }, [allPosts, location, distanceFilterKm, showAnyDistance, filterHashtags, sessionUser, calculateDistance, isLoading]);
-
-
-  const handleLoadNewPulses = async () => {
-    toast({ title: "Refreshing Pulses...", description: "Fetching the latest vibes for you." });
-    await refreshPosts();
-  };
   
   const handleRefresh = async () => {
     if (isLoading || isLoadingMore || isRefreshing) return;
@@ -628,7 +543,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
                 </p>
               </div>
             </AlertDialogDescription>
-          </AlertDialogHeader>
+          </AlertDialogFooter>
           <AlertDialogFooter>
             <AlertDialogCancel>I'll check later</AlertDialogCancel>
             <AlertDialogAction onClick={() => {
@@ -640,13 +555,6 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
       </AlertDialog>
 
       <div className="flex justify-end items-center sticky top-16 z-30 mb-4 px-1 gap-2 flex-wrap">
-          {newPulsesAvailable && (
-              <Button variant="outline" size="sm" onClick={handleLoadNewPulses} className="animate-pulse bg-accent/10 hover:bg-accent/20 border-accent/50 text-accent hover:text-accent/90 shadow-md mr-auto">
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Load {newPulsesCount} New {newPulsesCount === 1 ? "Pulse" : "Pulses"}
-              </Button>
-          )}
-
           <Button
               variant="outline"
               className="shadow-lg hover:shadow-xl transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary"
