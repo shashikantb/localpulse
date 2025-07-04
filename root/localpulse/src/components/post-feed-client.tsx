@@ -557,7 +557,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
                 </p>
               </div>
             </AlertDialogDescription>
-          </AlertDialogHeader>
+          </AlertDialogFooter>
           <AlertDialogFooter>
             <AlertDialogCancel>I'll check later</AlertDialogCancel>
             <AlertDialogAction onClick={() => {
