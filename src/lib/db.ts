@@ -191,7 +191,9 @@ export async function getPostsDb(
     let orderByClause: string;
     const queryParams: (string | number)[] = [options.limit, options.offset];
 
-    if (options.latitude != null && options.longitude != null) {
+    if (userRole === 'Gorakshak') {
+      orderByClause = 'p.createdat DESC';
+    } else if (options.latitude != null && options.longitude != null) {
       // Sort by distance if location is provided
       orderByClause = `earth_distance(ll_to_earth(p.latitude, p.longitude), ll_to_earth($3, $4)) ASC`;
       queryParams.push(options.latitude, options.longitude);
@@ -909,6 +911,24 @@ export async function getFollowingListDb(userId: number): Promise<FollowUser[]> 
   }
 }
 
+export async function getFollowedUserIdsDb(currentUserId: number, authorIds: number[]): Promise<Set<number>> {
+  await ensureDbInitialized();
+  const dbPool = getDbPool();
+  if (!dbPool || authorIds.length === 0) return new Set();
+
+  const client = await dbPool.connect();
+  try {
+    const query = `
+      SELECT following_id FROM user_followers 
+      WHERE follower_id = $1 AND following_id = ANY($2::int[]);
+    `;
+    const result = await client.query(query, [currentUserId, authorIds]);
+    return new Set(result.rows.map(r => r.following_id));
+  } finally {
+    client.release();
+  }
+}
+
 
 // --- Mention Functions ---
 
@@ -1255,4 +1275,3 @@ export async function getTotalUnreadMessagesDb(userId: number): Promise<number> 
       client.release();
     }
 }
-

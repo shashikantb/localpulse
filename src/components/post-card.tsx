@@ -29,6 +29,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
+import FollowButton from './follow-button';
 
 const CommentSectionSkeleton = () => (
   <div className="px-5 pb-4 border-t border-border/30 pt-4 bg-muted/20 space-y-4">
@@ -372,16 +373,24 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
         </Avatar>
         <div className="flex-1">
           <div className="flex items-center justify-between">
-            {post.authorid ? (
-              <Link href={`/users/${post.authorid}`} className="text-sm text-primary font-semibold flex items-center hover:underline">
-                {authorName}
-              </Link>
-            ) : (
-              <p className="text-sm text-primary font-semibold flex items-center">
-                {authorName}
-              </p>
-            )}
-            <CardDescription className="text-xs text-muted-foreground font-medium">
+            <div className="flex items-center gap-2 flex-wrap">
+              {post.authorid ? (
+                <Link href={`/users/${post.authorid}`} className="text-sm text-primary font-semibold flex items-center hover:underline">
+                  {authorName}
+                </Link>
+              ) : (
+                <p className="text-sm text-primary font-semibold flex items-center">
+                  {authorName}
+                </p>
+              )}
+              {sessionUser && post.authorid && !isOwnPost && (
+                  <FollowButton 
+                      targetUserId={post.authorid} 
+                      initialIsFollowing={!!post.isAuthorFollowedByCurrentUser} 
+                  />
+              )}
+            </div>
+            <CardDescription className="text-xs text-muted-foreground font-medium flex-shrink-0 ml-2">
               {timeAgo}
             </CardDescription>
           </div>

@@ -61,6 +61,7 @@ export interface Post {
   authorrole: UserRole | null; // This will be joined from the users table
   authorprofilepictureurl?: string | null; // This will be joined from the users table
   isLikedByCurrentUser?: boolean; // Added to track if the session user liked this post
+  isAuthorFollowedByCurrentUser?: boolean;
   mentions?: { id: number; name: string; }[];
 }
 

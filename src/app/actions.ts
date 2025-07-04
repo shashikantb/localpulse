@@ -35,15 +35,18 @@ export async function getPosts(options?: { page: number; limit: number; latitude
     
     if (posts.length > 0) {
         const postIds = posts.map(p => p.id);
-        
-        const [likedPostIds, mentionsMap] = await Promise.all([
+        const authorIds = [...new Set(posts.map(p => p.authorid).filter((id): id is number => id !== null))];
+
+        const [likedPostIds, mentionsMap, followedAuthorIds] = await Promise.all([
             user ? db.getLikedPostIdsForUserDb(user.id, postIds) : Promise.resolve(new Set<number>()),
-            db.getMentionsForPostsDb(postIds)
+            db.getMentionsForPostsDb(postIds),
+            (user && authorIds.length > 0) ? db.getFollowedUserIdsDb(user.id, authorIds) : Promise.resolve(new Set<number>())
         ]);
 
         posts.forEach((post: any) => {
             post.isLikedByCurrentUser = likedPostIds.has(post.id);
             post.mentions = mentionsMap.get(post.id) || [];
+            post.isAuthorFollowedByCurrentUser = followedAuthorIds.has(post.authorid);
         });
     }
     
@@ -89,15 +92,18 @@ export async function getMediaPosts(options?: { page: number; limit: number }): 
 
     if (posts.length > 0) {
         const postIds = posts.map(p => p.id);
+        const authorIds = [...new Set(posts.map(p => p.authorid).filter((id): id is number => id !== null))];
 
-        const [likedPostIds, mentionsMap] = await Promise.all([
+        const [likedPostIds, mentionsMap, followedAuthorIds] = await Promise.all([
             user ? db.getLikedPostIdsForUserDb(user.id, postIds) : Promise.resolve(new Set<number>()),
-            db.getMentionsForPostsDb(postIds)
+            db.getMentionsForPostsDb(postIds),
+            (user && authorIds.length > 0) ? db.getFollowedUserIdsDb(user.id, authorIds) : Promise.resolve(new Set<number>())
         ]);
         
         posts.forEach((post: any) => {
             post.isLikedByCurrentUser = likedPostIds.has(post.id);
             post.mentions = mentionsMap.get(post.id) || [];
+            post.isAuthorFollowedByCurrentUser = followedAuthorIds.has(post.authorid);
         });
     }
 
@@ -524,14 +530,18 @@ export async function getPostsByUserId(userId: number): Promise<Post[]> {
     
     if (posts.length > 0) {
         const postIds = posts.map(p => p.id);
-        const [likedPostIds, mentionsMap] = await Promise.all([
+        const authorIds = [...new Set(posts.map(p => p.authorid).filter((id): id is number => id !== null))];
+
+        const [likedPostIds, mentionsMap, followedAuthorIds] = await Promise.all([
             sessionUser ? db.getLikedPostIdsForUserDb(sessionUser.id, postIds) : Promise.resolve(new Set<number>()),
-            db.getMentionsForPostsDb(postIds)
+            db.getMentionsForPostsDb(postIds),
+            (sessionUser && authorIds.length > 0) ? db.getFollowedUserIdsDb(sessionUser.id, authorIds) : Promise.resolve(new Set<number>())
         ]);
 
         posts.forEach((post: any) => {
             post.isLikedByCurrentUser = likedPostIds.has(post.id);
             post.mentions = mentionsMap.get(post.id) || [];
+            post.isAuthorFollowedByCurrentUser = followedAuthorIds.has(post.authorid);
         });
     }
     
@@ -550,13 +560,16 @@ export async function getPostById(postId: number): Promise<Post | null> {
 
     if (post) {
         const postIds = [post.id];
-        const [likedPostIds, mentionsMap] = await Promise.all([
+        const authorIds = post.authorid ? [post.authorid] : [];
+        const [likedPostIds, mentionsMap, followedAuthorIds] = await Promise.all([
             user ? db.getLikedPostIdsForUserDb(user.id, postIds) : Promise.resolve(new Set<number>()),
-            db.getMentionsForPostsDb(postIds)
+            db.getMentionsForPostsDb(postIds),
+            (user && authorIds.length > 0) ? db.getFollowedUserIdsDb(user.id, authorIds) : Promise.resolve(new Set<number>())
         ]);
         
         (post as any).isLikedByCurrentUser = likedPostIds.has(post.id);
         (post as any).mentions = mentionsMap.get(post.id) || [];
+        (post as any).isAuthorFollowedByCurrentUser = followedAuthorIds.has(post.authorid);
     }
 
     return post;
