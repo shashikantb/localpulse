@@ -2,7 +2,7 @@
 import type { FC } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { getPendingUsers, approveUser, rejectUser } from './actions';
+import { getPendingUsers, approveUser, rejectUser } from '@/app/admin/(authed)/approvals/actions';
 import { UserCheck, UserX, Building, ShieldCheck, Mail, Calendar } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { revalidatePath } from 'next/cache';
