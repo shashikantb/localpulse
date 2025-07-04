@@ -199,14 +199,14 @@ function NotificationButtonContent({
 }) {
   switch (notificationPermissionStatus) {
     case 'loading':
-      return <><Loader2 className="w-4 h-4 sm:mr-2 animate-spin" /> <span className="hidden sm:inline">Checking...</span></>;
+      return <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> <span className="hidden sm:inline">Checking...</span></>;
     case 'granted':
-      return <><BellRing className="w-4 h-4 sm:mr-2 text-green-500" /> <span className="hidden sm:inline">Subscribed</span></>;
+      return <><BellRing className="w-5 h-5 mr-2 text-green-500" /> <span className="hidden sm:inline">Subscribed</span></>;
     case 'denied':
-      return <><BellOff className="w-4 h-4 sm:mr-2 text-destructive" /> <span className="hidden sm:inline">Setup</span></>;
+      return <><BellOff className="w-5 h-5 mr-2 text-destructive" /> <span className="hidden sm:inline">Setup Failed</span></>;
     case 'default':
     default:
-      return <><Bell className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Notify Me</span></>;
+      return <><Bell className="w-5 h-5 mr-2" /> <span className="hidden sm:inline">Notifications</span></>;
   }
 }
 
@@ -217,9 +217,7 @@ function NoPostsContent({
   isLoading: boolean;
   activeFilterCount: number;
 }) {
-  if (isLoading) {
-    return null; // Don't show this if we are still loading
-  }
+  if (isLoading) return null; // Don't show this if we are still loading
 
   const hasFilters = activeFilterCount > 0;
 
@@ -557,7 +555,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
                 </p>
               </div>
             </AlertDialogDescription>
-          </AlertDialogFooter>
+          </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>I'll check later</AlertDialogCancel>
             <AlertDialogAction onClick={() => {
@@ -568,44 +566,36 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
         </AlertDialogContent>
       </AlertDialog>
 
-      <div className="flex justify-between items-center border-b-2 border-primary/30 pb-3 mb-4">
-        <h2 className="text-2xl sm:text-3xl font-bold text-primary pl-1 flex items-center">
-          <Rss className="w-6 h-6 sm:w-8 sm:h-8 mr-2 text-accent opacity-90" />
-          Nearby Pulses
-        </h2>
-        <div className="flex items-center gap-1">
+      <div className="flex justify-between items-center sticky top-16 z-30 mb-4 px-1 gap-2 flex-wrap">
           <Button
-            variant="outline"
-            size="sm"
-            className="shadow-md hover:shadow-lg transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary"
-            onClick={handleNotificationRegistration}
-            disabled={notificationPermissionStatus === 'loading'}
-            aria-label="Toggle Notifications"
+              variant="outline"
+              className="shadow-lg hover:shadow-xl transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary"
+              onClick={handleNotificationRegistration}
+              disabled={notificationPermissionStatus === 'loading'}
+              aria-label="Toggle Notifications"
           >
-            <NotificationButtonContent notificationPermissionStatus={notificationPermissionStatus} />
+              <NotificationButtonContent notificationPermissionStatus={notificationPermissionStatus} />
           </Button>
           <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="outline" size="sm" className="shadow-md hover:shadow-lg transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary" aria-label="Open filters">
-                  <SlidersHorizontal className="w-4 h-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Filters</span>
-                  {activeFilterCount > 0 && <span className="ml-2 bg-accent text-accent-foreground text-xs px-1.5 py-0.5 rounded-full">{activeFilterCount}</span>}
-              </Button>
-            </SheetTrigger>
-            <SheetContent className="bg-card/95 backdrop-blur-md border-border w-full sm:max-w-md flex flex-col">
-              <FilterSheetContent 
-                distanceFilterKm={distanceFilterKm}
-                showAnyDistance={showAnyDistance}
-                handleDistanceChange={handleDistanceChange}
-                location={location}
-                isLoadingMore={isLoadingMore}
-                filterHashtags={filterHashtags}
-                handleHashtagFilterChange={handleHashtagFilterChange}
-                resetAllFilters={resetAllFilters}
-              />
-            </SheetContent>
+              <SheetTrigger asChild>
+                  <Button variant="outline" className="shadow-lg hover:shadow-xl transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary" aria-label="Open filters">
+                  <SlidersHorizontal className="w-5 h-5 mr-2" />
+                  Filters {activeFilterCount > 0 && <span className="ml-2 bg-accent text-accent-foreground text-xs px-1.5 py-0.5 rounded-full">{activeFilterCount}</span>}
+                  </Button>
+              </SheetTrigger>
+              <SheetContent className="bg-card/95 backdrop-blur-md border-border w-full sm:max-w-md flex flex-col">
+                  <FilterSheetContent 
+                    distanceFilterKm={distanceFilterKm}
+                    showAnyDistance={showAnyDistance}
+                    handleDistanceChange={handleDistanceChange}
+                    location={location}
+                    isLoadingMore={isLoadingMore}
+                    filterHashtags={filterHashtags}
+                    handleHashtagFilterChange={handleHashtagFilterChange}
+                    resetAllFilters={resetAllFilters}
+                  />
+              </SheetContent>
           </Sheet>
-        </div>
       </div>
       
       {isRefreshing && (
@@ -647,3 +637,4 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
 };
 
 export default PostFeedClient;
+

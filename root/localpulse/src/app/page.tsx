@@ -1,7 +1,7 @@
 
 import type { FC } from 'react';
 import { Suspense } from 'react';
-import { getSession } from './auth/actions';
+import { getSession } from '@/app/auth/actions';
 import PostComposerLoader, { PostComposerSkeleton } from '@/components/post-composer-loader';
 import PostFeedLoader from '@/components/post-feed-loader';
 import StatusFeed from '@/components/status-feed';
