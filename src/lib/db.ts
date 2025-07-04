@@ -74,7 +74,8 @@ async function initializeDbSchema(): Promise<void> {
             role VARCHAR(50) NOT NULL CHECK (role IN ('Business', 'Gorakshak', 'Admin', 'Public(जनता)')),
             status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
             createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-            profilepictureurl TEXT
+            profilepictureurl TEXT,
+            mobilenumber VARCHAR(20)
         );
         `);
         
@@ -182,7 +183,7 @@ const POST_COLUMNS_SANITIZED = `
 `;
 
 const USER_COLUMNS_SANITIZED = `
-  id, email, name, role, status, createdat, profilepictureurl
+  id, email, name, role, status, createdat, profilepictureurl, mobilenumber
 `;
 
 export async function getPostsDb(
@@ -642,11 +643,11 @@ export async function createUserDb(newUser: NewUser, status: 'pending' | 'approv
       const passwordhash = await bcrypt.hash(newUser.passwordplaintext, salt);
       
       const query = `
-          INSERT INTO users(name, email, passwordhash, role, status)
-          VALUES($1, $2, $3, $4, $5)
-          RETURNING id, name, email, role, status, createdat, profilepictureurl;
+          INSERT INTO users(name, email, passwordhash, role, status, mobilenumber)
+          VALUES($1, $2, $3, $4, $5, $6)
+          RETURNING ${USER_COLUMNS_SANITIZED};
       `;
-      const values = [newUser.name, newUser.email.toLowerCase(), passwordhash, newUser.role, status];
+      const values = [newUser.name, newUser.email.toLowerCase(), passwordhash, newUser.role, status, newUser.mobilenumber];
       const result: QueryResult<User> = await client.query(query, values);
       return result.rows[0];
     } finally {
@@ -751,7 +752,7 @@ export async function getPendingUsersDb(): Promise<User[]> {
     const client = await dbPool.connect();
     try {
       const query = `
-          SELECT id, name, email, role, status, createdat, profilepictureurl
+          SELECT ${USER_COLUMNS_SANITIZED}
           FROM users 
           WHERE status = 'pending'
           ORDER BY createdat ASC;
@@ -771,7 +772,7 @@ export async function getAllUsersDb(): Promise<User[]> {
     const client = await dbPool.connect();
     try {
       const query = `
-          SELECT id, name, email, role, status, createdat, profilepictureurl
+          SELECT ${USER_COLUMNS_SANITIZED}
           FROM users 
           ORDER BY createdat DESC;
       `;
@@ -793,7 +794,7 @@ export async function updateUserStatusDb(userId: number, status: 'approved' | 'r
           UPDATE users
           SET status = $1
           WHERE id = $2
-          RETURNING id, name, email, role, status, createdat, profilepictureurl;
+          RETURNING ${USER_COLUMNS_SANITIZED};
       `;
       const result: QueryResult<User> = await client.query(query, [status, userId]);
       return result.rows[0] || null;
@@ -813,7 +814,7 @@ export async function updateUserDb(userId: number, userData: UpdatableUserFields
         UPDATE users
         SET name = $1, email = $2, role = $3, status = $4
         WHERE id = $5
-        RETURNING id, name, email, role, status, createdat, profilepictureurl;
+        RETURNING ${USER_COLUMNS_SANITIZED};
       `;
       const values = [userData.name, userData.email.toLowerCase(), userData.role, userData.status, userId];
       const result: QueryResult<User> = await client.query(query, values);
@@ -952,7 +953,7 @@ export async function searchUsersDb(query: string, currentUserId?: number): Prom
   const client = await dbPool.connect();
   try {
     const sqlQuery = `
-      SELECT id, name, email, role, status, createdat, profilepictureurl 
+      SELECT ${USER_COLUMNS_SANITIZED}
       FROM users 
       WHERE name ILIKE $1 
         AND status = 'approved'
@@ -1288,4 +1289,22 @@ export async function getTotalUnreadMessagesDb(userId: number): Promise<number> 
     }
 }
 
-    
+export async function updateUserMobileDb(userId: number, mobileNumber: string): Promise<User | null> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) throw new Error("Database not configured.");
+
+    const client = await dbPool.connect();
+    try {
+        const query = `
+            UPDATE users
+            SET mobilenumber = $1
+            WHERE id = $2
+            RETURNING ${USER_COLUMNS_SANITIZED};
+        `;
+        const result = await client.query(query, [mobileNumber, userId]);
+        return result.rows[0] || null;
+    } finally {
+        client.release();
+    }
+}

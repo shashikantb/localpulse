@@ -2,7 +2,7 @@
 'use client';
 
 import type { FC } from 'react';
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -15,7 +15,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { signUp } from '@/app/auth/actions';
-import { Loader2, UserPlus, ShieldAlert, Building, ShieldCheck, User } from 'lucide-react';
+import { Loader2, UserPlus, ShieldAlert, Building, ShieldCheck, User, Phone } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 
@@ -24,6 +24,15 @@ const signupSchema = z.object({
   email: z.string().email('Please enter a valid email address.'),
   password: z.string().min(8, 'Password must be at least 8 characters.'),
   role: z.enum(['Business', 'Gorakshak', 'Public(जनता)'], { required_error: 'You must select a role.' }),
+  mobilenumber: z.string().optional(),
+}).superRefine((data, ctx) => {
+  if (data.role === 'Gorakshak' && (!data.mobilenumber || !/^\d{10}$/.test(data.mobilenumber))) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "A valid 10-digit mobile number is required for the Gorakshak role.",
+      path: ['mobilenumber'],
+    });
+  }
 });
 
 type SignupFormInputs = z.infer<typeof signupSchema>;
@@ -41,8 +50,11 @@ const SignupPage: FC = () => {
       name: '',
       email: '',
       password: '',
+      mobilenumber: '',
     },
   });
+
+  const selectedRole = form.watch('role');
 
   const onSubmit: SubmitHandler<SignupFormInputs> = async (data) => {
     setIsSubmitting(true);
@@ -197,6 +209,25 @@ const SignupPage: FC = () => {
                   </FormItem>
                 )}
               />
+              
+              {selectedRole === 'Gorakshak' && (
+                <FormField
+                  control={form.control}
+                  name="mobilenumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <Label htmlFor="mobilenumber">Mobile Number</Label>
+                       <div className="relative">
+                        <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <FormControl>
+                          <Input id="mobilenumber" type="tel" placeholder="10-digit mobile number" className="pl-10" {...field} disabled={isSubmitting} />
+                        </FormControl>
+                       </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
 
               <Button type="submit" className="w-full" disabled={isSubmitting || !form.formState.isValid}>
                 {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

@@ -10,6 +10,7 @@ export interface User {
   status: 'pending' | 'approved' | 'rejected';
   createdat: string;
   profilepictureurl?: string | null;
+  mobilenumber?: string | null;
 }
 
 // For displaying in the following list
@@ -30,6 +31,7 @@ export type NewUser = {
   email: string;
   role: 'Business' | 'Gorakshak' | 'Public(जनता)';
   passwordplaintext: string;
+  mobilenumber?: string;
 };
 
 // For updating a user from the admin panel

@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation';
 import { getUserWithFollowInfo, getPostsByUserId, startChatAndRedirect } from '@/app/actions';
 import { getSession } from '@/app/auth/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Card, CardHeader, CardContent, CardTitle } from '@/components/ui/card';
+import { Card, CardHeader, CardContent, CardTitle, CardDescription } from '@/components/ui/card';
 import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, MessageSquare, Settings } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
@@ -18,6 +18,8 @@ import UsernameEditor from '@/components/username-editor';
 import FollowingListDialog from '@/components/following-list-dialog';
 import LogoutButton from '@/components/logout-button';
 import { ThemeSwitcher } from '@/components/theme-switcher';
+import BajrangDalIdCard from '@/components/bajrang-dal-id-card';
+import UpdateMobileForm from '@/components/update-mobile-form';
 
 
 interface UserProfilePageProps {
@@ -52,6 +54,7 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
   };
 
   const isOwnProfile = sessionUser?.id === profileUser.id;
+  const isGorakshak = profileUser.role === 'Gorakshak';
 
   return (
     <div className="flex flex-col items-center p-4 sm:p-6 md:p-8 lg:p-16 bg-gradient-to-br from-background to-muted/30">
@@ -145,6 +148,24 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
             </div>
           </CardHeader>
         </Card>
+
+        {isOwnProfile && isGorakshak && (
+          <Card className="shadow-xl border border-border/60 rounded-xl bg-card/80 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle>बजरंग दल ID Card</CardTitle>
+              <CardDescription>
+                {profileUser.mobilenumber ? 'Your digital ID card. You can download it as an image.' : 'Please provide your mobile number to generate your ID card.'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {profileUser.mobilenumber ? (
+                <BajrangDalIdCard user={profileUser} />
+              ) : (
+                <UpdateMobileForm />
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {isOwnProfile && (
           <Card className="shadow-xl border border-border/60 rounded-xl bg-card/80 backdrop-blur-sm">

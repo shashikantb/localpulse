@@ -139,7 +139,7 @@ export async function updateUserProfilePicture(imageUrl: string): Promise<{ succ
     return { success: true };
   } catch (error: any) {
     console.error(`Error updating profile picture for user ${user.id}:`, error);
-    return { success: false, error: error.message || 'Failed to update profile picture.' };
+    return { success: false, error: 'Failed to update profile picture.' };
   }
 }
 
