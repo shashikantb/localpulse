@@ -1,4 +1,5 @@
 
+
 import { Pool, type QueryResult } from 'pg';
 import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Status, Conversation, Message, NewMessage, ConversationParticipant } from './db-types';
 import bcrypt from 'bcryptjs';
@@ -172,21 +173,42 @@ const USER_COLUMNS_SANITIZED = `
   id, email, name, role, status, createdat, profilepictureurl
 `;
 
-export async function getPostsDb(options: { limit: number; offset: number } = { limit: 10, offset: 0 }, userRole?: UserRole): Promise<Post[]> {
+export async function getPostsDb(
+  options: { 
+    limit: number; 
+    offset: number;
+    latitude?: number | null;
+    longitude?: number | null;
+  } = { limit: 10, offset: 0 },
+  userRole?: UserRole
+): Promise<Post[]> {
   await ensureDbInitialized();
   const dbPool = getDbPool();
   if (!dbPool) return [];
 
   const client = await dbPool.connect();
   try {
+    let orderByClause: string;
+    const queryParams: (string | number)[] = [options.limit, options.offset];
+
+    if (options.latitude != null && options.longitude != null) {
+      // Sort by distance if location is provided
+      orderByClause = `earth_distance(ll_to_earth(p.latitude, p.longitude), ll_to_earth($3, $4)) ASC`;
+      queryParams.push(options.latitude, options.longitude);
+    } else {
+      // Fallback to sort by date
+      orderByClause = 'p.createdat DESC';
+    }
+
     const postsQuery = `
       SELECT ${POST_COLUMNS_SANITIZED}
       FROM posts p
       LEFT JOIN users u ON p.authorid = u.id
-      ORDER BY p.createdat DESC
+      ORDER BY ${orderByClause}
       LIMIT $1 OFFSET $2
     `;
-    const postsResult = await client.query(postsQuery, [options.limit, options.offset]);
+
+    const postsResult = await client.query(postsQuery, queryParams);
     return postsResult.rows;
   } finally {
     client.release();
@@ -1233,3 +1255,4 @@ export async function getTotalUnreadMessagesDb(userId: number): Promise<number> 
       client.release();
     }
 }
+

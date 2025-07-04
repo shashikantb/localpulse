@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import type { FC } from 'react';
@@ -90,7 +91,7 @@ interface PostFeedClientProps {
 
 // --- Helper Components ---
 
-const FilterSheetContent = ({
+function FilterSheetContent({
   distanceFilterKm,
   showAnyDistance,
   handleDistanceChange,
@@ -108,7 +109,7 @@ const FilterSheetContent = ({
   filterHashtags: string[];
   handleHashtagFilterChange: (tag: string, checked: boolean) => void;
   resetAllFilters: () => void;
-}) => {
+}) {
   return (
     <>
       <SheetHeader>
@@ -189,13 +190,13 @@ const FilterSheetContent = ({
       </SheetFooter>
     </>
   );
-};
+}
 
-const NotificationButtonContent = ({
+function NotificationButtonContent({
   notificationPermissionStatus,
 }: {
   notificationPermissionStatus: 'default' | 'loading' | 'granted' | 'denied';
-}) => {
+}) {
   switch (notificationPermissionStatus) {
     case 'loading':
       return <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> <span className="hidden sm:inline">Checking...</span></>;
@@ -207,15 +208,15 @@ const NotificationButtonContent = ({
     default:
       return <><Bell className="w-5 h-5 mr-2" /> <span className="hidden sm:inline">Notifications</span></>;
   }
-};
+}
 
-const NoPostsContent = ({
+function NoPostsContent({
   isLoading,
   activeFilterCount,
 }: {
   isLoading: boolean;
   activeFilterCount: number;
-}) => {
+}) {
   if (isLoading) return null; // Don't show this if we are still loading
 
   const hasFilters = activeFilterCount > 0;
@@ -233,7 +234,7 @@ const NoPostsContent = ({
       </CardContent>
     </Card>
   );
-};
+}
 
 
 // --- Main Component ---
@@ -287,6 +288,9 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
   // Effect for initial load (stale-while-revalidate)
   useEffect(() => {
     const loadInitialData = async () => {
+      // If we have cached posts, show them first.
+      setIsLoading(allPosts.length === 0);
+
       // Fetch fresh data and other info in the background
       const sessionPromise = getSession();
       const locationPromise = new Promise<{ latitude: number; longitude: number } | null>(resolve => {
@@ -300,14 +304,22 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
           resolve(null);
         }
       });
-      const postsPromise = getPosts({ page: 1, limit: POSTS_PER_PAGE });
 
       try {
-        const [session, loc, freshPosts] = await Promise.all([sessionPromise, locationPromise, postsPromise]);
+        const [session, loc] = await Promise.all([sessionPromise, locationPromise]);
         
-        // Update state with fresh data
         setSessionUser(session.user);
         setLocation(loc);
+
+        // NOW fetch posts with the location data
+        const freshPosts = await getPosts({ 
+            page: 1, 
+            limit: POSTS_PER_PAGE,
+            latitude: loc?.latitude, // Pass location if available
+            longitude: loc?.longitude
+        });
+        
+        // Update state with fresh data
         setAllPosts(freshPosts); // This replaces cached data with fresh data
         setCurrentPage(1);
         setHasMorePosts(freshPosts.length === POSTS_PER_PAGE);
@@ -392,7 +404,12 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
   const refreshPosts = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const newInitialPosts = await getPosts({ page: 1, limit: POSTS_PER_PAGE });
+      const newInitialPosts = await getPosts({ 
+        page: 1, 
+        limit: POSTS_PER_PAGE, 
+        latitude: location?.latitude, 
+        longitude: location?.longitude 
+      });
       setAllPosts(newInitialPosts);
       setCurrentPage(1);
       setHasMorePosts(newInitialPosts.length === POSTS_PER_PAGE);
@@ -404,7 +421,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
     } finally {
       setIsRefreshing(false);
     }
-  }, []);
+  }, [location]);
   
   const handleLoadMore = useCallback(async () => {
     if (isLoadingMore || !hasMorePosts) return;
@@ -412,7 +429,12 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
     setIsLoadingMore(true);
     const nextPage = currentPage + 1;
     try {
-        const newPosts = await getPosts({ page: nextPage, limit: POSTS_PER_PAGE });
+        const newPosts = await getPosts({ 
+          page: nextPage, 
+          limit: POSTS_PER_PAGE, 
+          latitude: location?.latitude, 
+          longitude: location?.longitude 
+        });
         if (newPosts.length > 0) {
             setAllPosts(prevPosts => {
                 const existingIds = new Set(prevPosts.map(p => p.id));
@@ -431,7 +453,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
     } finally {
         setIsLoadingMore(false);
     }
-  }, [currentPage, hasMorePosts, isLoadingMore]);
+  }, [currentPage, hasMorePosts, isLoadingMore, location]);
 
 
   const observer = useRef<IntersectionObserver>();
@@ -449,17 +471,17 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
   }, [isLoadingMore, hasMorePosts, handleLoadMore]);
 
 
-  const filteredAndSortedPosts = useMemo(() => {
+  const filteredPosts = useMemo(() => {
     if (isLoading) {
         return [];
     }
 
     let processedPosts = [...allPosts];
     
-    // FILTERING FIRST - This is more efficient as we sort a smaller array.
+    // FILTERING ONLY - primary sorting is now done on the server.
     if (location && !showAnyDistance) {
       processedPosts = processedPosts.filter(p => 
-        p.latitude && p.longitude && 
+        p.latitude != null && p.longitude != null && 
         calculateDistance(location.latitude, location.longitude, p.latitude, p.longitude) <= distanceFilterKm
       );
     }
@@ -470,53 +492,8 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
       );
     }
 
-    // SORTING SECOND
-    // Role-based sorting logic
-    if (sessionUser?.role === 'Gorakshak' && location) {
-        processedPosts.sort((a, b) => {
-            const isAGorakshak = a.authorrole === 'Gorakshak';
-            const isBGorakshak = b.authorrole === 'Gorakshak';
-            const distA = calculateDistance(location.latitude, location.longitude, a.latitude, a.longitude);
-            const distB = calculateDistance(location.latitude, location.longitude, b.latitude, b.longitude);
-            const NEARBY_THRESHOLD_KM = 20; 
-            const isANearbyGorakshak = isAGorakshak && (distA <= NEARBY_THRESHOLD_KM);
-            const isBNearbyGorakshak = isBGorakshak && (distB <= NEARBY_THRESHOLD_KM);
-
-            if (isANearbyGorakshak && !isBNearbyGorakshak) return -1;
-            if (!isANearbyGorakshak && isBNearbyGorakshak) return 1;
-            if (isAGorakshak && !isBGorakshak) return -1;
-            if (!isAGorakshak && isBGorakshak) return 1;
-
-            if (isAGorakshak && isBGorakshak) {
-                return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
-            }
-            if (!isAGorakshak && !isBGorakshak) {
-                if (Math.abs(distA - distB) < 0.1) {
-                    return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
-                }
-                return distA - distB;
-            }
-            return 0;
-        });
-    } else if (location) { // Default logic for Business/public/anonymous users with location
-        processedPosts.sort((a, b) => {
-            const distA = calculateDistance(location.latitude, location.longitude, a.latitude, a.longitude);
-            const distB = calculateDistance(location.latitude, location.longitude, b.latitude, b.longitude);
-            
-            // If distance is very similar, sort by newest
-            if (Math.abs(distA - distB) < 0.1) { 
-                return new Date(b.createdat).getTime() - new Date(a.createdat).getTime();
-            }
-            // Primarily sort by distance
-            return distA - distB;
-        });
-    } else { // Fallback if no location: sort by newest
-       processedPosts.sort((a, b) => new Date(b.createdat).getTime() - new Date(a.createdat).getTime());
-    }
-    
     return processedPosts;
-
-  }, [allPosts, location, distanceFilterKm, showAnyDistance, filterHashtags, sessionUser, calculateDistance, isLoading]);
+  }, [allPosts, location, distanceFilterKm, showAnyDistance, filterHashtags, calculateDistance, isLoading]);
   
   const handleRefresh = async () => {
     if (isLoading || isLoadingMore || isRefreshing) return;
@@ -628,9 +605,9 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
       )}
 
       <div className="space-y-6">
-        {filteredAndSortedPosts.length > 0 ? (
+        {filteredPosts.length > 0 ? (
             <>
-              {filteredAndSortedPosts.map((post, index) => (
+              {filteredPosts.map((post, index) => (
                   <PostCard key={post.id} post={post} userLocation={location} sessionUser={sessionUser} isFirst={index === 0} />
               ))}
               
@@ -643,7 +620,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
                 </div>
               )}
 
-              {!hasMorePosts && filteredAndSortedPosts.length > 0 && (
+              {!hasMorePosts && filteredPosts.length > 0 && (
                 <div className="text-center text-muted-foreground py-10">
                   <Zap className="mx-auto h-12 w-12 mb-4 opacity-50" />
                   <p className="font-semibold">You've reached the end of the line!</p>
@@ -660,3 +637,4 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
 };
 
 export default PostFeedClient;
+

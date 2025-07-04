@@ -21,13 +21,15 @@ async function geocodeCoordinates(latitude: number, longitude: number): Promise<
 
 // The mapPostFromDb function is no longer needed as sanitization happens at the DB query level.
 
-export async function getPosts(options?: { page: number; limit: number }): Promise<Post[]> {
+export async function getPosts(options?: { page: number; limit: number; latitude?: number | null; longitude?: number | null; }): Promise<Post[]> {
   try {
     const { user } = await getSession();
     const dbOptions = options ? {
         limit: options.limit,
-        offset: (options.page - 1) * options.limit
-    } : undefined;
+        offset: (options.page - 1) * options.limit,
+        latitude: options.latitude,
+        longitude: options.longitude
+    } : { limit: 10, offset: 0 };
 
     let posts = await db.getPostsDb(dbOptions, user?.role);
     
