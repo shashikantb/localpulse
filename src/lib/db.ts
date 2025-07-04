@@ -1,6 +1,6 @@
 
 
-import { Pool, type QueryResult } from 'pg';
+import { Pool, Client, type QueryResult } from 'pg';
 import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Status, Conversation, Message, NewMessage, ConversationParticipant } from './db-types';
 import bcrypt from 'bcryptjs';
 
@@ -45,109 +45,121 @@ function getDbPool(): Pool | null {
   return pool;
 }
 
-// Function to initialize the database schema
+// Function to initialize the database schema.
+// This uses a DEDICATED client instead of one from the pool to avoid blocking the pool during long initializations.
 async function initializeDbSchema(): Promise<void> {
-  const dbPool = getDbPool();
-  if (!dbPool) {
-    // console.log("Skipping DB schema initialization: POSTGRES_URL is not set.");
-    return;
-  }
+    const connectionString = process.env.POSTGRES_URL;
+    if (!connectionString) {
+      // This case is handled by getDbPool, but good to be safe.
+      return;
+    }
 
-  const client = await dbPool.connect();
-  try {
-    console.log('PostgreSQL pool connected. Initializing database schema...');
-    await client.query('BEGIN');
+    const initClient = new Client({
+        connectionString,
+        ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
+    });
 
-    // Users Table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        passwordhash VARCHAR(255) NOT NULL,
-        role VARCHAR(50) NOT NULL CHECK (role IN ('Business', 'Gorakshak', 'Admin', 'Public(जनता)')),
-        status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
-        createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-        profilepictureurl TEXT
-      );
-    `);
-    
-    // Posts Table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS posts (
-        id SERIAL PRIMARY KEY,
-        content TEXT NOT NULL,
-        latitude REAL NOT NULL,
-        longitude REAL NOT NULL,
-        createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-        mediaurls TEXT[],
-        mediatype VARCHAR(10) CHECK (mediatype IN ('image', 'video', 'gallery')),
-        likecount INTEGER DEFAULT 0,
-        commentcount INTEGER DEFAULT 0,
-        viewcount INTEGER DEFAULT 0,
-        notifiedcount INTEGER DEFAULT 0,
-        city VARCHAR(255),
-        hashtags TEXT[],
-        authorid INTEGER REFERENCES users(id) ON DELETE SET NULL
-      );
-    `);
-    
-    // Post Likes Table
-    await client.query(`CREATE TABLE IF NOT EXISTS post_likes ( id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE, createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, post_id));`);
-    // Comments Table
-    await client.query(`CREATE TABLE IF NOT EXISTS comments ( id SERIAL PRIMARY KEY, postid INTEGER REFERENCES posts(id) ON DELETE CASCADE NOT NULL, author VARCHAR(255) NOT NULL, content TEXT NOT NULL, createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP );`);
-    // User Followers Table
-    await client.query(`CREATE TABLE IF NOT EXISTS user_followers ( follower_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, following_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (follower_id, following_id) );`);
-    // Post Mentions Table
-    await client.query(`CREATE TABLE IF NOT EXISTS post_mentions ( post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE, mentioned_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (post_id, mentioned_user_id) );`);
-    // Statuses Table
-    await client.query(`CREATE TABLE IF NOT EXISTS statuses ( id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, media_url TEXT NOT NULL, media_type VARCHAR(10) NOT NULL CHECK (media_type IN ('image', 'video')), created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP );`);
-    // Device Tokens Table
-    await client.query(`CREATE TABLE IF NOT EXISTS device_tokens ( id SERIAL PRIMARY KEY, token TEXT UNIQUE NOT NULL, latitude REAL, longitude REAL, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, last_updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP );`);
-    // Visitor Stats Table
-    await client.query(`CREATE TABLE IF NOT EXISTS visitor_stats ( stat_key VARCHAR(255) PRIMARY KEY, value BIGINT NOT NULL );`);
-    await client.query(`INSERT INTO visitor_stats (stat_key, value) VALUES ('total_visits', 0), ('daily_visits_date', 0), ('daily_visits_count', 0) ON CONFLICT (stat_key) DO NOTHING;`);
-    // Chat Tables
-    await client.query(`CREATE TABLE IF NOT EXISTS conversations ( id SERIAL PRIMARY KEY, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, last_message_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP );`);
-    await client.query(`CREATE TABLE IF NOT EXISTS conversation_participants ( conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, unread_count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (conversation_id, user_id) );`);
-    await client.query(`CREATE TABLE IF NOT EXISTS messages ( id SERIAL PRIMARY KEY, conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, content TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP );`);
+    try {
+        await initClient.connect();
+        console.log('Dedicated client connected for schema initialization...');
+        await initClient.query('BEGIN');
 
-    // --- Indexes for performance ---
-    await client.query('CREATE INDEX IF NOT EXISTS idx_posts_createdat ON posts (createdat DESC)');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_posts_authorid ON posts (authorid)');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_users_status ON users (status)');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_comments_postid ON comments (postid)');
-    await client.query('CREATE EXTENSION IF NOT EXISTS cube');
-    await client.query('CREATE EXTENSION IF NOT EXISTS earthdistance');
-    await client.query('CREATE INDEX IF NOT EXISTS posts_geo_idx ON posts USING gist (ll_to_earth(latitude, longitude))');
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_posts_media ON posts (createdat DESC) WHERE mediaurls IS NOT NULL AND array_length(mediaurls, 1) > 0 AND mediaurls[1] IS NOT NULL`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_users_role_id ON users(role, id)`);
-    await client.query('CREATE INDEX IF NOT EXISTS idx_post_likes_user_post ON post_likes (user_id, post_id)');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_followers_follower_id ON user_followers (follower_id)');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_followers_following_id ON user_followers (following_id)');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_post_mentions_post_id ON post_mentions (post_id)');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_device_tokens_user_id ON device_tokens (user_id);');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_statuses_user_id_created_at ON statuses (user_id, created_at DESC)');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_statuses_created_at ON statuses (created_at DESC)');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_conversations_last_message_at ON conversations(last_message_at DESC)');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_conversation_participants_user_id ON conversation_participants(user_id)');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_messages_conversation_id_created_at ON messages(conversation_id, created_at DESC)');
+        // Users Table
+        await initClient.query(`
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            email VARCHAR(255) UNIQUE NOT NULL,
+            passwordhash VARCHAR(255) NOT NULL,
+            role VARCHAR(50) NOT NULL CHECK (role IN ('Business', 'Gorakshak', 'Admin', 'Public(जनता)')),
+            status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+            createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+            profilepictureurl TEXT
+        );
+        `);
+        
+        // Posts Table
+        await initClient.query(`
+        CREATE TABLE IF NOT EXISTS posts (
+            id SERIAL PRIMARY KEY,
+            content TEXT NOT NULL,
+            latitude REAL NOT NULL,
+            longitude REAL NOT NULL,
+            createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+            mediaurls TEXT[],
+            mediatype VARCHAR(10) CHECK (mediatype IN ('image', 'video', 'gallery')),
+            likecount INTEGER DEFAULT 0,
+            commentcount INTEGER DEFAULT 0,
+            viewcount INTEGER DEFAULT 0,
+            notifiedcount INTEGER DEFAULT 0,
+            city VARCHAR(255),
+            hashtags TEXT[],
+            authorid INTEGER REFERENCES users(id) ON DELETE SET NULL
+        );
+        `);
+        
+        // Post Likes Table
+        await initClient.query(`CREATE TABLE IF NOT EXISTS post_likes ( id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE, createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, post_id));`);
+        // Comments Table
+        await initClient.query(`CREATE TABLE IF NOT EXISTS comments ( id SERIAL PRIMARY KEY, postid INTEGER REFERENCES posts(id) ON DELETE CASCADE NOT NULL, author VARCHAR(255) NOT NULL, content TEXT NOT NULL, createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP );`);
+        // User Followers Table
+        await initClient.query(`CREATE TABLE IF NOT EXISTS user_followers ( follower_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, following_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (follower_id, following_id) );`);
+        // Post Mentions Table
+        await initClient.query(`CREATE TABLE IF NOT EXISTS post_mentions ( post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE, mentioned_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (post_id, mentioned_user_id) );`);
+        // Statuses Table
+        await initClient.query(`CREATE TABLE IF NOT EXISTS statuses ( id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, media_url TEXT NOT NULL, media_type VARCHAR(10) NOT NULL CHECK (media_type IN ('image', 'video')), created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP );`);
+        // Device Tokens Table
+        await initClient.query(`CREATE TABLE IF NOT EXISTS device_tokens ( id SERIAL PRIMARY KEY, token TEXT UNIQUE NOT NULL, latitude REAL, longitude REAL, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, last_updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP );`);
+        // Visitor Stats Table
+        await initClient.query(`CREATE TABLE IF NOT EXISTS visitor_stats ( stat_key VARCHAR(255) PRIMARY KEY, value BIGINT NOT NULL );`);
+        await initClient.query(`INSERT INTO visitor_stats (stat_key, value) VALUES ('total_visits', 0), ('daily_visits_date', 0), ('daily_visits_count', 0) ON CONFLICT (stat_key) DO NOTHING;`);
+        // Chat Tables
+        await initClient.query(`CREATE TABLE IF NOT EXISTS conversations ( id SERIAL PRIMARY KEY, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, last_message_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP );`);
+        await initClient.query(`CREATE TABLE IF NOT EXISTS conversation_participants ( conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, unread_count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (conversation_id, user_id) );`);
+        await initClient.query(`CREATE TABLE IF NOT EXISTS messages ( id SERIAL PRIMARY KEY, conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, content TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP );`);
 
-    await client.query('COMMIT');
-    console.log('Database schema initialized successfully.');
+        // --- Indexes for performance ---
+        await initClient.query('CREATE INDEX IF NOT EXISTS idx_posts_createdat ON posts (createdat DESC)');
+        await initClient.query('CREATE INDEX IF NOT EXISTS idx_posts_authorid ON posts (authorid)');
+        await initClient.query('CREATE INDEX IF NOT EXISTS idx_users_status ON users (status)');
+        await initClient.query('CREATE INDEX IF NOT EXISTS idx_comments_postid ON comments (postid)');
+        await initClient.query('CREATE EXTENSION IF NOT EXISTS cube');
+        await initClient.query('CREATE EXTENSION IF NOT EXISTS earthdistance');
+        await initClient.query('CREATE INDEX IF NOT EXISTS posts_geo_idx ON posts USING gist (ll_to_earth(latitude, longitude))');
+        await initClient.query(`CREATE INDEX IF NOT EXISTS idx_posts_media ON posts (createdat DESC) WHERE mediaurls IS NOT NULL AND array_length(mediaurls, 1) > 0 AND mediaurls[1] IS NOT NULL`);
+        await initClient.query(`CREATE INDEX IF NOT EXISTS idx_users_role_id ON users(role, id)`);
+        await initClient.query('CREATE INDEX IF NOT EXISTS idx_post_likes_user_post ON post_likes (user_id, post_id)');
+        await initClient.query('CREATE INDEX IF NOT EXISTS idx_followers_follower_id ON user_followers (follower_id)');
+        await initClient.query('CREATE INDEX IF NOT EXISTS idx_followers_following_id ON user_followers (following_id)');
+        await initClient.query('CREATE INDEX IF NOT EXISTS idx_post_mentions_post_id ON post_mentions (post_id)');
+        await initClient.query('CREATE INDEX IF NOT EXISTS idx_device_tokens_user_id ON device_tokens (user_id);');
+        await initClient.query('CREATE INDEX IF NOT EXISTS idx_statuses_user_id_created_at ON statuses (user_id, created_at DESC)');
+        await initClient.query('CREATE INDEX IF NOT EXISTS idx_statuses_created_at ON statuses (created_at DESC)');
+        await initClient.query('CREATE INDEX IF NOT EXISTS idx_conversations_last_message_at ON conversations(last_message_at DESC)');
+        await initClient.query('CREATE INDEX IF NOT EXISTS idx_conversation_participants_user_id ON conversation_participants(user_id)');
+        await initClient.query('CREATE INDEX IF NOT EXISTS idx_messages_conversation_id_created_at ON messages(conversation_id, created_at DESC)');
 
-  } catch (err: any) {
-    await client.query('ROLLBACK');
-    console.error('Failed to initialize database schema', err);
-    throw new Error(`Critical: Failed to initialize DB schema on startup. ${err.message}`);
-  } finally {
-    client.release();
-  }
+        await initClient.query('COMMIT');
+        console.log('Database schema initialized successfully via dedicated client.');
+
+    } catch (err: any) {
+        // We try to rollback, but it might fail if the connection is already lost.
+        try { await initClient.query('ROLLBACK'); } catch (rbErr) { console.error('Rollback failed:', rbErr); }
+        console.error('Failed to initialize database schema', err);
+        throw new Error(`Critical: Failed to initialize DB schema on startup. ${err.message}`);
+    } finally {
+        // Ensure the dedicated client connection is always closed.
+        await initClient.end();
+        console.log('Dedicated client for schema initialization has been disconnected.');
+    }
 }
+
 
 // This function ensures that initialization is only attempted once.
 function ensureDbInitialized() {
     if (!initializationPromise) {
+        // Ensure the pool is created before we attempt initialization.
+        getDbPool();
         console.log("Database not initialized, starting initialization...");
         initializationPromise = initializeDbSchema().catch(err => {
             initializationPromise = null;
@@ -1275,3 +1287,5 @@ export async function getTotalUnreadMessagesDb(userId: number): Promise<number> 
       client.release();
     }
 }
+
+    
