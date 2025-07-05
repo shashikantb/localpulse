@@ -1,9 +1,8 @@
 
-
 'use server';
 
 import * as db from '@/lib/db';
-import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus, Conversation, Message, ConversationParticipant, PendingFamilyRequest, FamilyMember } from '@/lib/db-types';
+import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus, Conversation, Message, ConversationParticipant, PendingFamilyRequest, FamilyMember, FamilyMemberLocation } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 import { admin as firebaseAdmin } from '@/lib/firebase-admin';
 import { getSession } from '@/app/auth/actions';
@@ -976,4 +975,15 @@ export async function toggleLocationSharing(targetUserId: number, share: boolean
     console.error(`Error toggling location sharing for user ${targetUserId}:`, error);
     return { success: false, error: 'An unexpected server error occurred.' };
   }
+}
+
+export async function getFamilyLocations(): Promise<FamilyMemberLocation[]> {
+    const { user } = await getSession();
+    if (!user) return [];
+    try {
+        return await db.getFamilyLocationsDb(user.id);
+    } catch (error) {
+        console.error(`Error fetching family member locations for user ${user.id}:`, error);
+        return [];
+    }
 }

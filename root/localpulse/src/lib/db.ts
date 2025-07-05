@@ -1,8 +1,7 @@
 
 
-
 import { Pool, Client, type QueryResult } from 'pg';
-import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Status, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest, FamilyMember } from '@/lib/db-types';
+import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Status, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest, FamilyMember, FamilyMemberLocation } from '@/lib/db-types';
 import bcrypt from 'bcryptjs';
 
 // Re-export db-types
@@ -161,6 +160,7 @@ async function initializeDbSchema(): Promise<void> {
         await initClient.query('CREATE INDEX IF NOT EXISTS idx_messages_conversation_id_created_at ON messages(conversation_id, created_at DESC)');
         await initClient.query('CREATE INDEX IF NOT EXISTS idx_family_relationships_user1 ON family_relationships(user_id_1)');
         await initClient.query('CREATE INDEX IF NOT EXISTS idx_family_relationships_user2 ON family_relationships(user_id_2)');
+        await initClient.query('CREATE INDEX IF NOT EXISTS idx_device_tokens_location ON device_tokens (user_id, last_updated DESC) WHERE latitude IS NOT NULL AND longitude IS NOT NULL');
 
         await initClient.query('COMMIT');
         console.log('Database schema initialized successfully via dedicated client.');
@@ -1477,6 +1477,52 @@ export async function toggleLocationSharingDb(currentUserId: number, targetUserI
         `;
 
         await client.query(query, [share, u1, u2]);
+    } finally {
+        client.release();
+    }
+}
+
+export async function getFamilyLocationsDb(userId: number): Promise<FamilyMemberLocation[]> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return [];
+
+    const client = await dbPool.connect();
+    try {
+        const query = `
+            SELECT
+                other_user.id,
+                other_user.name,
+                other_user.profilepictureurl,
+                latest_token.latitude,
+                latest_token.longitude,
+                latest_token.last_updated
+            FROM family_relationships fr
+            JOIN users AS other_user ON other_user.id = (
+                CASE
+                    WHEN fr.user_id_1 = $1 THEN fr.user_id_2
+                    ELSE fr.user_id_1
+                END
+            )
+            LEFT JOIN LATERAL (
+                SELECT latitude, longitude, last_updated
+                FROM device_tokens
+                WHERE user_id = other_user.id AND latitude IS NOT NULL AND longitude IS NOT NULL
+                ORDER BY last_updated DESC
+                LIMIT 1
+            ) latest_token ON true
+            WHERE
+                (fr.user_id_1 = $1 OR fr.user_id_2 = $1)
+                AND fr.status = 'approved'
+                AND (
+                    (fr.user_id_1 = $1 AND fr.share_location_from_2_to_1 = true)
+                    OR
+                    (fr.user_id_2 = $1 AND fr.share_location_from_1_to_2 = true)
+                )
+                AND latest_token.latitude IS NOT NULL;
+        `;
+        const result = await client.query(query, [userId]);
+        return result.rows;
     } finally {
         client.release();
     }

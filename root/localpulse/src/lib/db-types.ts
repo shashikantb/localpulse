@@ -213,3 +213,12 @@ export interface FamilyMember extends User {
     i_am_sharing_with_them: boolean;
     they_are_sharing_with_me: boolean;
 }
+
+export interface FamilyMemberLocation {
+    id: number;
+    name: string;
+    profilepictureurl?: string | null;
+    latitude: number;
+    longitude: number;
+    last_updated: string;
+}

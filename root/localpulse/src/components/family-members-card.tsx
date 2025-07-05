@@ -4,9 +4,10 @@ import type { FC } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Users, MapPin } from 'lucide-react';
+import { Users, MapPin, Map } from 'lucide-react';
 import type { FamilyMember } from '@/lib/db-types';
 import LocationSharingToggle from './location-sharing-toggle';
+import { Button } from './ui/button';
 
 interface FamilyMembersCardProps {
   familyMembers: FamilyMember[];
@@ -15,14 +16,22 @@ interface FamilyMembersCardProps {
 const FamilyMembersCard: FC<FamilyMembersCardProps> = ({ familyMembers }) => {
   return (
     <Card className="shadow-xl border border-border/60 rounded-xl bg-card/80 backdrop-blur-sm">
-      <CardHeader>
-        <CardTitle className="flex items-center">
-            <Users className="w-6 h-6 mr-2 text-primary" />
-            Family Members
-        </CardTitle>
-        <CardDescription>
-          Manage location sharing with your connected family members.
-        </CardDescription>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <div>
+            <CardTitle className="flex items-center">
+                <Users className="w-6 h-6 mr-2 text-primary" />
+                Family Members
+            </CardTitle>
+            <CardDescription>
+              Manage location sharing with your family.
+            </CardDescription>
+        </div>
+        <Button asChild variant="outline" size="sm">
+            <Link href="/family/map">
+                <Map className="w-4 h-4 mr-2" />
+                View on Map
+            </Link>
+        </Button>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
