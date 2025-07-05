@@ -38,13 +38,22 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
     notFound();
   }
 
-  // Fetch user, posts, and session in parallel
-  const [{ user: profileUser, stats, isFollowing }, userPosts, { user: sessionUser }, familyMembers, pendingRequests] = await Promise.all([
+  // Fetch session first to determine if this is the user's own profile
+  const { user: sessionUser } = await getSession();
+  const isOwnProfile = sessionUser?.id === userId;
+
+  // Fetch all other data in parallel
+  const [
+    { user: profileUser, stats, isFollowing }, 
+    userPosts, 
+    familyMembers, 
+    pendingRequests
+  ] = await Promise.all([
     getUserWithFollowInfo(userId),
     getPostsByUserId(userId),
-    getSession(),
-    getFamilyMembers(userId),
-    getSession().then(s => s.user?.id === userId ? getPendingFamilyRequests() : Promise.resolve([]))
+    // Only fetch family members and requests if it's the user's own profile
+    isOwnProfile ? getFamilyMembers(userId) : Promise.resolve([]),
+    isOwnProfile ? getPendingFamilyRequests() : Promise.resolve([])
   ]);
 
   if (!profileUser || profileUser.status !== 'approved') {
@@ -59,7 +68,6 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
     }
   };
 
-  const isOwnProfile = sessionUser?.id === profileUser.id;
   const isGorakshak = profileUser.role === 'Gorakshak';
 
   return (
@@ -162,7 +170,7 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
           <FamilyRequestsList initialRequests={pendingRequests} />
         )}
         
-        {familyMembers.length > 0 && (
+        {isOwnProfile && familyMembers.length > 0 && (
           <FamilyMembersCard familyMembers={familyMembers} />
         )}
 
