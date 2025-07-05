@@ -1576,5 +1576,3 @@ export async function getRecipientsForSosDb(senderId: number): Promise<{ id: num
         client.release();
     }
 }
-
-    
