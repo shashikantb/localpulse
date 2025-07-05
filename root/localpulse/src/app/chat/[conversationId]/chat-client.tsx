@@ -22,35 +22,6 @@ interface ChatClientProps {
 
 const POLLING_INTERVAL = 3000; // 3 seconds
 
-// This component safely renders message content and makes URLs clickable.
-const ChatMessageContent: React.FC<{ content: string }> = ({ content }) => {
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
-  const parts = content.split(urlRegex);
-
-  return (
-    <p className="text-sm whitespace-pre-wrap break-words">
-      {parts.map((part, index) => {
-        if (part.match(urlRegex)) {
-          return (
-            <a
-              key={index}
-              href={part}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-400 hover:underline"
-              onClick={(e) => e.stopPropagation()} // Prevent link click from affecting parent elements
-            >
-              {part}
-            </a>
-          );
-        }
-        return part;
-      })}
-    </p>
-  );
-};
-
-
 export default function ChatClient({ initialMessages, partner, sessionUser, conversationId }: ChatClientProps) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [newMessage, setNewMessage] = useState('');
@@ -112,6 +83,8 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
     setMessages(prev => [...prev, optimisticMessage]);
     setNewMessage('');
 
+    // The SOS feature passes a third argument, but normal chat does not.
+    // The action handles this optional parameter.
     const result = await sendMessage(conversationId, optimisticMessage.content);
     
     if (result.error || !result.message) {
@@ -163,7 +136,7 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
                     : 'bg-muted text-foreground rounded-bl-none'
                 )}
               >
-                <ChatMessageContent content={message.content} />
+                <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
                 <span className={cn('text-xs mt-1.5 opacity-70', isSender ? 'self-end' : 'self-start')}>
                   {format(new Date(message.created_at), 'p')}
                 </span>
