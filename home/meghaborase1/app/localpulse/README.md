@@ -9,6 +9,7 @@ Before you begin, ensure you have the following installed:
 - Node.js (v18 or later recommended)
 - npm or yarn
 - A running PostgreSQL instance (either local or cloud-hosted)
+- A process manager like `pm2` for production.
 - NGINX or another reverse proxy for production deployments.
 
 ## Environment Variables
@@ -31,10 +32,6 @@ POSTGRES_SSL=true
 # You can generate a strong secret with the command: openssl rand -hex 32
 JWT_SECRET=your_super_secret_jwt_key_here
 
-# Optional: Set to 'true' to allow login over HTTP in development or
-# behind a misconfigured reverse proxy. NOT RECOMMENDED FOR PRODUCTION.
-ALLOW_INSECURE_LOGIN_FOR_HTTP=false
-
 # Google Generative AI API Key (if using Genkit features)
 GOOGLE_GENAI_API_KEY=your_google_genai_api_key
 
@@ -47,24 +44,64 @@ ADMIN_PASSWORD=password123
 - **`POSTGRES_URL`**: Ensure special characters in your username/password are URL-encoded.
 - **`JWT_SECRET`**: This MUST be set to a secure random string for production.
 
-## Production Setup with NGINX Reverse Proxy (HTTPS)
+## Getting Started (Local Development)
 
-For production deployments, your application **must** be served over HTTPS for secure login cookies to work. The recommended setup is to use a reverse proxy like NGINX to handle SSL termination.
+1.  **Install Dependencies:**
+    ```bash
+    npm install
+    ```
 
-### 1. Configure NGINX
-In your NGINX site configuration file, you need to proxy requests to your Next.js application (which runs on port 3000 by default). Critically, you must add the `X-Forwarded-Proto` header so that Next.js knows the original connection was secure.
+2.  **Set Up Environment Variables:**
+    Create the `.env.local` file as described above.
 
-Here is a sample NGINX configuration snippet:
+3.  **Run the Development Server:**
+    ```bash
+    npm run dev
+    ```
+---
+
+## Production Deployment Guide
+
+For production, the recommended setup is to run the Next.js app using a process manager like `pm2` and have a reverse proxy like NGINX handle incoming traffic and SSL.
+
+### Step 1: Build the Application
+On your server, run the build command:
+```bash
+npm run build
+```
+
+### Step 2: Configure PM2
+This project includes an `ecosystem.config.js` file to simplify running the app with `pm2`.
+
+To start the application, use:
+```bash
+pm2 start ecosystem.config.js
+```
+This will start the app named `localpulse-app`.
+
+To check logs:
+```bash
+pm2 logs localpulse-app
+```
+To reload the app after making changes to `.env.local`:
+```bash
+pm2 reload localpulse-app --update-env
+```
+
+### Step 3: Configure NGINX as a Reverse Proxy
+Your application **must** be served over HTTPS for secure login cookies to work correctly. Create an NGINX site configuration for your domain (`localpulse.in`) to proxy requests to your Next.js application (which runs on port 3000 by default).
+
+A sample NGINX configuration snippet:
 
 ```nginx
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
-    server_name your_domain.com;
+    server_name localpulse.in;
 
     # SSL Certs from Let's Encrypt or your provider
-    ssl_certificate /etc/letsencrypt/live/your_domain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/your_domain.com/privkey.pem;
+    ssl_certificate /path/to/your/fullchain.pem;
+    ssl_certificate_key /path/to/your/privkey.pem;
     # ... other ssl settings
 
     location / {
@@ -76,44 +113,23 @@ server {
         proxy_cache_bypass $http_upgrade;
         
         # CRITICAL LINE FOR SECURE COOKIES
+        # This tells Next.js that the original connection was secure (HTTPS).
         proxy_set_header X-Forwarded-Proto https;
     }
 }
 ```
-
-### 2. Run the Production Server
-After setting up your `.env.local` file and configuring NGINX, run the application:
+After saving your configuration, enable it and reload NGINX:
 ```bash
-npm run build
-npm start 
-# Or using a process manager like pm2
-# pm2 start npm --name "localpulse-app" -- start
+sudo systemctl reload nginx
 ```
-
-## Getting Started (Local Development)
-
-1.  **Install Dependencies:**
-    ```bash
-    npm install
-    ```
-
-2.  **Set Up Environment Variables:**
-    Create the `.env.local` file as described above. For local development, you can omit `NODE_ENV=production`.
-
-3.  **Run the Development Server:**
-    ```bash
-    npm run dev
-    ```
 
 ## Troubleshooting
 
-### Login works, but I'm logged out on other pages (Production)
-This is the classic symptom of the secure cookie issue. Your browser is not sending the login cookie back to the app because the app doesn't know it's running on HTTPS.
+### Login works, but I'm immediately logged out. Features like "Add Family" or "SOS" are missing.
 
-**Solution 1: Configure NGINX (Recommended)**
-- **Verify NGINX Config**: Ensure `proxy_set_header X-Forwarded-Proto https;` is present in your NGINX configuration and that NGINX has been reloaded (`sudo systemctl reload nginx`). This is the most secure and correct way to solve this.
+This is the classic symptom of a misconfigured reverse proxy. The browser is not sending the login cookie back to the app because Next.js doesn't know it's running on HTTPS.
 
-**Solution 2: Use Insecure Cookies (Fallback)**
-- If you cannot modify the NGINX configuration, you can set `ALLOW_INSECURE_LOGIN_FOR_HTTP=true` in your `.env.local` file.
-- **Security Warning**: This is **less secure** and should only be used as a last resort. It makes your login session vulnerable to man-in-the-middle attacks on insecure networks.
-- **Restart the App**: After making any changes, you must restart your application (`pm2 restart <app-name>`).
+**Solution: The NGINX Fix (Highly Recommended)**
+- **Verify NGINX Config**: This is the best and most secure solution. Ensure the line `proxy_set_header X-Forwarded-Proto https;` is present in your NGINX configuration file for this site. Reload NGINX after making the change.
+- The latest application code will automatically detect this header and issue a secure cookie. If this header is missing, the login will still fail. This is the correct and secure behavior for a production application.
+- **PM2 Restarts**: Remember to reload `pm2` with the `--update-env` flag for it to see any new environment variables: `pm2 reload localpulse-app --update-env`.

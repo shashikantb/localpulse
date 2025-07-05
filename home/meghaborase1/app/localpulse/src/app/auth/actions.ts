@@ -1,7 +1,7 @@
 
 'use server';
 
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import * as jose from 'jose';
 import bcrypt from 'bcryptjs';
@@ -101,14 +101,14 @@ export async function login(email: string, password: string): Promise<{ success:
     const maxAgeInSeconds = 30 * 24 * 60 * 60; // 30 days
     const expires = new Date(Date.now() + maxAgeInSeconds * 1000);
     
+    // Robustly determine if the connection is secure by checking the x-forwarded-proto header
+    // sent by a properly configured reverse proxy like NGINX.
+    const isSecure = headers().get('x-forwarded-proto') === 'https';
     const isProduction = process.env.NODE_ENV === 'production';
-    // This allows login on HTTP during development or behind a misconfigured reverse proxy.
-    // It's a security fallback and should ideally not be used in a well-configured production environment.
-    const allowInsecure = process.env.ALLOW_INSECURE_LOGIN_FOR_HTTP === 'true';
-
+    
     cookies().set(USER_COOKIE_NAME, sessionToken, {
       httpOnly: true,
-      secure: isProduction && !allowInsecure, // The cookie is secure in production, UNLESS explicitly overridden
+      secure: isProduction ? isSecure : false, // In production, secure status depends on the proxy. In dev, it's always false.
       expires: expires,
       sameSite: 'lax',
       path: '/',
