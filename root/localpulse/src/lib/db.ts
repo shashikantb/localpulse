@@ -1,5 +1,4 @@
 
-
 import { Pool, Client, type QueryResult } from 'pg';
 import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Status, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest, FamilyMember, FamilyMemberLocation } from '@/lib/db-types';
 import bcrypt from 'bcryptjs';
@@ -80,6 +79,7 @@ async function initializeDbSchema(): Promise<void> {
         `);
         
         // Add mobilenumber column to users table if it doesn't exist to support older schemas.
+        // This is a safe, non-destructive operation.
         await initClient.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS mobilenumber VARCHAR(20);`);
         
         // Posts Table
