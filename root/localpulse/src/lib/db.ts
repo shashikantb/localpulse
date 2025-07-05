@@ -1445,7 +1445,7 @@ export async function getFamilyMembersForUserDb(userId: number): Promise<FamilyM
     const client = await dbPool.connect();
     try {
         const query = `
-            SELECT 
+            SELECT
                 u.*,
                 CASE
                     WHEN fr.user_id_1 = $1 THEN fr.share_location_from_1_to_2
@@ -1454,7 +1454,10 @@ export async function getFamilyMembersForUserDb(userId: number): Promise<FamilyM
                 CASE
                     WHEN fr.user_id_1 = $1 THEN fr.share_location_from_2_to_1
                     ELSE fr.share_location_from_1_to_2
-                END AS they_are_sharing_with_me
+                END AS they_are_sharing_with_me,
+                latest_token.latitude,
+                latest_token.longitude,
+                latest_token.last_updated
             FROM family_relationships fr
             JOIN users u ON u.id = (
                 CASE
@@ -1462,6 +1465,13 @@ export async function getFamilyMembersForUserDb(userId: number): Promise<FamilyM
                     ELSE fr.user_id_1
                 END
             )
+            LEFT JOIN LATERAL (
+                SELECT latitude, longitude, last_updated
+                FROM device_tokens
+                WHERE user_id = u.id AND latitude IS NOT NULL AND longitude IS NOT NULL
+                ORDER BY last_updated DESC
+                LIMIT 1
+            ) latest_token ON true
             WHERE (fr.user_id_1 = $1 OR fr.user_id_2 = $1) AND fr.status = 'approved';
         `;
         const result = await client.query(query, [userId]);

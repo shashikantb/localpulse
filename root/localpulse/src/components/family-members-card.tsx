@@ -3,10 +3,10 @@ import type { FC } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Users, MapPin, Map } from 'lucide-react';
+import { Users, MapPin, ExternalLink } from 'lucide-react';
 import type { FamilyMember } from '@/lib/db-types';
 import LocationSharingToggle from './location-sharing-toggle';
-import { Button } from '@/components/ui/button';
+import { Button } from './ui/button';
 
 interface FamilyMembersCardProps {
   familyMembers: FamilyMember[];
@@ -15,49 +15,57 @@ interface FamilyMembersCardProps {
 const FamilyMembersCard: FC<FamilyMembersCardProps> = ({ familyMembers }) => {
   return (
     <Card className="shadow-xl border border-border/60 rounded-xl bg-card/80 backdrop-blur-sm">
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div>
-            <CardTitle className="flex items-center">
-                <Users className="w-6 h-6 mr-2 text-primary" />
-                Family Members
-            </CardTitle>
-            <CardDescription>
-              Manage location sharing with your family.
-            </CardDescription>
-        </div>
-        <Button asChild variant="outline" size="sm">
-            <Link href="/family/map">
-                <Map className="w-4 h-4 mr-2" />
-                View Locations
-            </Link>
-        </Button>
+      <CardHeader>
+        <CardTitle className="flex items-center">
+            <Users className="w-6 h-6 mr-2 text-primary" />
+            Family Members
+        </CardTitle>
+        <CardDescription>
+          Manage location sharing with your family.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
           {familyMembers.map((member) => (
             <div
               key={member.id}
-              className="flex items-center justify-between space-x-4 p-2 rounded-lg hover:bg-muted"
+              className="p-3 border rounded-lg hover:bg-muted/50 transition-colors"
             >
-                <Link href={`/users/${member.id}`} className="flex items-center space-x-4 flex-1">
-                    <Avatar>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                {/* Left side: Avatar and Name */}
+                <Link href={`/users/${member.id}`} className="flex items-center space-x-3 flex-1 min-w-0">
+                    <Avatar className="h-10 w-10">
                         <AvatarImage src={member.profilepictureurl || undefined} alt={member.name} />
                         <AvatarFallback>{member.name.charAt(0)}</AvatarFallback>
                     </Avatar>
-                    <div className="flex items-center gap-2">
-                        <span className="font-medium text-foreground">{member.name}</span>
-                        {member.they_are_sharing_with_me && (
-                            <MapPin className="w-4 h-4 text-green-500" title={`${member.name} is sharing their location with you.`}/>
-                        )}
+                    <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-foreground truncate">{member.name}</p>
+                        {member.they_are_sharing_with_me && member.latitude && member.longitude ? (
+                            <a 
+                                href={`https://www.google.com/maps/dir/?api=1&destination=${member.latitude},${member.longitude}`} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-xs text-blue-500 hover:underline flex items-center mt-0.5"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <MapPin className="w-3 h-3 mr-1"/>
+                                View Location
+                                <ExternalLink className="w-3 h-3 ml-1"/>
+                            </a>
+                        ) : member.they_are_sharing_with_me ? (
+                            <p className="text-xs text-muted-foreground mt-0.5">Location not available</p>
+                        ) : null}
                     </div>
                 </Link>
-                <div className="flex items-center gap-2">
+                {/* Right side: Toggle */}
+                <div className="flex items-center gap-2 flex-shrink-0 self-end sm:self-center">
                     <span className="text-sm text-muted-foreground">Share My Location</span>
                     <LocationSharingToggle 
                         targetUserId={member.id} 
                         initialIsSharing={member.i_am_sharing_with_them} 
                     />
                 </div>
+              </div>
             </div>
           ))}
         </div>

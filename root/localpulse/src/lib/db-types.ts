@@ -1,5 +1,4 @@
 
-
 export type UserRole = 'Business' | 'Gorakshak' | 'Admin' | 'Public(जनता)';
 
 // Define the structure of a User for client-side use (omitting password)
@@ -212,6 +211,9 @@ export interface PendingFamilyRequest {
 export interface FamilyMember extends User {
     i_am_sharing_with_them: boolean;
     they_are_sharing_with_me: boolean;
+    latitude?: number | null;
+    longitude?: number | null;
+    last_updated?: string | null;
 }
 
 export interface FamilyMemberLocation {
