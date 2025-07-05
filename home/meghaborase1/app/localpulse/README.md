@@ -1,14 +1,14 @@
 
 # Firebase Studio (LocalPulse)
 
-This is a NextJS starter application, now configured to use PostgreSQL as its database.
+This is a NextJS starter application, configured to use PostgreSQL as its database.
 
 ## Prerequisites
 
 Before you begin, ensure you have the following installed:
 - Node.js (v18 or later recommended)
 - npm or yarn
-- A running PostgreSQL instance (either local or cloud-hosted like Google Cloud SQL)
+- A running PostgreSQL instance (either local or cloud-hosted)
 - NGINX or another reverse proxy for production deployments.
 
 ## Environment Variables
@@ -24,7 +24,7 @@ NODE_ENV=production
 POSTGRES_URL=your_postgresql_connection_string
 
 # Optional: If your PostgreSQL instance requires SSL (common for cloud databases)
-POSTGRES_SSL=true 
+POSTGRES_SSL=true
 
 # Secure key for signing user session tokens (JWTs) (MANDATORY FOR PRODUCTION)
 # This is crucial for production security.
@@ -40,8 +40,8 @@ ADMIN_PASSWORD=password123
 ```
 
 **Important Notes:**
-- **URL Encoding:** If your username or password in `POSTGRES_URL` contains special characters, they must be URL-encoded.
-- **`JWT_SECRET`**: This is **mandatory** for production security.
+- **`POSTGRES_URL`**: Ensure special characters in your username/password are URL-encoded.
+- **`JWT_SECRET`**: This MUST be set to a secure random string for production.
 
 ## Production Setup with NGINX Reverse Proxy (HTTPS)
 
@@ -88,9 +88,18 @@ npm start
 
 ## Getting Started (Local Development)
 
-1.  **Install Dependencies:** `npm install`
-2.  **Set Up Environment Variables:** Create `.env.local`.
-3.  **Run Development Server:** `npm run dev`
+1.  **Install Dependencies:**
+    ```bash
+    npm install
+    ```
+
+2.  **Set Up Environment Variables:**
+    Create the `.env.local` file as described above. For local development, you can omit `NODE_ENV=production`.
+
+3.  **Run the Development Server:**
+    ```bash
+    npm run dev
+    ```
 
 ## Troubleshooting
 
@@ -98,3 +107,4 @@ npm start
 This is the classic symptom of the secure cookie issue.
 - **Verify NGINX Config**: Ensure `proxy_set_header X-Forwarded-Proto https;` is present in your NGINX configuration and that NGINX has been reloaded (`sudo systemctl reload nginx`).
 - **Restart the App**: After making any changes, you must restart your application (`pm2 restart <app-name>`).
+
