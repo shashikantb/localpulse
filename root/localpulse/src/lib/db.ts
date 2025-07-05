@@ -1564,11 +1564,11 @@ export async function getRecipientsForSosDb(senderId: number): Promise<{ id: num
         const query = `
             SELECT user_id_2 AS recipient_id
             FROM family_relationships
-            WHERE user_id_1 = $1 AND share_location_from_1_to_2 = TRUE AND status = 'approved'
+            WHERE user_id_1 = $1 AND status = 'approved' AND share_location_from_1_to_2 = TRUE
             UNION
             SELECT user_id_1 AS recipient_id
             FROM family_relationships
-            WHERE user_id_2 = $1 AND share_location_from_2_to_1 = TRUE AND status = 'approved';
+            WHERE user_id_2 = $1 AND status = 'approved' AND share_location_from_2_to_1 = TRUE;
         `;
         const result = await client.query(query, [senderId]);
         return result.rows.map(row => ({ id: row.recipient_id }));
