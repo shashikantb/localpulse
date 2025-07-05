@@ -22,6 +22,35 @@ interface ChatClientProps {
 
 const POLLING_INTERVAL = 3000; // 3 seconds
 
+// This component safely renders message content and makes URLs clickable.
+const ChatMessageContent: React.FC<{ content: string }> = ({ content }) => {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = content.split(urlRegex);
+
+  return (
+    <p className="text-sm whitespace-pre-wrap break-words">
+      {parts.map((part, index) => {
+        if (part.match(urlRegex)) {
+          return (
+            <a
+              key={index}
+              href={part}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-400 hover:underline"
+              onClick={(e) => e.stopPropagation()} // Prevent link click from affecting parent elements
+            >
+              {part}
+            </a>
+          );
+        }
+        return part;
+      })}
+    </p>
+  );
+};
+
+
 export default function ChatClient({ initialMessages, partner, sessionUser, conversationId }: ChatClientProps) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [newMessage, setNewMessage] = useState('');
@@ -29,8 +58,6 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  // Use a ref to track the sending state inside the polling interval
-  // to avoid re-creating the interval on every state change.
   const isSendingRef = useRef(isSending);
   isSendingRef.current = isSending;
   
@@ -46,16 +73,11 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
   useEffect(() => {
     let isMounted = true;
     const fetchMessages = async () => {
-        // If a message is currently being sent, skip this poll cycle.
-        // This prevents a race condition where the poll fetches data
-        // before our optimistic update's corresponding message has been
-        // saved to the database.
         if (isSendingRef.current) {
             return;
         }
         try {
             const newMessages = await getMessages(conversationId);
-            // Only update state if the component is still mounted and data has changed.
             if (isMounted && JSON.stringify(messagesRef.current) !== JSON.stringify(newMessages)) {
                 setMessages(newMessages);
             }
@@ -78,7 +100,7 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
     if (!newMessage.trim() || isSending) return;
 
     setIsSending(true);
-    const tempId = Date.now(); // For optimistic update
+    const tempId = Date.now();
     const optimisticMessage: Message = {
         id: tempId,
         conversation_id: conversationId,
@@ -94,7 +116,6 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
     
     if (result.error || !result.message) {
       console.error('Failed to send message:', result.error);
-      // Revert optimistic update on failure
       setMessages(prev => prev.filter(m => m.id !== tempId));
       toast({
         variant: 'destructive',
@@ -102,7 +123,6 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
         description: result.error || 'Could not send the message. Please try again.',
       });
     } else {
-      // Replace optimistic message with the real one from the server
       setMessages(prev => prev.map(m => m.id === tempId ? result.message! : m));
     }
     
@@ -143,7 +163,7 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
                     : 'bg-muted text-foreground rounded-bl-none'
                 )}
               >
-                <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
+                <ChatMessageContent content={message.content} />
                 <span className={cn('text-xs mt-1.5 opacity-70', isSender ? 'self-end' : 'self-start')}>
                   {format(new Date(message.created_at), 'p')}
                 </span>
