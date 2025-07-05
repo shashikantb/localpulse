@@ -222,7 +222,3 @@ export interface FamilyMemberLocation {
     longitude: number;
     last_updated: string;
 }
-
-export interface FamilyMemberLocationWithIcon extends FamilyMemberLocation {
-  iconHtml: string;
-}

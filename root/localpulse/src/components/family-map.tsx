@@ -2,28 +2,20 @@
 'use client';
 
 import 'leaflet/dist/leaflet.css';
+import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css';
+import 'leaflet-defaulticon-compatibility';
+
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import type { User } from '@/lib/db-types';
+import type { User, FamilyMemberLocation } from '@/lib/db-types';
 import L from 'leaflet';
 import { formatDistanceToNowStrict } from 'date-fns';
-import type { FamilyMemberLocationWithIcon } from '@/lib/db-types';
 
 interface FamilyMapProps {
-  locations: FamilyMemberLocationWithIcon[];
+  locations: FamilyMemberLocation[];
   currentUser: User;
 }
 
-const createCustomIcon = (iconHtml: string) => {
-  return new L.DivIcon({
-    html: iconHtml,
-    className: 'bg-transparent border-none',
-    iconSize: [44, 48],
-    iconAnchor: [22, 48], // Point of the icon which will correspond to marker's location
-    popupAnchor: [0, -48], // Point from which the popup should open relative to the iconAnchor
-  });
-};
-
-export default function FamilyMap({ locations, currentUser }: FamilyMapProps) {
+export default function FamilyMap({ locations }: FamilyMapProps) {
   // Calculate the center of the map
   const getMapCenter = (): [number, number] => {
     if (locations.length === 0) {
@@ -57,7 +49,7 @@ export default function FamilyMap({ locations, currentUser }: FamilyMapProps) {
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       {locations.map((loc) => (
-        <Marker key={loc.id} position={[loc.latitude, loc.longitude]} icon={createCustomIcon(loc.iconHtml)}>
+        <Marker key={loc.id} position={[loc.latitude, loc.longitude]}>
           <Popup>
             <div className="text-center font-semibold">{loc.name}</div>
             <div className="text-xs text-muted-foreground">
