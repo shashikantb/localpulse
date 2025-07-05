@@ -1,14 +1,15 @@
+
 # Firebase Studio (LocalPulse)
 
-This is a NextJS starter application, now configured to use PostgreSQL as its database.
+This is a NextJS starter application, configured to use PostgreSQL as its database.
 
 ## Prerequisites
 
 Before you begin, ensure you have the following installed:
 - Node.js (v18 or later recommended)
 - npm or yarn
-- A running PostgreSQL instance (either local or cloud-hosted like Google Cloud SQL)
-- `openssl` for generating SSL certificates in production.
+- A running PostgreSQL instance (either local or cloud-hosted)
+- NGINX or another reverse proxy for production deployments.
 
 ## Environment Variables
 
@@ -20,12 +21,10 @@ NODE_ENV=production
 
 # PostgreSQL Connection URL (MANDATORY)
 # Format: postgresql://USERNAME:PASSWORD@HOST:PORT/DATABASE
-# Example: postgresql://youruser:yourpassword@your-cloud-host.com:5432/yourdatabase
 POSTGRES_URL=your_postgresql_connection_string
 
 # Optional: If your PostgreSQL instance requires SSL (common for cloud databases)
-# Set to true if required, e.g., for Google Cloud SQL, AWS RDS, Azure PostgreSQL.
-# POSTGRES_SSL=true 
+POSTGRES_SSL=true
 
 # Secure key for signing user session tokens (JWTs) (MANDATORY FOR PRODUCTION)
 # This is crucial for production security.
@@ -40,28 +39,54 @@ ADMIN_USERNAME=admin
 ADMIN_PASSWORD=password123
 ```
 
-**Important Notes for `POSTGRES_URL`:**
-- **URL Encoding:** If your username or password contains special characters (e.g., `@`, `#`, `!`), they **must be URL-encoded**.
-- **SSL:** For cloud databases, you will likely need to enable SSL by setting `POSTGRES_SSL=true`.
+**Important Notes:**
+- **`POSTGRES_URL`**: Ensure special characters in your username/password are URL-encoded.
+- **`JWT_SECRET`**: This MUST be set to a secure random string for production.
 
-## Production Setup with HTTPS
+## Production Setup with NGINX Reverse Proxy (HTTPS)
 
-For production deployments, especially when behind a load balancer that terminates SSL, the application must run in HTTPS mode to ensure secure cookies work correctly.
+For production deployments, your application **must** be served over HTTPS for secure login cookies to work. The recommended setup is to use a reverse proxy like NGINX to handle SSL termination.
 
-### 1. Generate Self-Signed Certificates
-On your production VM, navigate to the project's root directory (`/home/meghaborase1/app/localpulse`) and run the following command to generate a self-signed SSL certificate and key. These will be used by the application's internal server.
+### 1. Configure NGINX
+In your NGINX site configuration file, you need to proxy requests to your Next.js application (which runs on port 3000 by default). Critically, you must add the `X-Forwarded-Proto` header so that Next.js knows the original connection was secure.
 
-```bash
-openssl req -x509 -newkey rsa:2048 -keyout server.key -out server.cert -days 365 -nodes
+Here is a sample NGINX configuration snippet:
+
+```nginx
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name your_domain.com;
+
+    # SSL Certs from Let's Encrypt or your provider
+    ssl_certificate /etc/letsencrypt/live/your_domain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/your_domain.com/privkey.pem;
+    # ... other ssl settings
+
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        
+        # CRITICAL LINE FOR SECURE COOKIES
+        proxy_set_header X-Forwarded-Proto https;
+    }
+}
 ```
-When prompted, you can leave the fields blank by pressing Enter. This will create two files: `server.key` and `server.cert`.
 
-**Important**: If you are running multiple VMs, this command must be run on **each VM**.
+### 2. Run the Production Server
+After setting up your `.env.local` file and configuring NGINX, run the application:
+```bash
+npm run build
+npm start 
+# Or using a process manager like pm2
+# pm2 start npm --name "localpulse-app" -- start
+```
 
-### 2. Configure Your Load Balancer
-Ensure your GCP Load Balancer's backend service is configured to use the **HTTPS** protocol to communicate with your VMs on port 3000 (or your configured port). You may need to configure health checks to also use HTTPS.
-
-## Getting Started
+## Getting Started (Local Development)
 
 1.  **Install Dependencies:**
     ```bash
@@ -69,29 +94,16 @@ Ensure your GCP Load Balancer's backend service is configured to use the **HTTPS
     ```
 
 2.  **Set Up Environment Variables:**
-    Create the `.env.local` file as described above.
+    Create the `.env.local` file as described above. For local development, you can omit `NODE_ENV=production`.
 
-3.  **Run the Development Server (Local):**
+3.  **Run the Development Server:**
     ```bash
     npm run dev
-    ```
-
-4.  **Run the Production Server:**
-    After setting up your `.env.local` file and generating SSL certs (if in production), run:
-    ```bash
-    npm run build
-    npm start 
-    # Or using a process manager like pm2
-    # pm2 start npm --name "localpulse-app" -- start
     ```
 
 ## Troubleshooting
 
 ### Login works, but I'm logged out on other pages (Production)
 This is the classic symptom of the secure cookie issue.
-- **Verify Certificates**: Ensure `server.key` and `server.cert` exist in your project's root directory on the production VM.
-- **Verify `package.json`**: Make sure the `start` script is `node server.js`.
-- **Verify Load Balancer Protocol**: Double-check that your load balancer's backend service is set to use **HTTPS** to communicate with your VMs.
-- **Restart the App**: After making any changes, you must rebuild and restart your application (`npm run build`, `pm2 restart <app-name>`).
-
-To get started, take a look at `src/app/page.tsx`.
+- **Verify NGINX Config**: Ensure `proxy_set_header X-Forwarded-Proto https;` is present in your NGINX configuration and that NGINX has been reloaded (`sudo systemctl reload nginx`).
+- **Restart the App**: After making any changes, you must restart your application (`pm2 restart <app-name>`).
