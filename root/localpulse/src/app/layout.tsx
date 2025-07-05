@@ -1,12 +1,13 @@
+
 import type { Metadata } from 'next';
 import { GeistSans } from 'geist/font/sans';
-import './globals.css';
+import '@/app/globals.css';
 import { Toaster } from '@/components/ui/toaster';
 import Footer from '@/components/layout/footer';
 import { AppInstallPrompt } from '@/components/app-install-prompt';
 import Header from '@/components/layout/header';
 import StickyNav from '@/components/sticky-nav';
-import { Providers } from './providers';
+import { Providers } from '@/app/providers';
 import { getSession } from '@/app/auth/actions';
 
 // The geist font package exports an object with the variable name pre-configured.
