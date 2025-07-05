@@ -6,7 +6,7 @@ import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import type { User } from '@/lib/db-types';
 import L from 'leaflet';
 import { formatDistanceToNowStrict } from 'date-fns';
-import type { FamilyMemberLocationWithIcon } from '@/app/family/map/page';
+import type { FamilyMemberLocationWithIcon } from '@/lib/db-types';
 
 interface FamilyMapProps {
   locations: FamilyMemberLocationWithIcon[];

@@ -10,7 +10,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import type { FamilyMemberLocation } from '@/lib/db-types';
+import type { FamilyMemberLocation, FamilyMemberLocationWithIcon } from '@/lib/db-types';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,10 +22,6 @@ const FamilyMap = dynamic(() => import('@/components/family-map'), {
     </div>
   ),
 });
-
-export interface FamilyMemberLocationWithIcon extends FamilyMemberLocation {
-  iconHtml: string;
-}
 
 const createIconMarkup = (user: FamilyMemberLocation) => {
     return renderToStaticMarkup(
