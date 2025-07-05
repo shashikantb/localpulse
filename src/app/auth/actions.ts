@@ -5,17 +5,32 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import * as jose from 'jose';
 import bcrypt from 'bcryptjs';
-import { createUserDb, getUserByEmailDb, getUserByIdDb, updateUserProfilePictureDb, updateUserNameDb } from '@/lib/db';
+import { createUserDb, getUserByEmailDb, getUserByIdDb, updateUserProfilePictureDb, updateUserNameDb, updateUserMobileDb } from '@/lib/db';
 import type { NewUser, User } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 import { cache } from 'react';
+import { z } from 'zod';
+
 
 const USER_COOKIE_NAME = 'user-auth-token';
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback-secret-for-jwt-that-is-at-least-32-bytes-long');
 
-if (!process.env.JWT_SECRET) {
-  console.warn('JWT_SECRET environment variable is not set. Using a fallback secret. THIS IS NOT SECURE FOR PRODUCTION.');
+// Use a fallback secret for development if not set, but log a strong warning.
+const secret = process.env.JWT_SECRET;
+if (!secret && process.env.NODE_ENV === 'production') {
+    console.error('----------------------------------------------------------------');
+    console.error('FATAL: A secure JWT_SECRET environment variable must be set for production.');
+    console.error('Application will not function correctly without it.');
+    console.error('----------------------------------------------------------------');
 }
+const JWT_SECRET = new TextEncoder().encode(secret || 'fallback-secret-for-jwt-that-is-at-least-32-bytes-long');
+
+if (!process.env.JWT_SECRET && process.env.NODE_ENV !== 'production') {
+  console.warn('----------------------------------------------------------------');
+  console.warn('WARNING: JWT_SECRET environment variable is not set. Using a temporary, insecure fallback secret.');
+  console.warn('THIS IS NOT SAFE FOR PRODUCTION. Please set a secure secret in your .env.local file.');
+  console.warn('----------------------------------------------------------------');
+}
+
 
 async function encrypt(payload: any) {
   return await new jose.SignJWT(payload)
@@ -32,6 +47,7 @@ async function decrypt(token: string): Promise<any | null> {
     });
     return payload;
   } catch (error) {
+    // This will happen if the token is invalid or the secret is wrong.
     console.error('Failed to verify JWT:', error);
     return null;
   }
@@ -84,7 +100,7 @@ export async function login(email: string, password: string): Promise<{ success:
     const sessionToken = await encrypt(sessionPayload);
     const maxAgeInSeconds = 30 * 24 * 60 * 60; // 30 days
     const expires = new Date(Date.now() + maxAgeInSeconds * 1000);
-
+    
     cookies().set(USER_COOKIE_NAME, sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -167,5 +183,29 @@ export async function updateUsername(name: string): Promise<{ success: boolean; 
     return { success: false, error: 'Failed to update username.' };
   } catch (error: any) {
     return { success: false, error: error.message || 'An unknown error occurred.' };
+  }
+}
+
+const mobileSchema = z.string().regex(/^\d{10}$/, 'Must be a valid 10-digit mobile number.');
+
+export async function updateUserMobile(formData: FormData) {
+  const { user } = await getSession();
+  if (!user) {
+    return { success: false, error: 'Authentication required.' };
+  }
+
+  const mobileNumber = formData.get('mobilenumber') as string;
+  const validation = mobileSchema.safeParse(mobileNumber);
+
+  if (!validation.success) {
+    return { success: false, error: validation.error.errors[0].message };
+  }
+  
+  try {
+    await updateUserMobileDb(user.id, validation.data);
+    revalidatePath(`/users/${user.id}`);
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: 'Failed to update mobile number.' };
   }
 }
