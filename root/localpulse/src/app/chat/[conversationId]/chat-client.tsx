@@ -22,8 +22,7 @@ interface ChatClientProps {
 
 const POLLING_INTERVAL = 3000; // 3 seconds
 
-// A simple component to render message content and detect links
-function MessageContent({ content }: { content: string }) {
+const renderMessageContent = (content: string) => {
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const parts = content.split(urlRegex);
 
@@ -41,7 +40,8 @@ function MessageContent({ content }: { content: string }) {
             })}
         </p>
     );
-}
+};
+
 
 export default function ChatClient({ initialMessages, partner, sessionUser, conversationId }: ChatClientProps) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
@@ -156,7 +156,7 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
                     : 'bg-muted text-foreground rounded-bl-none'
                 )}
               >
-                <MessageContent content={message.content} />
+                {renderMessageContent(message.content)}
                 <span className={cn('text-xs mt-1.5 opacity-70', isSender ? 'self-end' : 'self-start')}>
                   {format(new Date(message.created_at), 'p')}
                 </span>
