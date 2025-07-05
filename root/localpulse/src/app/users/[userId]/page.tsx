@@ -2,7 +2,7 @@
 
 import type { FC } from 'react';
 import { notFound } from 'next/navigation';
-import { getUserWithFollowInfo, getPostsByUserId, getFamilyMembers, getPendingFamilyRequests } from '@/app/actions';
+import { getUserWithFollowInfo, getPostsByUserId, getFamilyMembers, getPendingFamilyRequests, getFamilyRelationshipStatus } from '@/app/actions';
 import { startChatAndRedirect } from '@/app/chat/actions';
 import { getSession } from '@/app/auth/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -48,13 +48,16 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
     { user: profileUser, stats, isFollowing }, 
     userPosts, 
     familyMembers, 
-    pendingRequests
+    pendingRequests,
+    familyRelationshipStatus
   ] = await Promise.all([
     getUserWithFollowInfo(userId),
     getPostsByUserId(userId),
     // Only fetch family members and requests if it's the user's own profile
     isOwnProfile ? getFamilyMembers(userId) : Promise.resolve([] as FamilyMember[]),
-    isOwnProfile ? getPendingFamilyRequests() : Promise.resolve([])
+    isOwnProfile ? getPendingFamilyRequests() : Promise.resolve([]),
+    // Only fetch relationship status if it's NOT the user's own profile
+    !isOwnProfile && sessionUser ? getFamilyRelationshipStatus(userId) : Promise.resolve({ status: 'none' as const })
   ]);
 
   if (!profileUser || profileUser.status !== 'approved') {
@@ -131,7 +134,11 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
                             </form>
                         )}
                         {sessionUser && (
-                          <FamilyActionButton sessionUser={sessionUser} targetUser={profileUser} />
+                          <FamilyActionButton 
+                            sessionUser={sessionUser} 
+                            targetUser={profileUser}
+                            initialStatus={familyRelationshipStatus.status}
+                          />
                         )}
                       </div>
                    )}

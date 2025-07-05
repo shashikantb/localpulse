@@ -1,30 +1,23 @@
 
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { Button } from '@/components/ui/button';
 import { Loader2, UserPlus, UserCheck, UserX, Clock } from 'lucide-react';
 import type { User, FamilyRelationshipStatus } from '@/lib/db-types';
-import { getFamilyRelationshipStatus, sendFamilyRequest, respondToFamilyRequest, cancelFamilyRequest } from '@/app/actions';
+import { sendFamilyRequest, respondToFamilyRequest, cancelFamilyRequest } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 
 interface FamilyActionButtonProps {
   sessionUser: User;
   targetUser: User;
+  initialStatus: FamilyRelationshipStatus;
 }
 
-export default function FamilyActionButton({ sessionUser, targetUser }: FamilyActionButtonProps) {
-  const [status, setStatus] = useState<FamilyRelationshipStatus>('none');
-  const [loading, setLoading] = useState(true);
+export default function FamilyActionButton({ sessionUser, targetUser, initialStatus }: FamilyActionButtonProps) {
+  const [status, setStatus] = useState<FamilyRelationshipStatus>(initialStatus);
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
-
-  useEffect(() => {
-    getFamilyRelationshipStatus(targetUser.id).then(res => {
-      setStatus(res.status);
-      setLoading(false);
-    });
-  }, [targetUser.id]);
 
   const handleRequest = () => {
     startTransition(async () => {
@@ -61,10 +54,6 @@ export default function FamilyActionButton({ sessionUser, targetUser }: FamilyAc
       }
     });
   };
-
-  if (loading) {
-    return <Button size="sm" variant="outline" disabled><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Checking...</Button>;
-  }
 
   switch (status) {
     case 'none':
