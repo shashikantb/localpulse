@@ -1356,7 +1356,9 @@ export async function sendFamilyRequestDb(requesterId: number, receiverId: numbe
         const query = `
             INSERT INTO family_relationships (user_id_1, user_id_2, requester_id, status)
             VALUES ($1, $2, $3, 'pending')
-            ON CONFLICT (user_id_1, user_id_2) DO NOTHING;
+            ON CONFLICT (user_id_1, user_id_2) DO UPDATE
+            SET requester_id = $3, status = 'pending'
+            WHERE family_relationships.status = 'rejected';
         `;
         await client.query(query, [u1, u2, requesterId]);
     } finally {
@@ -1373,6 +1375,19 @@ export async function updateFamilyRequestStatusDb(relationshipId: number, status
     try {
         const query = `UPDATE family_relationships SET status = $1 WHERE id = $2`;
         await client.query(query, [status, relationshipId]);
+    } finally {
+        client.release();
+    }
+}
+
+export async function deleteFamilyRelationshipDb(relationshipId: number): Promise<void> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) throw new Error("Database not configured.");
+
+    const client = await dbPool.connect();
+    try {
+        await client.query('DELETE FROM family_relationships WHERE id = $1', [relationshipId]);
     } finally {
         client.release();
     }
