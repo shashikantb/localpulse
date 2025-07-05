@@ -24,7 +24,6 @@ import UpdateMobileForm from '@/components/update-mobile-form';
 import FamilyActionButton from '@/components/family-action-button';
 import FamilyMembersCard from '@/components/family-members-card';
 import FamilyRequestsList from '@/components/family-requests-list';
-import { cookies } from 'next/headers';
 
 
 interface UserProfilePageProps {
@@ -42,12 +41,6 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
   // Fetch session first to determine if this is the user's own profile
   const { user: sessionUser } = await getSession();
   const isOwnProfile = sessionUser?.id === userId;
-
-  // --- Start Debug Info ---
-  const cookieStore = cookies();
-  const sessionCookie = cookieStore.get('user-auth-token');
-  const nodeEnv = process.env.NODE_ENV;
-  // --- End Debug Info ---
 
   // Fetch all other data in parallel
   const [
@@ -84,19 +77,6 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
     <div className="flex flex-col items-center p-4 sm:p-6 md:p-8 lg:p-16 bg-gradient-to-br from-background to-muted/30">
       <div className="container mx-auto max-w-2xl space-y-8 py-8 mb-20"> {/* Added margin-bottom */}
         
-        {/* --- Start Debug Card --- */}
-        <Card className="mb-8 bg-yellow-100 border-yellow-400">
-          <CardHeader>
-            <CardTitle>Connection Debug Info (Temporary)</CardTitle>
-          </CardHeader>
-          <CardContent className="font-mono text-xs space-y-2">
-            <p><strong>NODE_ENV:</strong> {nodeEnv || 'not set'}</p>
-            <p><strong>Session User (from getSession):</strong> {sessionUser ? `ID: ${sessionUser.id}, Name: ${sessionUser.name}` : <span className="text-red-600 font-bold">NULL</span>}</p>
-            <p><strong>user-auth-token (from cookies):</strong> {sessionCookie ? `Found (Value starts with: ${sessionCookie.value.substring(0, 20)}...)` : <span className="text-red-600 font-bold">NOT FOUND</span>}</p>
-          </CardContent>
-        </Card>
-        {/* --- End Debug Card --- */}
-
         <Card className="shadow-xl border border-border/60 rounded-xl bg-card/80 backdrop-blur-sm">
           <CardHeader className="flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-6 p-6">
             <div className="relative group">

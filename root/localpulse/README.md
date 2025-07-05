@@ -34,6 +34,16 @@ JWT_SECRET=your_super_secret_jwt_key_here
 # Recommended for Production for better performance and security
 NODE_ENV=production
 
+# !! IMPORTANT FOR PRODUCTION LOGIN !!
+# Use this setting ONLY if your production site is not served over HTTPS.
+# By default, production cookies are 'Secure', meaning browsers only send them over HTTPS.
+# If your load balancer or reverse proxy terminates SSL and talks to Node.js over HTTP,
+# the browser might not send the login cookie, and users will appear logged out.
+# Setting this to 'true' makes the cookie non-secure, which is less safe but may be necessary
+# for certain hosting environments.
+# The best solution is to ensure end-to-end HTTPS.
+# ALLOW_INSECURE_LOGIN_FOR_HTTP=true
+
 # Google Generative AI API Key (if using Genkit features)
 GOOGLE_GENAI_API_KEY=your_google_genai_api_key
 
@@ -49,7 +59,7 @@ Update `ADMIN_USERNAME` and `ADMIN_PASSWORD` to secure values, especially for pr
 **Important Notes for Production:**
 - **`JWT_SECRET`**: This variable is **mandatory** for user authentication to work in production.
 - **`POSTGRES_URL`**: This variable is **mandatory** for any database functionality.
-- **HTTPS Required**: Because user login cookies are marked as `Secure`, your production deployment **must** be served over HTTPS for authentication to work correctly. If your site is served over HTTP, browsers will not send the login cookie, and the server will think you are a guest.
+- **HTTPS Required**: Because user login cookies are marked as `Secure`, your production deployment **must** be served over HTTPS for authentication to work correctly. If your site is served over HTTP, browsers will not send the login cookie, and the server will think you are a guest. See the `ALLOW_INSECURE_LOGIN_FOR_HTTP` setting for workarounds.
 - **URL Encoding:** If your username or password in `POSTGRES_URL` contains special characters (e.g., `@`, `#`, `!`, `:`, `/`, `?`, `[`, `]`), they **must be URL-encoded**. For example, `my@secret#pass` becomes `my%40secret%23pass`.
 - **SSL:** For cloud-hosted PostgreSQL (like Google Cloud SQL, AWS RDS, Azure), you will likely need to enable SSL by setting `POSTGRES_SSL=true`.
 
@@ -81,6 +91,6 @@ This error means the application could not connect to your PostgreSQL server.
 ### User is Not Logged In (in Production)
 If login works but features for logged-in users (like SOS, Add Family, Profile editing) are missing in your production environment:
 - **Check `JWT_SECRET`**: Ensure the `JWT_SECRET` environment variable is correctly set in your production hosting environment (e.g., in Google Cloud Run's environment variable settings).
-- **Check for HTTPS**: The application sets secure cookies in production, which require an HTTPS connection. If your production site is not served over HTTPS, browsers will not send the login cookie, and the server will think you are a guest. Ensure your production deployment has HTTPS enabled and properly configured.
+- **Check for HTTPS**: The application sets secure cookies in production, which require an HTTPS connection. If your production site is not served over HTTPS, browsers will not send the login cookie, and the server will think you are a guest. Ensure your production deployment has HTTPS enabled and properly configured. As a temporary workaround for environments without end-to-end HTTPS, you can set `ALLOW_INSECURE_LOGIN_FOR_HTTP=true` in your `.env.local` file, but this is less secure.
 
 To get started, take a look at `src/app/page.tsx`.

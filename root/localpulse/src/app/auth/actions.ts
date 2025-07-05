@@ -101,10 +101,13 @@ export async function login(email: string, password: string): Promise<{ success:
     const sessionToken = await encrypt(sessionPayload);
     const maxAgeInSeconds = 30 * 24 * 60 * 60; // 30 days
     const expires = new Date(Date.now() + maxAgeInSeconds * 1000);
+    
+    const isProduction = process.env.NODE_ENV === 'production';
+    const allowInsecure = process.env.ALLOW_INSECURE_LOGIN_FOR_HTTP === 'true';
 
     cookies().set(USER_COOKIE_NAME, sessionToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isProduction && !allowInsecure, // The cookie is secure in production, UNLESS explicitly overridden
       expires: expires,
       sameSite: 'lax',
       path: '/',
