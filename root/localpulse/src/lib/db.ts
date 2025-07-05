@@ -5,7 +5,7 @@ import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, 
 import bcrypt from 'bcryptjs';
 
 // Re-export db-types
-export * from '@/lib/db-types';
+export * from './db-types';
 
 let pool: Pool | null = null;
 let dbWarningShown = false;
@@ -1505,6 +1505,72 @@ export async function toggleLocationSharingDb(currentUserId: number, targetUserI
         `;
 
         await client.query(query, [share, u1, u2]);
+    } finally {
+        client.release();
+    }
+}
+
+export async function getFamilyLocationsForUserDb(userId: number): Promise<FamilyMemberLocation[]> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return [];
+
+    const client = await dbPool.connect();
+    try {
+        const query = `
+            SELECT
+                u.id,
+                u.name,
+                u.profilepictureurl,
+                latest_token.latitude,
+                latest_token.longitude,
+                latest_token.last_updated
+            FROM family_relationships fr
+            JOIN users u ON u.id = (
+                CASE
+                    WHEN fr.user_id_1 = $1 THEN fr.user_id_2
+                    ELSE fr.user_id_1
+                END
+            )
+            -- This join finds the most recent location for the family member
+            JOIN LATERAL (
+                SELECT latitude, longitude, last_updated
+                FROM device_tokens
+                WHERE user_id = u.id AND latitude IS NOT NULL AND longitude IS NOT NULL
+                ORDER BY last_updated DESC
+                LIMIT 1
+            ) latest_token ON true
+            -- This condition checks if the family member is sharing their location with the current user
+            WHERE (
+                (fr.user_id_1 = $1 AND fr.share_location_from_2_to_1 = TRUE)
+                OR (fr.user_id_2 = $1 AND fr.share_location_from_1_to_2 = TRUE)
+            ) AND fr.status = 'approved';
+        `;
+        const result: QueryResult<FamilyMemberLocation> = await client.query(query, [userId]);
+        return result.rows;
+    } finally {
+        client.release();
+    }
+}
+
+export async function getRecipientsForSosDb(senderId: number): Promise<{ id: number }[]> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return [];
+
+    const client = await dbPool.connect();
+    try {
+        const query = `
+            SELECT user_id_2 AS recipient_id
+            FROM family_relationships
+            WHERE user_id_1 = $1 AND share_location_from_1_to_2 = TRUE AND status = 'approved'
+            UNION
+            SELECT user_id_1 AS recipient_id
+            FROM family_relationships
+            WHERE user_id_2 = $1 AND share_location_from_2_to_1 = TRUE AND status = 'approved';
+        `;
+        const result = await client.query(query, [senderId]);
+        return result.rows.map(row => ({ id: row.recipient_id }));
     } finally {
         client.release();
     }

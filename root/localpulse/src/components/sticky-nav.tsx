@@ -1,0 +1,119 @@
+
+'use client';
+
+import type { FC } from 'react';
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { Home, Film, User as UserIcon, MessageSquare } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { getSession } from '@/app/auth/actions';
+import { getUnreadMessageCount } from '@/app/actions';
+import type { User } from '@/lib/db-types';
+import { Skeleton } from '@/components/ui/skeleton';
+import SosButton from './sos-button';
+
+const LoadingSkeleton: FC = () => (
+    <div className="container mx-auto flex h-14 max-w-2xl items-center justify-around px-4">
+        {[...Array(5)].map((_, i) => (
+            <div key={i} className="flex h-full w-full flex-col items-center justify-center space-y-1 pt-2">
+                <Skeleton className="h-5 w-5 rounded-full" />
+                <Skeleton className="h-4 w-12" />
+            </div>
+        ))}
+    </div>
+);
+
+const UNREAD_POLL_INTERVAL = 15000; // 15 seconds
+
+const StickyNav: FC = () => {
+  const pathname = usePathname();
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // Effect to fetch initial session and unread count
+  useEffect(() => {
+    getSession().then(session => {
+      setUser(session.user);
+      if (session.user) {
+        getUnreadMessageCount().then(setUnreadCount);
+      }
+      setLoading(false);
+    });
+  }, [pathname]); // Re-fetch session data if the path changes
+
+  // Effect to poll for unread messages
+  useEffect(() => {
+    if (!user) return; // Only poll if user is logged in
+    
+    const intervalId = setInterval(() => {
+        getUnreadMessageCount().then(setUnreadCount);
+    }, UNREAD_POLL_INTERVAL);
+
+    return () => clearInterval(intervalId);
+  }, [user]);
+
+
+  const leadingNavItems = [
+    { name: 'Home', href: '/', icon: Home, current: pathname === '/' },
+    { name: 'Reels', href: '/reels', icon: Film, current: pathname === '/reels' },
+  ];
+  
+  const trailingNavItems = [
+    { name: 'Chat', href: '/chat', icon: MessageSquare, current: pathname.startsWith('/chat'), requiresAuth: true, badgeCount: unreadCount },
+    { 
+      name: 'Profile', 
+      href: user ? `/users/${user.id}` : '/login', 
+      icon: UserIcon, 
+      current: user ? pathname.startsWith(`/users/${user.id}`) : pathname === '/login' 
+    }
+  ];
+
+  const renderNavItem = (item: any) => {
+    if (item.requiresAuth && !user) return null;
+    return (
+      <Link
+        key={item.name}
+        href={item.href}
+        className={cn(
+            'relative flex h-full w-full flex-row items-center justify-center space-x-2 border-b-2 px-2 text-sm font-medium transition-colors sm:flex-col sm:space-x-0 sm:space-y-1 sm:pt-2',
+            item.current
+            ? 'border-primary text-primary'
+            : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'
+        )}
+        aria-current={item.current ? 'page' : undefined}
+      >
+        <item.icon className="h-5 w-5" />
+        <span className="hidden sm:inline">{item.name}</span>
+        {item.badgeCount > 0 && (
+            <span className="absolute top-1 right-2 sm:right-auto sm:left-1/2 sm:ml-4 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-accent-foreground text-[10px] font-bold ring-2 ring-background">
+                {item.badgeCount > 9 ? '9+' : item.badgeCount}
+            </span>
+        )}
+      </Link>
+    );
+  };
+
+  return (
+    <nav className="sticky top-14 z-40 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      {loading ? (
+        <LoadingSkeleton />
+      ) : (
+        <div className="container mx-auto flex h-14 max-w-2xl items-center justify-around px-2">
+            {leadingNavItems.map(renderNavItem)}
+            
+            {user && (
+              <div className="flex h-full flex-col items-center justify-center">
+                <SosButton />
+              </div>
+            )}
+            
+            {trailingNavItems.map(renderNavItem)}
+        </div>
+      )}
+    </nav>
+  );
+};
+
+export default StickyNav;

@@ -753,7 +753,7 @@ export async function getMessages(conversationId: number): Promise<Message[]> {
   }
 }
 
-async function sendChatNotification(conversationId: number, sender: User, content: string) {
+async function sendChatNotification(conversationId: number, sender: User, content: string, title?: string) {
   try {
     const partner = await db.getConversationPartnerDb(conversationId, sender.id);
     if (!partner) return;
@@ -763,7 +763,7 @@ async function sendChatNotification(conversationId: number, sender: User, conten
 
     const notificationPayload = {
       notification: {
-        title: `New message from ${sender.name}`,
+        title: title || `New message from ${sender.name}`,
         body: content.length > 100 ? `${content.substring(0, 97)}...` : content,
       },
       data: {
@@ -795,7 +795,7 @@ async function sendChatNotification(conversationId: number, sender: User, conten
   }
 }
 
-export async function sendMessage(conversationId: number, content: string): Promise<{ message?: Message; error?: string }> {
+export async function sendMessage(conversationId: number, content: string, notificationTitle?: string): Promise<{ message?: Message; error?: string }> {
   const { user } = await getSession();
   if (!user) return { error: 'You must be logged in to send messages.' };
 
@@ -807,7 +807,7 @@ export async function sendMessage(conversationId: number, content: string): Prom
     });
     
     // Send notification in the background without blocking the response
-    sendChatNotification(conversationId, user, content).catch(err => {
+    sendChatNotification(conversationId, user, content, notificationTitle).catch(err => {
         console.error("Background task to send chat notification failed:", err);
     });
 
@@ -988,5 +988,47 @@ export async function toggleLocationSharing(targetUserId: number, share: boolean
   } catch (error: any) {
     console.error(`Error toggling location sharing for user ${targetUserId}:`, error);
     return { success: false, error: 'An unexpected server error occurred.' };
+  }
+}
+
+export async function getFamilyLocations(): Promise<FamilyMemberLocation[]> {
+    const { user } = await getSession();
+    if (!user) return [];
+    try {
+        return await db.getFamilyLocationsForUserDb(user.id);
+    } catch (error) {
+        console.error(`Error fetching family locations for user ${user.id}:`, error);
+        return [];
+    }
+}
+
+export async function sendSosMessage(latitude: number, longitude: number): Promise<{ success: boolean; error?: string; message?: string }> {
+  const { user } = await getSession();
+  if (!user) {
+    return { success: false, error: 'You must be logged in to send an SOS.' };
+  }
+
+  try {
+    const recipients = await db.getRecipientsForSosDb(user.id);
+    if (recipients.length === 0) {
+      return { success: false, error: 'You are not sharing your location with any family members. SOS not sent.' };
+    }
+
+    const sosMessageContent = `🔴 SOS EMERGENCY ALERT 🔴\nFrom: ${user.name}\nMy current location is: https://www.google.com/maps?q=${latitude},${longitude}`;
+    const notificationTitle = `🔴 SOS from ${user.name}`;
+    
+    let sentCount = 0;
+    for (const recipient of recipients) {
+      const conversationId = await db.findOrCreateConversationDb(user.id, recipient.id);
+      await sendMessage(conversationId, sosMessageContent, notificationTitle);
+      sentCount++;
+    }
+    
+    revalidatePath('/chat');
+    return { success: true, message: `SOS alert sent to ${sentCount} family member(s).` };
+
+  } catch (error: any) {
+    console.error('Error sending SOS message:', error);
+    return { success: false, error: 'Failed to send SOS message due to a server error.' };
   }
 }
