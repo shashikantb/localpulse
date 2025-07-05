@@ -28,7 +28,7 @@ const FamilyMembersCard: FC<FamilyMembersCardProps> = ({ familyMembers }) => {
         <Button asChild variant="outline" size="sm">
             <Link href="/family/map">
                 <Map className="w-4 h-4 mr-2" />
-                View on Map
+                View Locations
             </Link>
         </Button>
       </CardHeader>
