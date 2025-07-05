@@ -18,27 +18,6 @@ export default async function FamilyLocationsPage() {
 
   const locations = await getFamilyLocations();
 
-  // A helper function to format time difference simply without extra libraries
-  const formatTimeAgo = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-
-    if (seconds < 60) return "just now";
-    let interval = seconds / 31536000;
-    if (interval > 1) return Math.floor(interval) + " years ago";
-    interval = seconds / 2592000;
-    if (interval > 1) return Math.floor(interval) + " months ago";
-    interval = seconds / 86400;
-    if (interval > 1) return Math.floor(interval) + " days ago";
-    interval = seconds / 3600;
-    if (interval > 1) return Math.floor(interval) + " hours ago";
-    interval = seconds / 60;
-    if (interval > 1) return Math.floor(interval) + " minutes ago";
-    return Math.floor(seconds) + " seconds ago";
-  };
-
-
   return (
     <div className="flex flex-col items-center p-4 sm:p-6 md:p-8">
       <div className="container mx-auto w-full max-w-2xl space-y-6">
@@ -65,7 +44,7 @@ export default async function FamilyLocationsPage() {
                                     <div>
                                         <p className="font-semibold text-lg text-foreground">{loc.name}</p>
                                         <p className="text-xs text-muted-foreground">
-                                          Last updated: {formatTimeAgo(loc.last_updated)}
+                                          Last updated: {new Date(loc.last_updated).toLocaleString()}
                                         </p>
                                     </div>
                                 </div>
