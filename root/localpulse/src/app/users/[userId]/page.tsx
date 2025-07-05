@@ -2,7 +2,7 @@
 
 import type { FC } from 'react';
 import { notFound } from 'next/navigation';
-import { getUserWithFollowInfo, getPostsByUserId, getFamilyMembers, getPendingFamilyRequests } from '@/app/actions';
+import { getUserWithFollowInfo, getPostsByUserId, getFamilyMembers, getPendingFamilyRequests, getFamilyRelationshipStatus } from '@/app/actions';
 import { startChatAndRedirect } from '@/app/chat/actions';
 import { getSession } from '@/app/auth/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -11,7 +11,7 @@ import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, MessageS
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { PostCard } from '@/components/post-card';
-import type { User, FamilyMember } from '@/lib/db-types';
+import type { User, FamilyMember, FamilyRelationshipStatus } from '@/lib/db-types';
 import ProfilePictureUpdater from '@/components/profile-picture-updater';
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -48,13 +48,16 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
     { user: profileUser, stats, isFollowing }, 
     userPosts, 
     familyMembers, 
-    pendingRequests
+    pendingRequests,
+    familyStatusResult
   ] = await Promise.all([
     getUserWithFollowInfo(userId),
     getPostsByUserId(userId),
     // Only fetch family members and requests if it's the user's own profile
     isOwnProfile ? getFamilyMembers(userId) : Promise.resolve([] as FamilyMember[]),
     isOwnProfile ? getPendingFamilyRequests() : Promise.resolve([]),
+    // Fetch family status on the server
+    sessionUser && !isOwnProfile ? getFamilyRelationshipStatus(userId) : Promise.resolve({ status: 'none' as FamilyRelationshipStatus })
   ]);
 
   if (!profileUser || profileUser.status !== 'approved') {
@@ -134,6 +137,7 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
                           <FamilyActionButton 
                             sessionUser={sessionUser} 
                             targetUser={profileUser}
+                            initialStatus={familyStatusResult.status}
                           />
                         )}
                       </div>
