@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import type { Message, User, ConversationParticipant } from '@/lib/db-types';
-import { getMessages, sendMessage } from '@/app/actions';
+import { getMessages, sendMessage } from '@/app/chat/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
