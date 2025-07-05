@@ -246,7 +246,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
   const [sessionUser, setSessionUser] = useState<User | null>(null);
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [isLoading, setIsLoading] = useState(allPosts.length === 0);
-  const [isRefreshing, setIsRefreshing] = useState(isRefreshing);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMorePosts, setHasMorePosts] = useState<boolean>(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
