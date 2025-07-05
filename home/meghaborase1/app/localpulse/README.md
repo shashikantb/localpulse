@@ -31,6 +31,10 @@ POSTGRES_SSL=true
 # You can generate a strong secret with the command: openssl rand -hex 32
 JWT_SECRET=your_super_secret_jwt_key_here
 
+# Optional: Set to 'true' to allow login over HTTP in development or
+# behind a misconfigured reverse proxy. NOT RECOMMENDED FOR PRODUCTION.
+ALLOW_INSECURE_LOGIN_FOR_HTTP=false
+
 # Google Generative AI API Key (if using Genkit features)
 GOOGLE_GENAI_API_KEY=your_google_genai_api_key
 
@@ -104,7 +108,12 @@ npm start
 ## Troubleshooting
 
 ### Login works, but I'm logged out on other pages (Production)
-This is the classic symptom of the secure cookie issue.
-- **Verify NGINX Config**: Ensure `proxy_set_header X-Forwarded-Proto https;` is present in your NGINX configuration and that NGINX has been reloaded (`sudo systemctl reload nginx`).
-- **Restart the App**: After making any changes, you must restart your application (`pm2 restart <app-name>`).
+This is the classic symptom of the secure cookie issue. Your browser is not sending the login cookie back to the app because the app doesn't know it's running on HTTPS.
 
+**Solution 1: Configure NGINX (Recommended)**
+- **Verify NGINX Config**: Ensure `proxy_set_header X-Forwarded-Proto https;` is present in your NGINX configuration and that NGINX has been reloaded (`sudo systemctl reload nginx`). This is the most secure and correct way to solve this.
+
+**Solution 2: Use Insecure Cookies (Fallback)**
+- If you cannot modify the NGINX configuration, you can set `ALLOW_INSECURE_LOGIN_FOR_HTTP=true` in your `.env.local` file.
+- **Security Warning**: This is **less secure** and should only be used as a last resort. It makes your login session vulnerable to man-in-the-middle attacks on insecure networks.
+- **Restart the App**: After making any changes, you must restart your application (`pm2 restart <app-name>`).

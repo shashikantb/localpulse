@@ -103,6 +103,8 @@ export async function login(email: string, password: string): Promise<{ success:
     const expires = new Date(Date.now() + maxAgeInSeconds * 1000);
     
     const isProduction = process.env.NODE_ENV === 'production';
+    // This allows login on HTTP during development or behind a misconfigured reverse proxy.
+    // It's a security fallback and should ideally not be used in a well-configured production environment.
     const allowInsecure = process.env.ALLOW_INSECURE_LOGIN_FOR_HTTP === 'true';
 
     cookies().set(USER_COOKIE_NAME, sessionToken, {
