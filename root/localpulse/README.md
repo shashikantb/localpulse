@@ -42,7 +42,7 @@ NODE_ENV=production
 # Setting this to 'true' makes the cookie non-secure, which is less safe but may be necessary
 # for certain hosting environments.
 # The best solution is to ensure end-to-end HTTPS.
-# ALLOW_INSECURE_LOGIN_FOR_HTTP=true
+ALLOW_INSECURE_LOGIN_FOR_HTTP=true
 
 # Google Generative AI API Key (if using Genkit features)
 GOOGLE_GENAI_API_KEY=your_google_genai_api_key
@@ -91,6 +91,6 @@ This error means the application could not connect to your PostgreSQL server.
 ### User is Not Logged In (in Production)
 If login works but features for logged-in users (like SOS, Add Family, Profile editing) are missing in your production environment:
 - **Check `JWT_SECRET`**: Ensure the `JWT_SECRET` environment variable is correctly set in your production hosting environment (e.g., in Google Cloud Run's environment variable settings).
-- **Check for HTTPS**: The application sets secure cookies in production, which require an HTTPS connection. If your production site is not served over HTTPS, browsers will not send the login cookie, and the server will think you are a guest. Ensure your production deployment has HTTPS enabled and properly configured. As a temporary workaround for environments without end-to-end HTTPS, you can set `ALLOW_INSECURE_LOGIN_FOR_HTTP=true` in your `.env.local` file, but this is less secure.
+- **Check for HTTPS**: The application sets secure cookies in production, which require an HTTPS connection. If your production site is not served over HTTPS, browsers will not send the login cookie, and the server will think you are a guest. As a temporary workaround for environments without end-to-end HTTPS, you can set `ALLOW_INSECURE_LOGIN_FOR_HTTP=true` in your `.env.local` file, but this is less secure.
 
 To get started, take a look at `src/app/page.tsx`.
