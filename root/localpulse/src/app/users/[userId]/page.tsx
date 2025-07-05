@@ -135,9 +135,8 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
                         )}
                         {sessionUser && !isOwnProfile && (
                           <FamilyActionButton 
-                            sessionUser={sessionUser} 
-                            targetUser={profileUser}
                             initialStatus={familyStatusResult.status}
+                            targetUserId={profileUser.id}
                           />
                         )}
                       </div>
