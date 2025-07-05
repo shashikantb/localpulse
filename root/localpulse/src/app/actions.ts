@@ -498,6 +498,20 @@ export async function registerDeviceToken(
   }
 }
 
+export async function updateUserLocation(latitude?: number, longitude?: number): Promise<void> {
+    if (latitude === undefined || longitude === undefined) return;
+    try {
+        const { user } = await getSession();
+        if (user) {
+            await db.updateUserLocationDb(user.id, latitude, longitude);
+        }
+    } catch (error: any) {
+        // Fail silently
+        console.error('Failed to update user location in background:', error.message);
+    }
+}
+
+
 export async function checkForNewerPosts(latestPostIdClientKnows: number): Promise<{ hasNewerPosts: boolean; count: number }> {
   try {
     // If the client doesn't know about any posts yet (e.g., initial load),
@@ -838,7 +852,7 @@ export async function markConversationAsRead(conversationId: number): Promise<vo
 
 // --- Family Relationship Actions ---
 
-export async function getFamilyRelationshipStatus(targetUserId: number): Promise<{ status: FamilyRelationshipStatus }> {
+export async function getFamilyRelationshipStatus(targetUserId: number): Promise<{ status: 'none' | 'pending_from_me' | 'pending_from_them' | 'approved' }> {
   const { user: sessionUser } = await getSession();
   if (!sessionUser || sessionUser.id === targetUserId) {
     return { status: 'none' };

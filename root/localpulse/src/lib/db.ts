@@ -478,6 +478,24 @@ export async function addOrUpdateDeviceTokenDb(token: string, latitude?: number,
   }
 }
 
+export async function updateUserLocationDb(userId: number, latitude: number, longitude: number): Promise<void> {
+  await ensureDbInitialized();
+  const dbPool = getDbPool();
+  if (!dbPool) return;
+  const client = await dbPool.connect();
+  try {
+    // This query updates all tokens for a user. If they have none, it does nothing.
+    const query = `
+      UPDATE device_tokens 
+      SET latitude = $1, longitude = $2, last_updated = NOW()
+      WHERE user_id = $3;
+    `;
+    await client.query(query, [latitude, longitude, userId]);
+  } finally {
+    client.release();
+  }
+}
+
 export async function getNearbyDeviceTokensDb(latitude: number, longitude: number, radiusKm: number = 20): Promise<string[]> {
   await ensureDbInitialized();
   const dbPool = getDbPool();

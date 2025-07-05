@@ -1,10 +1,11 @@
 
+
 'use client';
 
 import type { FC } from 'react';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { Post, User } from '@/lib/db-types';
-import { getPosts, registerDeviceToken } from '@/app/actions';
+import { getPosts, registerDeviceToken, updateUserLocation } from '@/app/actions';
 import { getSession } from '@/app/auth/actions';
 import { PostCard } from '@/components/post-card';
 import { PostFeedSkeleton } from '@/components/post-feed-skeleton';
@@ -309,6 +310,14 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
         
         setSessionUser(session.user);
         setLocation(loc);
+
+        // Update location in the background for family sharing, if user is logged in
+        if (session.user && loc) {
+            updateUserLocation(loc.latitude, loc.longitude).catch(err => {
+                // This is a background task, so we don't need to bother the user with an error.
+                console.warn("Silent location update failed:", err);
+            });
+        }
 
         // NOW fetch posts with the location data
         const freshPosts = await getPosts({ 
