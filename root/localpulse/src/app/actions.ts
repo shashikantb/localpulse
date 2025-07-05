@@ -1,8 +1,9 @@
 
+
 'use server';
 
 import * as db from '@/lib/db';
-import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus, Conversation, Message, ConversationParticipant, PendingFamilyRequest, FamilyRelationshipStatus } from '@/lib/db-types';
+import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus, Conversation, Message, ConversationParticipant, PendingFamilyRequest, FamilyMember } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 import { admin as firebaseAdmin } from '@/lib/firebase-admin';
 import { getSession } from '@/app/auth/actions';
@@ -941,7 +942,7 @@ export async function respondToFamilyRequest(otherUserId: number, response: 'app
   }
 }
 
-export async function getFamilyMembers(userId: number): Promise<User[]> {
+export async function getFamilyMembers(userId: number): Promise<FamilyMember[]> {
     try {
         return await db.getFamilyMembersForUserDb(userId);
     } catch (error) {
@@ -959,4 +960,20 @@ export async function getPendingFamilyRequests(): Promise<PendingFamilyRequest[]
         console.error(`Error fetching pending family requests for user ${user.id}:`, error);
         return [];
     }
+}
+
+export async function toggleLocationSharing(targetUserId: number, share: boolean): Promise<{ success: boolean; error?: string }> {
+  const { user: sessionUser } = await getSession();
+  if (!sessionUser) {
+    return { success: false, error: 'You must be logged in.' };
+  }
+  
+  try {
+    await db.toggleLocationSharingDb(sessionUser.id, targetUserId, share);
+    revalidatePath(`/users/${sessionUser.id}`);
+    return { success: true };
+  } catch (error: any) {
+    console.error(`Error toggling location sharing for user ${targetUserId}:`, error);
+    return { success: false, error: 'An unexpected server error occurred.' };
+  }
 }

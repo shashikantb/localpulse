@@ -1,13 +1,15 @@
 
+
 import type { FC } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Users } from 'lucide-react';
-import type { User } from '@/lib/db-types';
+import { Users, MapPin } from 'lucide-react';
+import type { FamilyMember } from '@/lib/db-types';
+import LocationSharingToggle from './location-sharing-toggle';
 
 interface FamilyMembersCardProps {
-  familyMembers: User[];
+  familyMembers: FamilyMember[];
 }
 
 const FamilyMembersCard: FC<FamilyMembersCardProps> = ({ familyMembers }) => {
@@ -19,23 +21,36 @@ const FamilyMembersCard: FC<FamilyMembersCardProps> = ({ familyMembers }) => {
             Family Members
         </CardTitle>
         <CardDescription>
-          Connected family members.
+          Manage location sharing with your connected family members.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
           {familyMembers.map((member) => (
-            <Link
+            <div
               key={member.id}
-              href={`/users/${member.id}`}
-              className="flex items-center space-x-4 p-2 rounded-lg hover:bg-muted"
+              className="flex items-center justify-between space-x-4 p-2 rounded-lg hover:bg-muted"
             >
-              <Avatar>
-                <AvatarImage src={member.profilepictureurl || undefined} alt={member.name} />
-                <AvatarFallback>{member.name.charAt(0)}</AvatarFallback>
-              </Avatar>
-              <span className="font-medium text-foreground">{member.name}</span>
-            </Link>
+                <Link href={`/users/${member.id}`} className="flex items-center space-x-4 flex-1">
+                    <Avatar>
+                        <AvatarImage src={member.profilepictureurl || undefined} alt={member.name} />
+                        <AvatarFallback>{member.name.charAt(0)}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex items-center gap-2">
+                        <span className="font-medium text-foreground">{member.name}</span>
+                        {member.they_are_sharing_with_me && (
+                            <MapPin className="w-4 h-4 text-green-500" title={`${member.name} is sharing their location with you.`}/>
+                        )}
+                    </div>
+                </Link>
+                <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Share My Location</span>
+                    <LocationSharingToggle 
+                        targetUserId={member.id} 
+                        initialIsSharing={member.i_am_sharing_with_them} 
+                    />
+                </div>
+            </div>
           ))}
         </div>
       </CardContent>

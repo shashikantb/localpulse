@@ -2,7 +2,7 @@
 
 
 import { Pool, Client, type QueryResult } from 'pg';
-import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Status, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest } from '@/lib/db-types';
+import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Status, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest, FamilyMember } from '@/lib/db-types';
 import bcrypt from 'bcryptjs';
 
 // Re-export db-types
@@ -134,6 +134,10 @@ async function initializeDbSchema(): Promise<void> {
             UNIQUE (user_id_1, user_id_2)
           );
         `);
+        // Add location sharing columns to family_relationships table if they don't exist
+        await initClient.query(`ALTER TABLE family_relationships ADD COLUMN IF NOT EXISTS share_location_from_1_to_2 BOOLEAN NOT NULL DEFAULT false;`);
+        await initClient.query(`ALTER TABLE family_relationships ADD COLUMN IF NOT EXISTS share_location_from_2_to_1 BOOLEAN NOT NULL DEFAULT false;`);
+
 
         // --- Indexes for performance ---
         await initClient.query('CREATE INDEX IF NOT EXISTS idx_posts_createdat ON posts (createdat DESC)');
@@ -1357,7 +1361,7 @@ export async function sendFamilyRequestDb(requesterId: number, receiverId: numbe
             INSERT INTO family_relationships (user_id_1, user_id_2, requester_id, status)
             VALUES ($1, $2, $3, 'pending')
             ON CONFLICT (user_id_1, user_id_2) DO UPDATE
-            SET requester_id = $3, status = 'pending'
+            SET requester_id = $3, status = 'pending', created_at = NOW()
             WHERE family_relationships.status = 'rejected';
         `;
         await client.query(query, [u1, u2, requesterId]);
@@ -1415,7 +1419,7 @@ export async function getPendingFamilyRequestsForUserDb(userId: number): Promise
     }
 }
 
-export async function getFamilyMembersForUserDb(userId: number): Promise<User[]> {
+export async function getFamilyMembersForUserDb(userId: number): Promise<FamilyMember[]> {
     await ensureDbInitialized();
     const dbPool = getDbPool();
     if (!dbPool) return [];
@@ -1423,19 +1427,56 @@ export async function getFamilyMembersForUserDb(userId: number): Promise<User[]>
     const client = await dbPool.connect();
     try {
         const query = `
-            SELECT ${USER_COLUMNS_SANITIZED}
-            FROM users u
-            JOIN (
-                SELECT CASE
-                    WHEN user_id_1 = $1 THEN user_id_2
-                    ELSE user_id_1
-                END as family_member_id
-                FROM family_relationships
-                WHERE (user_id_1 = $1 OR user_id_2 = $1) AND status = 'approved'
-            ) AS fm ON u.id = fm.family_member_id;
+            SELECT 
+                u.*,
+                CASE
+                    WHEN fr.user_id_1 = $1 THEN fr.share_location_from_1_to_2
+                    ELSE fr.share_location_from_2_to_1
+                END AS i_am_sharing_with_them,
+                CASE
+                    WHEN fr.user_id_1 = $1 THEN fr.share_location_from_2_to_1
+                    ELSE fr.share_location_from_1_to_2
+                END AS they_are_sharing_with_me
+            FROM family_relationships fr
+            JOIN users u ON u.id = (
+                CASE
+                    WHEN fr.user_id_1 = $1 THEN fr.user_id_2
+                    ELSE fr.user_id_1
+                END
+            )
+            WHERE (fr.user_id_1 = $1 OR fr.user_id_2 = $1) AND fr.status = 'approved';
         `;
         const result = await client.query(query, [userId]);
         return result.rows;
+    } finally {
+        client.release();
+    }
+}
+
+
+export async function toggleLocationSharingDb(currentUserId: number, targetUserId: number, share: boolean): Promise<void> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) throw new Error("Database not configured.");
+
+    const client = await dbPool.connect();
+    try {
+        const [u1, u2] = currentUserId < targetUserId ? [currentUserId, targetUserId] : [targetUserId, currentUserId];
+        
+        let columnToUpdate;
+        if (currentUserId < targetUserId) {
+            columnToUpdate = 'share_location_from_1_to_2';
+        } else {
+            columnToUpdate = 'share_location_from_2_to_1';
+        }
+
+        const query = `
+            UPDATE family_relationships
+            SET ${columnToUpdate} = $1
+            WHERE user_id_1 = $2 AND user_id_2 = $3 AND status = 'approved'
+        `;
+
+        await client.query(query, [share, u1, u2]);
     } finally {
         client.release();
     }

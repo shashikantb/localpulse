@@ -6,11 +6,11 @@ import { getUserWithFollowInfo, getPostsByUserId, startChatAndRedirect, getFamil
 import { getSession } from '@/app/auth/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardHeader, CardContent, CardTitle, CardDescription } from '@/components/ui/card';
-import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, MessageSquare, Settings, Users } from 'lucide-react';
+import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, MessageSquare, Settings } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { PostCard } from '@/components/post-card';
-import type { User } from '@/lib/db-types';
+import type { User, FamilyMember } from '@/lib/db-types';
 import ProfilePictureUpdater from '@/components/profile-picture-updater';
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -52,7 +52,7 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
     getUserWithFollowInfo(userId),
     getPostsByUserId(userId),
     // Only fetch family members and requests if it's the user's own profile
-    isOwnProfile ? getFamilyMembers(userId) : Promise.resolve([]),
+    isOwnProfile ? getFamilyMembers(userId) : Promise.resolve([] as FamilyMember[]),
     isOwnProfile ? getPendingFamilyRequests() : Promise.resolve([])
   ]);
 
