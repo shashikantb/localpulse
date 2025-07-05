@@ -31,6 +31,9 @@ POSTGRES_URL=your_postgresql_connection_string
 # You can generate a strong secret with the command: openssl rand -hex 32
 JWT_SECRET=your_super_secret_jwt_key_here
 
+# Recommended for Production for better performance and security
+NODE_ENV=production
+
 # Google Generative AI API Key (if using Genkit features)
 GOOGLE_GENAI_API_KEY=your_google_genai_api_key
 
@@ -46,7 +49,7 @@ Update `ADMIN_USERNAME` and `ADMIN_PASSWORD` to secure values, especially for pr
 **Important Notes for Production:**
 - **`JWT_SECRET`**: This variable is **mandatory** for user authentication to work in production.
 - **`POSTGRES_URL`**: This variable is **mandatory** for any database functionality.
-- **HTTPS Required**: Because user login cookies are marked as `Secure`, your production deployment **must** be served over HTTPS for authentication to work correctly.
+- **HTTPS Required**: Because user login cookies are marked as `Secure`, your production deployment **must** be served over HTTPS for authentication to work correctly. If your site is served over HTTP, browsers will not send the login cookie, and the server will think you are a guest.
 - **URL Encoding:** If your username or password in `POSTGRES_URL` contains special characters (e.g., `@`, `#`, `!`, `:`, `/`, `?`, `[`, `]`), they **must be URL-encoded**. For example, `my@secret#pass` becomes `my%40secret%23pass`.
 - **SSL:** For cloud-hosted PostgreSQL (like Google Cloud SQL, AWS RDS, Azure), you will likely need to enable SSL by setting `POSTGRES_SSL=true`.
 
