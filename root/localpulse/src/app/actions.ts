@@ -707,8 +707,7 @@ export async function getStatusesForFeed(): Promise<UserWithStatuses[]> {
 
 // --- Family Relationship Actions ---
 
-export async function getFamilyRelationshipStatus(targetUserId: number): Promise<{ status: 'none' | 'pending_from_me' | 'pending_from_them' | 'approved' }> {
-  const { user: sessionUser } = await getSession();
+export async function getFamilyRelationshipStatus(sessionUser: User | null, targetUserId: number): Promise<{ status: 'none' | 'pending_from_me' | 'pending_from_them' | 'approved' }> {
   if (!sessionUser || sessionUser.id === targetUserId) {
     return { status: 'none' };
   }
