@@ -990,14 +990,3 @@ export async function toggleLocationSharing(targetUserId: number, share: boolean
     return { success: false, error: 'An unexpected server error occurred.' };
   }
 }
-
-export async function getFamilyLocations(): Promise<FamilyMemberLocation[]> {
-    const { user } = await getSession();
-    if (!user) return [];
-    try {
-        return await db.getFamilyLocationsDb(user.id);
-    } catch (error) {
-        console.error(`Error fetching family member locations for user ${user.id}:`, error);
-        return [];
-    }
-}
