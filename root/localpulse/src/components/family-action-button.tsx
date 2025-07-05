@@ -1,23 +1,43 @@
 
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Loader2, UserPlus, UserCheck, UserX, Clock } from 'lucide-react';
 import type { User, FamilyRelationshipStatus } from '@/lib/db-types';
-import { sendFamilyRequest, respondToFamilyRequest, cancelFamilyRequest } from '@/app/actions';
+import { sendFamilyRequest, respondToFamilyRequest, cancelFamilyRequest, getFamilyRelationshipStatus } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 
 interface FamilyActionButtonProps {
-  sessionUser: User;
+  sessionUser: User | null;
   targetUser: User;
-  initialStatus: FamilyRelationshipStatus;
 }
 
-export default function FamilyActionButton({ sessionUser, targetUser, initialStatus }: FamilyActionButtonProps) {
-  const [status, setStatus] = useState<FamilyRelationshipStatus>(initialStatus);
+export default function FamilyActionButton({ sessionUser, targetUser }: FamilyActionButtonProps) {
+  const [status, setStatus] = useState<FamilyRelationshipStatus>('none');
+  const [isLoading, setIsLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (!sessionUser) {
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    getFamilyRelationshipStatus(sessionUser, targetUser.id)
+      .then(result => {
+        setStatus(result.status);
+      })
+      .catch(err => {
+        console.error("Failed to get family relationship status:", err);
+        setStatus('none'); // Default to none on error
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, [sessionUser, targetUser.id]);
+
 
   const handleRequest = () => {
     startTransition(async () => {
@@ -55,20 +75,26 @@ export default function FamilyActionButton({ sessionUser, targetUser, initialSta
     });
   };
 
-  if (isPending) {
-      return <Button size="sm" disabled><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Please Wait</Button>;
+  const isTransitioning = isPending || isLoading;
+
+  if (!sessionUser) {
+    return null; // Don't show the button to guests
+  }
+  
+  if (isLoading) {
+      return <Button size="sm" disabled><Loader2 className="mr-2 h-4 w-4 animate-spin" /> ...</Button>;
   }
 
   switch (status) {
     case 'none':
-      return <Button size="sm" onClick={handleRequest} disabled={isPending}><UserPlus className="mr-2 h-4 w-4" /> Add Family</Button>;
+      return <Button size="sm" onClick={handleRequest} disabled={isTransitioning}><UserPlus className="mr-2 h-4 w-4" /> Add Family</Button>;
     case 'pending_from_me':
-      return <Button size="sm" variant="outline" onClick={handleCancelRequest} disabled={isPending}><Clock className="mr-2 h-4 w-4" /> Request Sent</Button>;
+      return <Button size="sm" variant="outline" onClick={handleCancelRequest} disabled={isTransitioning}><Clock className="mr-2 h-4 w-4" /> Request Sent</Button>;
     case 'pending_from_them':
       return (
         <div className="flex gap-2">
-          <Button size="sm" variant="default" onClick={() => handleResponse('approve')} disabled={isPending}><UserCheck className="mr-2 h-4 w-4" /> Accept</Button>
-          <Button size="sm" variant="destructive" onClick={() => handleResponse('reject')} disabled={isPending}><UserX className="mr-2 h-4 w-4" /> Reject</Button>
+          <Button size="sm" variant="default" onClick={() => handleResponse('approve')} disabled={isTransitioning}><UserCheck className="mr-2 h-4 w-4" /> Accept</Button>
+          <Button size="sm" variant="destructive" onClick={() => handleResponse('reject')} disabled={isTransitioning}><UserX className="mr-2 h-4 w-4" /> Reject</Button>
         </div>
       );
     case 'approved':
