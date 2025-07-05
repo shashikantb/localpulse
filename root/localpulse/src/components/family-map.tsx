@@ -3,29 +3,19 @@
 
 import 'leaflet/dist/leaflet.css';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import type { FamilyMemberLocation, User } from '@/lib/db-types';
+import type { User } from '@/lib/db-types';
 import L from 'leaflet';
 import { formatDistanceToNowStrict } from 'date-fns';
-import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
-import { renderToStaticMarkup } from 'react-dom/server';
+import type { FamilyMemberLocationWithIcon } from '@/app/family/map/page';
 
 interface FamilyMapProps {
-  locations: FamilyMemberLocation[];
+  locations: FamilyMemberLocationWithIcon[];
   currentUser: User;
 }
 
-const createCustomIcon = (user: FamilyMemberLocation) => {
-  const avatarMarkup = renderToStaticMarkup(
-    <div className="relative">
-      <Avatar className="h-10 w-10 border-2 border-primary bg-background p-0.5">
-        <AvatarImage src={user.profilepictureurl || undefined} alt={user.name} />
-        <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
-      </Avatar>
-      <div className="absolute -bottom-1 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-primary"></div>
-    </div>
-  );
+const createCustomIcon = (iconHtml: string) => {
   return new L.DivIcon({
-    html: avatarMarkup,
+    html: iconHtml,
     className: 'bg-transparent border-none',
     iconSize: [44, 48],
     iconAnchor: [22, 48], // Point of the icon which will correspond to marker's location
@@ -67,7 +57,7 @@ export default function FamilyMap({ locations, currentUser }: FamilyMapProps) {
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       {locations.map((loc) => (
-        <Marker key={loc.id} position={[loc.latitude, loc.longitude]} icon={createCustomIcon(loc)}>
+        <Marker key={loc.id} position={[loc.latitude, loc.longitude]} icon={createCustomIcon(loc.iconHtml)}>
           <Popup>
             <div className="text-center font-semibold">{loc.name}</div>
             <div className="text-xs text-muted-foreground">

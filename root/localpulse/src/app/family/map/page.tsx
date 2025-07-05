@@ -8,6 +8,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Map, Users } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import type { FamilyMemberLocation } from '@/lib/db-types';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +23,23 @@ const FamilyMap = dynamic(() => import('@/components/family-map'), {
   ),
 });
 
+export interface FamilyMemberLocationWithIcon extends FamilyMemberLocation {
+  iconHtml: string;
+}
+
+const createIconMarkup = (user: FamilyMemberLocation) => {
+    return renderToStaticMarkup(
+      <div className="relative">
+        <Avatar className="h-10 w-10 border-2 border-primary bg-background p-0.5">
+          <AvatarImage src={user.profilepictureurl || undefined} alt={user.name} />
+          <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+        </Avatar>
+        <div className="absolute -bottom-1 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-primary"></div>
+      </div>
+    );
+};
+
+
 export default async function FamilyMapPage() {
   const { user } = await getSession();
   if (!user) {
@@ -27,6 +47,11 @@ export default async function FamilyMapPage() {
   }
 
   const locations = await getFamilyLocations();
+
+  const locationsWithIcons: FamilyMemberLocationWithIcon[] = locations.map(loc => ({
+      ...loc,
+      iconHtml: createIconMarkup(loc),
+  }));
 
   return (
     <div className="flex flex-col items-center p-4 sm:p-6 md:p-8">
@@ -42,8 +67,8 @@ export default async function FamilyMapPage() {
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                {locations.length > 0 ? (
-                    <FamilyMap locations={locations} currentUser={user} />
+                {locationsWithIcons.length > 0 ? (
+                    <FamilyMap locations={locationsWithIcons} currentUser={user} />
                 ) : (
                     <div className="text-center py-16 text-muted-foreground bg-muted/50 rounded-lg">
                         <Users className="mx-auto h-16 w-16 mb-4 opacity-50" />
