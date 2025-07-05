@@ -795,7 +795,7 @@ async function sendChatNotification(conversationId: number, sender: User, conten
   }
 }
 
-export async function sendMessage(conversationId: number, content: string, notificationTitle?: string): Promise<{ message?: Message; error?: string }> {
+export async function sendMessage(conversationId: number, content: string): Promise<{ message?: Message; error?: string }> {
   const { user } = await getSession();
   if (!user) return { error: 'You must be logged in to send messages.' };
 
@@ -806,8 +806,8 @@ export async function sendMessage(conversationId: number, content: string, notif
       content,
     });
     
-    // Send notification in the background without blocking the response
-    sendChatNotification(conversationId, user, content, notificationTitle).catch(err => {
+    // Send notification in the background with the default title
+    sendChatNotification(conversationId, user, content).catch(err => {
         console.error("Background task to send chat notification failed:", err);
     });
 
@@ -1020,11 +1020,23 @@ export async function sendSosMessage(latitude: number, longitude: number): Promi
     let sentCount = 0;
     for (const recipient of recipients) {
       const conversationId = await db.findOrCreateConversationDb(user.id, recipient.id);
-      await sendMessage(conversationId, sosMessageContent, notificationTitle);
+      
+      // Directly add message to DB
+      await db.addMessageDb({
+          conversationId,
+          senderId: user.id,
+          content: sosMessageContent,
+      });
+
+      // Directly send notification with custom title
+      sendChatNotification(conversationId, user, sosMessageContent, notificationTitle).catch(err => {
+          console.error("Background task to send SOS chat notification failed:", err);
+      });
+      
       sentCount++;
     }
     
-    revalidatePath('/chat');
+    revalidatePath('/chat', 'layout'); // Use layout revalidation to update sidebar and unread counts
     return { success: true, message: `SOS alert sent to ${sentCount} family member(s).` };
 
   } catch (error: any) {

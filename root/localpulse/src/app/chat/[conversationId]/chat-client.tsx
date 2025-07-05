@@ -7,7 +7,7 @@ import { getMessages, sendMessage } from '@/app/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Send, User as UserIcon, Loader2 } from 'lucide-react';
+import { Send, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -21,6 +21,27 @@ interface ChatClientProps {
 }
 
 const POLLING_INTERVAL = 3000; // 3 seconds
+
+// A simple component to render message content and detect links
+function MessageContent({ content }: { content: string }) {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = content.split(urlRegex);
+
+    return (
+        <p className="text-sm whitespace-pre-wrap break-words">
+            {parts.map((part, index) => {
+                if (part.match(urlRegex)) {
+                    return (
+                        <a key={index} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
+                            {part}
+                        </a>
+                    );
+                }
+                return part;
+            })}
+        </p>
+    );
+}
 
 export default function ChatClient({ initialMessages, partner, sessionUser, conversationId }: ChatClientProps) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
@@ -83,8 +104,7 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
     setMessages(prev => [...prev, optimisticMessage]);
     setNewMessage('');
 
-    // The SOS feature passes a third argument, but normal chat does not.
-    // The action handles this optional parameter.
+    // Uses the simplified sendMessage action
     const result = await sendMessage(conversationId, optimisticMessage.content);
     
     if (result.error || !result.message) {
@@ -136,7 +156,7 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
                     : 'bg-muted text-foreground rounded-bl-none'
                 )}
               >
-                <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
+                <MessageContent content={message.content} />
                 <span className={cn('text-xs mt-1.5 opacity-70', isSender ? 'self-end' : 'self-start')}>
                   {format(new Date(message.created_at), 'p')}
                 </span>
