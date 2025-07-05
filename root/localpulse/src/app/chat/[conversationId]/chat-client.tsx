@@ -22,29 +22,6 @@ interface ChatClientProps {
 
 const POLLING_INTERVAL = 3000; // 3 seconds
 
-const renderMessageContent = (content: string) => {
-    // Regex to find URLs
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    const parts = content.split(urlRegex);
-
-    return parts.map((part, index) => {
-        if (part && part.match(urlRegex)) {
-            return (
-                <a
-                    key={index}
-                    href={part}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-400 hover:underline"
-                >
-                    {part}
-                </a>
-            );
-        }
-        return <React.Fragment key={index}>{part}</React.Fragment>;
-    });
-};
-
 export default function ChatClient({ initialMessages, partner, sessionUser, conversationId }: ChatClientProps) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [newMessage, setNewMessage] = useState('');
@@ -166,7 +143,7 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
                     : 'bg-muted text-foreground rounded-bl-none'
                 )}
               >
-                <div className="text-sm whitespace-pre-wrap break-words">{renderMessageContent(message.content)}</div>
+                <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
                 <span className={cn('text-xs mt-1.5 opacity-70', isSender ? 'self-end' : 'self-start')}>
                   {format(new Date(message.created_at), 'p')}
                 </span>
