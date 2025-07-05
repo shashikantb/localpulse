@@ -14,12 +14,20 @@ import { z } from 'zod';
 
 const USER_COOKIE_NAME = 'user-auth-token';
 
-// The JWT_SECRET is now mandatory.
+// Use a fallback secret for development if not set, but log a strong warning.
 const secret = process.env.JWT_SECRET;
-if (!secret || secret.length < 32) {
-  throw new Error('FATAL: A secure JWT_SECRET with at least 32 characters must be set in your environment variables. The application cannot start without it.');
+if (!secret && process.env.NODE_ENV === 'production') {
+    // In production, the secret is absolutely mandatory.
+    throw new Error('FATAL: A secure JWT_SECRET environment variable must be set for production.');
 }
-const JWT_SECRET = new TextEncoder().encode(secret);
+const JWT_SECRET = new TextEncoder().encode(secret || 'fallback-secret-for-jwt-that-is-at-least-32-bytes-long');
+
+if (!process.env.JWT_SECRET) {
+  console.warn('----------------------------------------------------------------');
+  console.warn('WARNING: JWT_SECRET environment variable is not set. Using a temporary, insecure fallback secret.');
+  console.warn('THIS IS NOT SAFE FOR PRODUCTION. Please set a secure secret in your .env.local file.');
+  console.warn('----------------------------------------------------------------');
+}
 
 
 async function encrypt(payload: any) {
