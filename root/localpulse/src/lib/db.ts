@@ -74,7 +74,8 @@ async function initializeDbSchema(): Promise<void> {
             role VARCHAR(50) NOT NULL CHECK (role IN ('Business', 'Gorakshak', 'Admin', 'Public(जनता)')),
             status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
             createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-            profilepictureurl TEXT
+            profilepictureurl TEXT,
+            mobilenumber VARCHAR(20)
         );
         `);
         
@@ -1575,3 +1576,5 @@ export async function getRecipientsForSosDb(senderId: number): Promise<{ id: num
         client.release();
     }
 }
+
+    
