@@ -1,7 +1,8 @@
 
 
+
 import { Pool, Client, type QueryResult } from 'pg';
-import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Status, Conversation, Message, NewMessage, ConversationParticipant } from '@/lib/db-types';
+import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Status, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest } from '@/lib/db-types';
 import bcrypt from 'bcryptjs';
 
 // Re-export db-types
@@ -120,6 +121,19 @@ async function initializeDbSchema(): Promise<void> {
         await initClient.query(`CREATE TABLE IF NOT EXISTS conversations ( id SERIAL PRIMARY KEY, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, last_message_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP );`);
         await initClient.query(`CREATE TABLE IF NOT EXISTS conversation_participants ( conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, unread_count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (conversation_id, user_id) );`);
         await initClient.query(`CREATE TABLE IF NOT EXISTS messages ( id SERIAL PRIMARY KEY, conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, content TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP );`);
+        // Family Relationships Table
+        await initClient.query(`
+          CREATE TABLE IF NOT EXISTS family_relationships (
+            id SERIAL PRIMARY KEY,
+            user_id_1 INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            user_id_2 INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            requester_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+            created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT user_order_check CHECK (user_id_1 < user_id_2),
+            UNIQUE (user_id_1, user_id_2)
+          );
+        `);
 
         // --- Indexes for performance ---
         await initClient.query('CREATE INDEX IF NOT EXISTS idx_posts_createdat ON posts (createdat DESC)');
@@ -141,6 +155,8 @@ async function initializeDbSchema(): Promise<void> {
         await initClient.query('CREATE INDEX IF NOT EXISTS idx_conversations_last_message_at ON conversations(last_message_at DESC)');
         await initClient.query('CREATE INDEX IF NOT EXISTS idx_conversation_participants_user_id ON conversation_participants(user_id)');
         await initClient.query('CREATE INDEX IF NOT EXISTS idx_messages_conversation_id_created_at ON messages(conversation_id, created_at DESC)');
+        await initClient.query('CREATE INDEX IF NOT EXISTS idx_family_relationships_user1 ON family_relationships(user_id_1)');
+        await initClient.query('CREATE INDEX IF NOT EXISTS idx_family_relationships_user2 ON family_relationships(user_id_2)');
 
         await initClient.query('COMMIT');
         console.log('Database schema initialized successfully via dedicated client.');
@@ -1306,6 +1322,105 @@ export async function updateUserMobileDb(userId: number, mobileNumber: string): 
         `;
         const result = await client.query(query, [mobileNumber, userId]);
         return result.rows[0] || null;
+    } finally {
+        client.release();
+    }
+}
+
+// --- Family Relationship Functions ---
+
+export async function getFamilyRelationshipDb(userId1: number, userId2: number): Promise<FamilyRelationship | null> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return null;
+
+    const client = await dbPool.connect();
+    try {
+        const [u1, u2] = userId1 < userId2 ? [userId1, userId2] : [userId2, userId1];
+        const query = `SELECT * FROM family_relationships WHERE user_id_1 = $1 AND user_id_2 = $2`;
+        const result = await client.query(query, [u1, u2]);
+        return result.rows[0] || null;
+    } finally {
+        client.release();
+    }
+}
+
+export async function sendFamilyRequestDb(requesterId: number, receiverId: number): Promise<void> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) throw new Error("Database not configured.");
+
+    const client = await dbPool.connect();
+    try {
+        const [u1, u2] = requesterId < receiverId ? [requesterId, receiverId] : [receiverId, requesterId];
+        const query = `
+            INSERT INTO family_relationships (user_id_1, user_id_2, requester_id, status)
+            VALUES ($1, $2, $3, 'pending')
+            ON CONFLICT (user_id_1, user_id_2) DO NOTHING;
+        `;
+        await client.query(query, [u1, u2, requesterId]);
+    } finally {
+        client.release();
+    }
+}
+
+export async function updateFamilyRequestStatusDb(relationshipId: number, status: 'approved' | 'rejected'): Promise<void> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) throw new Error("Database not configured.");
+
+    const client = await dbPool.connect();
+    try {
+        const query = `UPDATE family_relationships SET status = $1 WHERE id = $2`;
+        await client.query(query, [status, relationshipId]);
+    } finally {
+        client.release();
+    }
+}
+
+export async function getPendingFamilyRequestsForUserDb(userId: number): Promise<PendingFamilyRequest[]> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return [];
+
+    const client = await dbPool.connect();
+    try {
+        const query = `
+            SELECT fr.id, fr.requester_id, u.name as requester_name, u.profilepictureurl as requester_profile_picture_url
+            FROM family_relationships fr
+            JOIN users u ON fr.requester_id = u.id
+            WHERE (fr.user_id_1 = $1 OR fr.user_id_2 = $1)
+            AND fr.status = 'pending'
+            AND fr.requester_id != $1;
+        `;
+        const result = await client.query(query, [userId]);
+        return result.rows;
+    } finally {
+        client.release();
+    }
+}
+
+export async function getFamilyMembersForUserDb(userId: number): Promise<User[]> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return [];
+
+    const client = await dbPool.connect();
+    try {
+        const query = `
+            SELECT ${USER_COLUMNS_SANITIZED}
+            FROM users u
+            JOIN (
+                SELECT CASE
+                    WHEN user_id_1 = $1 THEN user_id_2
+                    ELSE user_id_1
+                END as family_member_id
+                FROM family_relationships
+                WHERE (user_id_1 = $1 OR user_id_2 = $1) AND status = 'approved'
+            ) AS fm ON u.id = fm.family_member_id;
+        `;
+        const result = await client.query(query, [userId]);
+        return result.rows;
     } finally {
         client.release();
     }
