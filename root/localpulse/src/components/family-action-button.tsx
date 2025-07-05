@@ -1,23 +1,41 @@
 
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Loader2, UserPlus, UserCheck, UserX, Clock } from 'lucide-react';
 import type { User, FamilyRelationshipStatus } from '@/lib/db-types';
-import { sendFamilyRequest, respondToFamilyRequest, cancelFamilyRequest } from '@/app/actions';
+import { sendFamilyRequest, respondToFamilyRequest, cancelFamilyRequest, getFamilyRelationshipStatus } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 
 interface FamilyActionButtonProps {
   sessionUser: User;
   targetUser: User;
-  initialStatus: FamilyRelationshipStatus;
 }
 
-export default function FamilyActionButton({ sessionUser, targetUser, initialStatus }: FamilyActionButtonProps) {
-  const [status, setStatus] = useState<FamilyRelationshipStatus>(initialStatus);
+export default function FamilyActionButton({ sessionUser, targetUser }: FamilyActionButtonProps) {
+  const [status, setStatus] = useState<FamilyRelationshipStatus | 'loading'>('loading');
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
+
+  useEffect(() => {
+    // This effect runs on the client after the component mounts
+    if (sessionUser.id === targetUser.id) {
+        setStatus('none');
+        return;
+    }
+
+    getFamilyRelationshipStatus(targetUser.id)
+      .then(result => {
+        setStatus(result.status);
+      })
+      .catch(err => {
+        console.error("Failed to fetch family status:", err);
+        // Gracefully default to a usable state on error, ensuring the button is always visible.
+        setStatus('none'); 
+      });
+  }, [targetUser.id, sessionUser.id]);
+
 
   const handleRequest = () => {
     startTransition(async () => {
@@ -54,6 +72,10 @@ export default function FamilyActionButton({ sessionUser, targetUser, initialSta
       }
     });
   };
+
+  if (status === 'loading') {
+      return <Button size="sm" disabled><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading</Button>;
+  }
 
   switch (status) {
     case 'none':
