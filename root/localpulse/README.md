@@ -127,14 +127,36 @@ sudo systemctl reload nginx
 
 ### Login works, but I'm immediately logged out, or features like "Add Family" or "SOS" are missing.
 
-This is the classic symptom of a misconfigured reverse proxy or a stale browser cookie.
+This is the classic symptom of your NGINX reverse proxy not correctly telling the Next.js application that the connection is secure (HTTPS). The application then creates a session cookie that the browser refuses to send back, causing you to be logged out.
 
-**The Solution:**
-1.  **Verify NGINX Config**: This is the best and most secure solution. Ensure the line `proxy_set_header X-Forwarded-Proto https;` is present in your NGINX configuration file for your site (`/etc/nginx/sites-available/localpulse.in` or similar). Then, reload NGINX with `sudo systemctl reload nginx`.
-2.  **Clear Browser Cache**: After deploying or changing your `JWT_SECRET`, your browser might be holding an old, invalid session cookie. **Clear your browser's cache and cookies for `localpulse.in` to ensure you are getting a fresh session**, then log in again.
+**The Solution: Verify NGINX Configuration**
+
+The most secure and permanent solution is to ensure the following line is present in your NGINX site configuration file (e.g., `/etc/nginx/sites-available/localpulse.in`):
+
+```nginx
+# ... inside your server { ... } block
+    location / {
+        proxy_pass http://localhost:3000;
+        # ... other proxy settings
+        
+        # CRITICAL LINE FOR SECURE COOKIES
+        # This tells Next.js that the original connection from the user was secure (HTTPS).
+        proxy_set_header X-Forwarded-Proto https;
+    }
+# ...
+```
+
+After adding or verifying this line, reload NGINX for the change to take effect:
+```bash
+sudo systemctl reload nginx
+```
+
+Finally, **clear your browser's cookies** for `localpulse.in` and log in again.
 
 ### I see `ERR_JWS_SIGNATURE_VERIFICATION_FAILED` in my server logs.
 
 This error means you recently changed your `JWT_SECRET` environment variable, but your browser is still trying to use a cookie signed with the old secret.
 
-**The Solution:** Clear your browser's cookies and site data for `localpulse.in`, then log in again. This will create a new, valid cookie signed with the new secret.
+**The Solution: Clear Browser Cookies**
+
+Clear your browser's cookies and site data for `localpulse.in`, then log in again. This will create a new, valid cookie signed with the new secret.
