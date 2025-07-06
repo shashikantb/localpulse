@@ -127,31 +127,33 @@ sudo systemctl reload nginx
 
 ### Login works, but I'm immediately logged out.
 
-This is the classic symptom of your NGINX reverse proxy not correctly telling the Next.js application that the connection is secure (HTTPS). The application then creates a session cookie that the browser refuses to send back, causing you to be logged out.
+This is a classic symptom of your application generating a "secure" cookie that your browser or WebView refuses to use over an insecure (HTTP) connection.
 
-**The Solution: Verify NGINX Configuration**
+**Solution 1: Use a Reverse Proxy (Recommended for Production)**
 
-The most secure and permanent solution is to ensure the following line is present in your NGINX site configuration file (e.g., `/etc/nginx/sites-available/localpulse.in`):
+The most secure and permanent solution is to ensure your NGINX reverse proxy is correctly telling the Next.js application that the connection is secure (HTTPS). Verify the following line is present in your NGINX site configuration:
 
 ```nginx
-# ... inside your server { ... } block
-    location / {
-        proxy_pass http://localhost:3000;
-        # ... other proxy settings
-        
-        # CRITICAL LINE FOR SECURE COOKIES
-        # This tells Next.js that the original connection from the user was secure (HTTPS).
-        proxy_set_header X-Forwarded-Proto https;
-    }
-# ...
+# ... inside your location / { ... } block
+proxy_set_header X-Forwarded-Proto https;
 ```
+After adding this, reload NGINX (`sudo systemctl reload nginx`) and **clear your browser's cookies** for the site before logging in again.
 
-After adding or verifying this line, reload NGINX for the change to take effect:
-```bash
-sudo systemctl reload nginx
+**Solution 2: Allow Insecure Cookies (For WebViews or non-HTTPS setups)**
+
+If you are running the app in a WebView or an environment that cannot use HTTPS, you may need to explicitly allow the application to send a non-secure cookie.
+
+In your `ecosystem.config.js` file, ensure the `ALLOW_INSECURE_LOGIN_FOR_HTTP` variable is set to `'true'`:
+
+```javascript
+// ... inside your env: { ... } block
+env: {
+    NODE_ENV: 'production',
+    ALLOW_INSECURE_LOGIN_FOR_HTTP: 'true',
+    // ... other settings
+},
 ```
-
-Finally, **clear your browser's cookies** for `localpulse.in` and log in again.
+This forces the application to generate a cookie that will work over HTTP. Remember to reload PM2 (`pm2 reload localpulse-app --update-env`) after changing this file.
 
 ### I see `ERR_JWS_SIGNATURE_VERIFICATION_FAILED` in my server logs.
 
