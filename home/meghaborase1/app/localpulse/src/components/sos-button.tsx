@@ -1,10 +1,11 @@
+
 'use client';
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { sendSosMessage } from '../app/chat/actions';
+import { sendSosMessage } from '@/app/actions';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -108,3 +109,5 @@ export default function SosButton() {
     </div>
   );
 }
+
+    
