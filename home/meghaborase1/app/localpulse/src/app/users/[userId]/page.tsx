@@ -6,7 +6,7 @@ import { startChatAndRedirect } from '@/app/chat/actions';
 import { getSession } from '@/app/auth/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardHeader, CardContent, CardTitle, CardDescription } from '@/components/ui/card';
-import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, MessageSquare, Settings } from 'lucide-react';
+import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, MessageSquare, Settings, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { PostCard } from '@/components/post-card';
@@ -24,6 +24,7 @@ import UpdateMobileForm from '@/components/update-mobile-form';
 import FamilyActionButton from '@/components/family-action-button';
 import FamilyMembersCard from '@/components/family-members-card';
 import FamilyRequestsList from '@/components/family-requests-list';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 
 interface UserProfilePageProps {
@@ -177,7 +178,24 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
         )}
         
         {isOwnProfile && familyMembers.length > 0 && (
-          <FamilyMembersCard familyMembers={familyMembers} />
+          <Card className="shadow-xl border border-border/60 rounded-xl bg-card/80 backdrop-blur-sm p-0">
+            <Accordion type="single" collapsible className="w-full">
+              <AccordionItem value="family-members" className="border-b-0">
+                <AccordionTrigger className="p-6 hover:no-underline">
+                   <div className="flex items-center">
+                        <Users className="w-6 h-6 mr-3 text-primary" />
+                        <div className="text-left">
+                            <CardTitle>Family Members</CardTitle>
+                            <CardDescription className="pt-1">Manage location sharing with your family.</CardDescription>
+                        </div>
+                    </div>
+                </AccordionTrigger>
+                <AccordionContent className="px-6 pb-6">
+                  <FamilyMembersCard familyMembers={familyMembers} />
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </Card>
         )}
 
         {isOwnProfile && isGorakshak && (
