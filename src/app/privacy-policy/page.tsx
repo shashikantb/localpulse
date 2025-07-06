@@ -1,8 +1,8 @@
 
 import type { NextPage } from 'next';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ShieldCheck, Bell, AlertTriangle } from 'lucide-react';
+import { ShieldCheck, Bell, AlertTriangle, User, Settings, Trash2 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const PrivacyPolicyPage: NextPage = () => {
@@ -13,15 +13,15 @@ const PrivacyPolicyPage: NextPage = () => {
           <CardHeader className="pb-4 pt-6 px-6 bg-gradient-to-br from-card to-muted/10 rounded-t-xl">
             <CardTitle className="text-3xl font-bold text-primary flex items-center">
               <ShieldCheck className="w-8 h-8 mr-3 text-accent" />
-              Privacy Policy for LocalPulse
+              Privacy Policy & Account Deletion
             </CardTitle>
+            <CardDescription>
+                Last Updated: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+            </CardDescription>
           </CardHeader>
           <CardContent className="p-6">
             <ScrollArea className="h-[calc(100vh-20rem)] pr-4">
               <div className="space-y-6 text-foreground/90">
-                <p className="text-sm text-muted-foreground">
-                  Last Updated: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-                </p>
                 
                 <section>
                     <Alert variant="default" className="bg-accent/10 border-accent/30">
@@ -30,118 +30,57 @@ const PrivacyPolicyPage: NextPage = () => {
                             Prominent Disclosure for Location Access
                         </AlertTitle>
                         <AlertDescription className="text-foreground/80">
-                            LocalPulse collects location data to deliver city-wise news, alerts, and real-time updates relevant to your area — even when the app is closed or not in use. This data is only used to provide core app functionality and is never sold to third parties. You may disable location access anytime from your device settings.
-                        </AlertDescription>
-                    </Alert>
-                </section>
-                
-                <section>
-                    <Alert variant="destructive" className="bg-yellow-500/10 border-yellow-500/30 text-yellow-700 dark:text-yellow-400">
-                        <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-                        <AlertTitle className="font-bold text-base text-yellow-800 dark:text-yellow-300">
-                            Troubleshooting Push Notifications
-                        </AlertTitle>
-                        <AlertDescription className="text-yellow-700/90 dark:text-yellow-400/90 space-y-2">
-                           <p>Some phone manufacturers (like **Xiaomi, Oppo, Vivo, OnePlus, Realme, and Huawei**) use aggressive battery-saving features that can prevent apps from receiving push notifications. If you are not receiving notifications, please check the following settings on your device:</p>
-                           <ul className="list-disc list-inside space-y-1 text-sm pl-2">
-                               <li>**Autostart / App Launch:** Find LocalPulse in your phone's settings and enable the "Autostart" or "Auto-launch" permission.</li>
-                               <li>**Battery Optimization:** Find LocalPulse in the battery settings and select "No restrictions" or "Don't optimize".</li>
-                               <li>**App Pinning:** Pin our app in the "Recent Apps" screen to keep it running in the background.</li>
-                           </ul>
-                           <p className="text-xs pt-1">These settings are often found in your phone's main Settings app, under "Battery," "Apps," or "Security." The exact names may vary by manufacturer.</p>
+                            LocalPulse collects location data to deliver city-wise news, alerts, and real-time updates relevant to your area. This is essential for the core functionality of the app. This data is never sold to third parties.
                         </AlertDescription>
                     </Alert>
                 </section>
 
                 <section className="space-y-2">
-                  <h2 className="text-xl font-semibold text-primary">1. Introduction</h2>
-                  <p>
-                    Welcome to LocalPulse (&quot;we,&quot; &quot;us,&quot; or &quot;our&quot;). This Privacy Policy describes how we collect, use, disclose, and safeguard your information when you use our mobile application and services (collectively, the &quot;Service&quot;).
-                  </p>
+                  <h2 className="text-xl font-semibold text-primary">1. Information We Collect</h2>
+                  <p>We may collect and process information such as your name, email, location data, device information, and usage information to provide and improve our service.</p>
                 </section>
 
                 <section className="space-y-2">
-                  <h2 className="text-xl font-semibold text-primary">2. Information We Collect</h2>
-                  <p>We may collect and process the following types of information:</p>
-                  <div className="space-y-1 pl-4">
-                    <h3 className="text-lg font-medium text-foreground/80">a. Location Data</h3>
-                    <p>We collect:</p>
-                    <ul className="list-disc list-inside space-y-1 pl-4">
-                      <li>
-                        Precise location (via GPS, Wi-Fi, and cellular networks) to show relevant content based on your area.
-                      </li>
-                      <li>
-                        Background location (when enabled) to deliver real-time localized updates even when the app is not in the foreground.
-                      </li>
-                    </ul>
-                    <h3 className="text-lg font-medium text-foreground/80 mt-2">b. Device and Log Information</h3>
-                    <ul className="list-disc list-inside space-y-1 pl-4">
-                      <li>
-                        Device model, operating system version, unique identifiers, IP address, and network status.
-                      </li>
-                    </ul>
-                    <h3 className="text-lg font-medium text-foreground/80 mt-2">c. Usage Information</h3>
-                     <ul className="list-disc list-inside space-y-1 pl-4">
-                      <li>
-                        Pages visited, in-app behaviors, and interaction logs (e.g., WebView activity).
-                      </li>
-                    </ul>
-                    <h3 className="text-lg font-medium text-foreground/80 mt-2">d. Push Notification Tokens</h3>
-                    <ul className="list-disc list-inside space-y-1 pl-4">
-                       <li>
-                        We collect device tokens via Firebase Cloud Messaging (FCM) to send you location-specific alerts and updates.
-                      </li>
-                    </ul>
-                  </div>
+                  <h2 className="text-xl font-semibold text-primary">2. How We Use Your Information</h2>
+                  <p>We use your information to personalize content, send relevant notifications, improve the app, and for security purposes.</p>
                 </section>
 
-                <section className="space-y-2">
-                  <h2 className="text-xl font-semibold text-primary">3. How We Use Your Information</h2>
-                  <p>We use the information we collect to:</p>
-                  <ul className="list-disc list-inside space-y-1 pl-4">
-                    <li>Provide and personalize our services.</li>
-                    <li>Send you notifications about relevant local events or user activities.</li>
-                    <li>Improve app performance, security, and user experience.</li>
-                    <li>Monitor and debug issues via analytics and crash reports.</li>
-                  </ul>
-                </section>
+                <section id="delete-account" className="space-y-2 pt-4 border-t mt-6">
+                    <h2 className="text-2xl font-bold text-destructive flex items-center"><Trash2 className="w-6 h-6 mr-2" />Account Deletion</h2>
+                    <p className="pb-2">You have the right to permanently delete your account and associated data. Please follow these steps carefully:</p>
+                    
+                    <ol className="list-decimal list-inside space-y-4 text-foreground/90 my-4 p-4 border bg-muted/50 rounded-lg">
+                        <li>
+                            <strong>Navigate to Your Profile:</strong> Log in and go to your profile page by clicking the 
+                            <span className="inline-block mx-1.5 p-1 bg-background border rounded-md align-middle"><User className="h-4 w-4" /></span>
+                             Profile icon in the navigation bar.
+                        </li>
+                        <li>
+                            <strong>Find the Settings Card:</strong> On your profile page, scroll to find the card titled "Settings".
+                             <div className="my-2 p-2 bg-background border rounded-md flex items-center gap-2 text-sm">
+                                <Settings className="w-4 h-4 text-primary"/>
+                                <span>Look for the Settings section on your profile.</span>
+                            </div>
+                        </li>
+                        <li>
+                            <strong>Click "Delete Account":</strong> Inside the Settings card, under the "Danger Zone" heading, you will find a red button labeled "Delete Account". Click this button to begin the process.
+                        </li>
+                        <li>
+                            <strong>Confirm Deletion:</strong> A confirmation dialog will appear explaining that this action is permanent. This is your final chance to cancel. To finalize the deletion, you must click the final confirmation button in the dialog.
+                        </li>
+                    </ol>
 
-                <section className="space-y-2">
-                  <h2 className="text-xl font-semibold text-primary">4. Sharing Your Information</h2>
-                  <p>We do not sell your personal data. We may share limited data:</p>
-                  <ul className="list-disc list-inside space-y-1 pl-4">
-                    <li>
-                      With service providers (e.g., Firebase by Google) for analytics and push notifications.
-                    </li>
-                    <li>
-                      When required by law or to protect user safety or security.
-                    </li>
-                  </ul>
-                </section>
-
-                <section className="space-y-2">
-                  <h2 className="text-xl font-semibold text-primary">5. Data Retention</h2>
-                  <p>
-                    We retain your data as long as necessary to provide the Service or as required by law. You may request deletion of your data at any time by contacting us.
-                  </p>
-                </section>
-
-                <section className="space-y-2">
-                  <h2 className="text-xl font-semibold text-primary">6. Security</h2>
-                  <p>
-                    We implement standard security measures (such as HTTPS encryption and secure storage) to protect your personal data.
-                  </p>
-                </section>
-
-                <section className="space-y-2">
-                  <h2 className="text-xl font-semibold text-primary">7. Your Rights and Choices</h2>
-                  <p>Depending on your jurisdiction, you may have rights to:</p>
-                  <ul className="list-disc list-inside space-y-1 pl-4">
-                    <li>Access and correct your data.</li>
-                    <li>Request deletion of your data.</li>
-                    <li>Opt-out of notifications (via device settings).</li>
-                    <li>Withdraw consent for location tracking.</li>
-                  </ul>
+                    <h3 className="text-xl font-medium text-foreground/80 pt-4 border-t mt-4">What Happens When You Delete Your Account?</h3>
+                    <Alert variant="destructive" className="mt-2">
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertTitle>This action is permanent and cannot be undone.</AlertTitle>
+                    </Alert>
+                     <ul className="list-disc list-inside space-y-2 text-foreground/90 pt-2 pl-2">
+                        <li>Your user profile, including your name, email, and profile picture, will be permanently deleted from our database.</li>
+                        <li>All of your likes, comments, and follower relationships (both followers and following) will be removed.</li>
+                        <li>All of your chat conversations and messages will be deleted.</li>
+                        <li>Your posts will **not** be deleted. Instead, they will become "anonymous" and will no longer be linked to your account.</li>
+                     </ul>
                 </section>
 
                 <p className="font-bold text-lg text-destructive pt-4 border-t mt-6">

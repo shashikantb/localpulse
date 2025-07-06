@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { FC } from 'react';
@@ -16,7 +17,7 @@ const Footer: FC = () => {
           <span className="text-muted-foreground/50">|</span>
           <Link href="/privacy-policy" className="flex items-center hover:text-primary transition-colors">
             <Shield className="w-4 h-4 mr-1.5 text-primary/70" />
-            Privacy Policy
+            Privacy & Deletion
           </Link>
         </div>
       </div>

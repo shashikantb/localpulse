@@ -5,7 +5,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import * as jose from 'jose';
 import bcrypt from 'bcryptjs';
-import { createUserDb, getUserByEmailDb, getUserByIdDb, updateUserProfilePictureDb, updateUserNameDb, updateUserMobileDb } from '@/lib/db';
+import { createUserDb, getUserByEmailDb, getUserByIdDb, updateUserProfilePictureDb, updateUserNameDb, updateUserMobileDb, deleteUserDb } from '@/lib/db';
 import type { NewUser, User } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 import { cache } from 'react';
@@ -17,6 +17,7 @@ const USER_COOKIE_NAME = 'user-auth-token';
 // Use a fallback secret for development if not set, but log a strong warning.
 const secret = process.env.JWT_SECRET;
 if (!secret && process.env.NODE_ENV === 'production') {
+    // In production, the secret is absolutely mandatory.
     console.error('----------------------------------------------------------------');
     console.error('FATAL: A secure JWT_SECRET environment variable must be set for production.');
     console.error('Application will not function correctly without it.');
@@ -100,11 +101,17 @@ export async function login(email: string, password: string): Promise<{ success:
     const sessionToken = await encrypt(sessionPayload);
     const maxAgeInSeconds = 30 * 24 * 60 * 60; // 30 days
     const expires = new Date(Date.now() + maxAgeInSeconds * 1000);
+    
+    const isProduction = process.env.NODE_ENV === 'production';
+    // This allows login on HTTP during development or behind a misconfigured reverse proxy.
+    // It's a security fallback and should ideally not be used in a well-configured production environment.
+    const allowInsecure = process.env.ALLOW_INSECURE_LOGIN_FOR_HTTP === 'true';
 
     cookies().set(USER_COOKIE_NAME, sessionToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isProduction && !allowInsecure, // The cookie is secure in production, UNLESS explicitly overridden
       expires: expires,
+      maxAge: maxAgeInSeconds, // Use maxAge for modern browsers
       sameSite: 'lax',
       path: '/',
     });
@@ -207,5 +214,22 @@ export async function updateUserMobile(formData: FormData) {
     return { success: true };
   } catch (error: any) {
     return { success: false, error: 'Failed to update mobile number.' };
+  }
+}
+
+export async function deleteCurrentUserAccount(): Promise<{ success: boolean; error?: string }> {
+  const { user } = await getSession();
+  if (!user) {
+    return { success: false, error: 'You must be logged in to delete your account.' };
+  }
+  
+  try {
+    await deleteUserDb(user.id);
+    // The logout will clear the cookie and revalidate the layout
+    await logout(); 
+    return { success: true };
+  } catch (error: any) {
+    console.error(`Failed to delete account for user ${user.id}:`, error);
+    return { success: false, error: 'An unexpected server error occurred while deleting your account.' };
   }
 }
