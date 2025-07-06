@@ -63,7 +63,7 @@ const PrivacyPolicyPage: NextPage = () => {
                             </div>
                         </li>
                         <li>
-                            <strong>Click "Delete Account":</strong> Inside the Settings card, you will find a red button labeled "Delete Account". Click this button to begin the process.
+                            <strong>Click "Delete Account":</strong> Inside the Settings card, under the "Danger Zone" heading, you will find a red button labeled "Delete Account". Click this button to begin the process.
                         </li>
                         <li>
                             <strong>Confirm Deletion:</strong> A confirmation dialog will appear explaining that this action is permanent. This is your final chance to cancel. To finalize the deletion, you must click the final confirmation button in the dialog.
