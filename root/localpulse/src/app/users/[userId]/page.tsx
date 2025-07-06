@@ -6,7 +6,7 @@ import { startChatAndRedirect } from '@/app/chat/actions';
 import { getSession } from '@/app/auth/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardHeader, CardContent, CardTitle, CardDescription } from '@/components/ui/card';
-import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, MessageSquare, Settings } from 'lucide-react';
+import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, MessageSquare, Settings, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { PostCard } from '@/components/post-card';
@@ -24,6 +24,9 @@ import UpdateMobileForm from '@/components/update-mobile-form';
 import FamilyActionButton from '@/components/family-action-button';
 import FamilyMembersCard from '@/components/family-members-card';
 import FamilyRequestsList from '@/components/family-requests-list';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import DeleteAccountButton from '@/components/delete-account-button';
+import { Separator } from '@/components/ui/separator';
 
 
 interface UserProfilePageProps {
@@ -44,9 +47,9 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
 
   // Fetch all other data in parallel
   const [
-    { user: profileUser, stats, isFollowing }, 
-    userPosts, 
-    familyMembers, 
+    { user: profileUser, stats, isFollowing },
+    userPosts,
+    familyMembers,
     pendingRequests,
     familyStatusResult
   ] = await Promise.all([
@@ -62,7 +65,7 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
   if (!profileUser || profileUser.status !== 'approved') {
     notFound();
   }
-  
+
   const getRoleIcon = (role: User['role']) => {
     switch (role) {
       case 'Business': return <Building className="h-8 w-8 text-primary" />;
@@ -75,8 +78,8 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
 
   return (
     <div className="flex flex-col items-center p-4 sm:p-6 md:p-8 lg:p-16 bg-gradient-to-br from-background to-muted/30">
-      <div className="container mx-auto max-w-2xl space-y-8 py-8 mb-20"> {/* Added margin-bottom */}
-        
+      <div className="container mx-auto max-w-2xl space-y-8 py-8 mb-20">
+
         <Card className="shadow-xl border border-border/60 rounded-xl bg-card/80 backdrop-blur-sm">
           <CardHeader className="flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-6 p-6">
             <div className="relative group">
@@ -133,7 +136,7 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
                             </form>
                         )}
                         {sessionUser && !isOwnProfile && (
-                          <FamilyActionButton 
+                          <FamilyActionButton
                             initialStatus={familyStatusResult.status}
                             targetUserId={profileUser.id}
                           />
@@ -158,7 +161,7 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
                     </div>
                   </FollowingListDialog>
               </div>
-              
+
               <Badge variant={profileUser.role === 'Business' ? 'secondary' : 'default'} className="capitalize">
                 {profileUser.role}
               </Badge>
@@ -175,9 +178,26 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
         {isOwnProfile && pendingRequests.length > 0 && (
           <FamilyRequestsList initialRequests={pendingRequests} />
         )}
-        
+
         {isOwnProfile && familyMembers.length > 0 && (
-          <FamilyMembersCard familyMembers={familyMembers} />
+          <Card className="shadow-xl border border-border/60 rounded-xl bg-card/80 backdrop-blur-sm p-0">
+            <Accordion type="single" collapsible className="w-full">
+              <AccordionItem value="family-members" className="border-b-0">
+                <AccordionTrigger className="p-6 hover:no-underline">
+                   <div className="flex items-center">
+                        <Users className="w-6 h-6 mr-3 text-primary" />
+                        <div className="text-left">
+                            <h2 className="text-lg font-semibold leading-none tracking-tight">Family Members</h2>
+                            <p className="text-sm text-muted-foreground pt-1">Manage location sharing with your family.</p>
+                        </div>
+                    </div>
+                </AccordionTrigger>
+                <AccordionContent className="px-6 pb-6 pt-0">
+                  <FamilyMembersCard familyMembers={familyMembers} />
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </Card>
         )}
 
         {isOwnProfile && isGorakshak && (
@@ -206,10 +226,15 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
                 Settings
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label className="text-base">Theme</Label>
                 <ThemeSwitcher />
+              </div>
+              <Separator />
+              <div className="space-y-2">
+                <Label className="text-base text-destructive">Danger Zone</Label>
+                <DeleteAccountButton />
               </div>
             </CardContent>
           </Card>
@@ -221,11 +246,11 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
             </h2>
             {userPosts.length > 0 ? (
                 userPosts.map(post => (
-                    <PostCard 
-                        key={post.id} 
-                        post={post} 
+                    <PostCard
+                        key={post.id}
+                        post={post}
                         userLocation={null} // Can't get viewing user's location on server for distance calc
-                        sessionUser={sessionUser} 
+                        sessionUser={sessionUser}
                     />
                 ))
             ) : (

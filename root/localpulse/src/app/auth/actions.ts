@@ -5,7 +5,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import * as jose from 'jose';
 import bcrypt from 'bcryptjs';
-import { createUserDb, getUserByEmailDb, getUserByIdDb, updateUserProfilePictureDb, updateUserNameDb, updateUserMobileDb } from '@/lib/db';
+import { createUserDb, getUserByEmailDb, getUserByIdDb, updateUserProfilePictureDb, updateUserNameDb, updateUserMobileDb, deleteUserDb } from '@/lib/db';
 import type { NewUser, User } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 import { cache } from 'react';
@@ -111,6 +111,7 @@ export async function login(email: string, password: string): Promise<{ success:
       httpOnly: true,
       secure: isProduction && !allowInsecure, // The cookie is secure in production, UNLESS explicitly overridden
       expires: expires,
+      maxAge: maxAgeInSeconds, // Use maxAge for modern browsers
       sameSite: 'lax',
       path: '/',
     });
@@ -213,5 +214,24 @@ export async function updateUserMobile(formData: FormData) {
     return { success: true };
   } catch (error: any) {
     return { success: false, error: 'Failed to update mobile number.' };
+  }
+}
+
+export async function deleteCurrentUserAccount(): Promise<{ success: boolean; error?: string }> {
+  const { user } = await getSession();
+  if (!user) {
+    return { success: false, error: 'You must be logged in to delete your account.' };
+  }
+  
+  try {
+    // Note: The database is configured with ON DELETE SET NULL for posts.authorid
+    // and ON DELETE CASCADE for related data like likes, follows, etc.
+    await deleteUserDb(user.id);
+    // The logout will clear the cookie and revalidate the layout
+    await logout(); 
+    return { success: true };
+  } catch (error: any) {
+    console.error(`Failed to delete account for user ${user.id}:`, error);
+    return { success: false, error: 'An unexpected server error occurred while deleting your account.' };
   }
 }
