@@ -1,12 +1,10 @@
 
 import type { FC } from 'react';
 import Link from 'next/link';
-import { CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Users, MapPin, ExternalLink } from 'lucide-react';
+import { MapPin, ExternalLink } from 'lucide-react';
 import type { FamilyMember } from '@/lib/db-types';
 import LocationSharingToggle from './location-sharing-toggle';
-import { Button } from './ui/button';
 
 interface FamilyMembersCardProps {
   familyMembers: FamilyMember[];

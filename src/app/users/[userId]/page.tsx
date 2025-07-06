@@ -181,7 +181,7 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
         
         {isOwnProfile && familyMembers.length > 0 && (
           <Card className="shadow-xl border border-border/60 rounded-xl bg-card/80 backdrop-blur-sm p-0">
-            <Accordion type="single" collapsible className="w-full" defaultValue="family-members">
+            <Accordion type="single" collapsible className="w-full">
               <AccordionItem value="family-members" className="border-b-0">
                 <AccordionTrigger className="p-6 hover:no-underline">
                    <div className="flex items-center">
