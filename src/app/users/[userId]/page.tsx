@@ -6,7 +6,7 @@ import { startChatAndRedirect } from '@/app/chat/actions';
 import { getSession } from '@/app/auth/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardHeader, CardContent, CardTitle, CardDescription } from '@/components/ui/card';
-import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, MessageSquare, Settings, Users, Separator } from 'lucide-react';
+import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, MessageSquare, Settings, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { PostCard } from '@/components/post-card';
@@ -26,6 +26,7 @@ import FamilyMembersCard from '@/components/family-members-card';
 import FamilyRequestsList from '@/components/family-requests-list';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import DeleteAccountButton from '@/components/delete-account-button';
+import { Separator } from '@/components/ui/separator';
 
 
 interface UserProfilePageProps {
