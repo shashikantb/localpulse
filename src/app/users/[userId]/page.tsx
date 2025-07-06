@@ -1,4 +1,3 @@
-
 import type { FC } from 'react';
 import { notFound } from 'next/navigation';
 import { getPostsByUserId, getFamilyMembers, getPendingFamilyRequests, getFamilyRelationshipStatus, getUserWithFollowInfo } from '@/app/actions';
