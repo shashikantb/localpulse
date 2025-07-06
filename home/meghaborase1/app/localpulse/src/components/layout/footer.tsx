@@ -3,7 +3,7 @@
 
 import type { FC } from 'react';
 import Link from 'next/link';
-import { Code, Shield, Trash2 } from 'lucide-react';
+import { Code, Shield } from 'lucide-react';
 
 const Footer: FC = () => {
   return (
@@ -18,11 +18,6 @@ const Footer: FC = () => {
           <Link href="/privacy-policy" className="flex items-center hover:text-primary transition-colors">
             <Shield className="w-4 h-4 mr-1.5 text-primary/70" />
             Privacy Policy
-          </Link>
-           <span className="text-muted-foreground/50">|</span>
-          <Link href="/account/delete" className="flex items-center hover:text-primary transition-colors">
-            <Trash2 className="w-4 h-4 mr-1.5 text-primary/70" />
-            Delete Account
           </Link>
         </div>
       </div>
