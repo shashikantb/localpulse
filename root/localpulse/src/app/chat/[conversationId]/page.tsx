@@ -1,5 +1,5 @@
 
-import { getMessages, getConversationPartner, markConversationAsRead } from '@/app/chat/actions';
+import { getMessages, getConversationPartner, markConversationAsRead } from '@/app/actions';
 import { getSession } from '@/app/auth/actions';
 import { notFound, redirect } from 'next/navigation';
 import ChatClient from './chat-client';

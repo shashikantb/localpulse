@@ -4,8 +4,7 @@
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { getConversations, startChatAndRedirect } from '@/app/chat/actions';
-import { searchUsers } from '@/app/actions';
+import { getConversations, startChatAndRedirect, searchUsers } from '@/app/actions';
 import type { Conversation, User } from '@/lib/db-types';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';

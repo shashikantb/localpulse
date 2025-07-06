@@ -1,8 +1,7 @@
 
 import type { FC } from 'react';
 import { notFound } from 'next/navigation';
-import { getPostsByUserId, getFamilyMembers, getPendingFamilyRequests, getFamilyRelationshipStatus, getUserWithFollowInfo } from '@/app/actions';
-import { startChatAndRedirect } from '@/app/chat/actions';
+import { getPostsByUserId, getFamilyMembers, getPendingFamilyRequests, getFamilyRelationshipStatus, getUserWithFollowInfo, startChatAndRedirect } from '@/app/actions';
 import { getSession } from '@/app/auth/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardHeader, CardContent, CardTitle, CardDescription } from '@/components/ui/card';
