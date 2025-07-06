@@ -46,35 +46,39 @@ const PrivacyPolicyPage: NextPage = () => {
                 </section>
 
                 <section id="delete-account" className="space-y-2 pt-4 border-t mt-6">
-                    <h2 className="text-xl font-semibold text-destructive flex items-center"><Trash2 className="w-5 h-5 mr-2" />Account Deletion</h2>
-                    <p>You have the right to permanently delete your account and associated data. Please follow these steps:</p>
+                    <h2 className="text-2xl font-bold text-destructive flex items-center"><Trash2 className="w-6 h-6 mr-2" />Account Deletion</h2>
+                    <p className="pb-2">You have the right to permanently delete your account and associated data. Please follow these steps carefully:</p>
                     
                     <ol className="list-decimal list-inside space-y-4 text-foreground/90 my-4 p-4 border bg-muted/50 rounded-lg">
                         <li>
                             <strong>Navigate to Your Profile:</strong> Log in and go to your profile page by clicking the 
-                            <span className="inline-block mx-1.5 p-1 bg-muted rounded-md align-middle"><User className="h-4 w-4" /></span>
+                            <span className="inline-block mx-1.5 p-1 bg-background border rounded-md align-middle"><User className="h-4 w-4" /></span>
                              Profile icon in the navigation bar.
                         </li>
                         <li>
-                            <strong>Find Settings:</strong> On your profile page, find the "Settings" card, usually near the bottom.
-                             <div className="my-2 p-2 bg-background/50 border rounded-md flex items-center gap-2 text-sm">
+                            <strong>Find the Settings Card:</strong> On your profile page, scroll to find the card titled "Settings".
+                             <div className="my-2 p-2 bg-background border rounded-md flex items-center gap-2 text-sm">
                                 <Settings className="w-4 h-4 text-primary"/>
-                                <span>Look for the Settings section.</span>
+                                <span>Look for the Settings section on your profile.</span>
                             </div>
                         </li>
                         <li>
-                            <strong>Click "Delete Account":</strong> Inside Settings, click the red "Delete Account" button.
+                            <strong>Click "Delete Account":</strong> Inside the Settings card, you will find a red button labeled "Delete Account". Click this button to begin the process.
                         </li>
                         <li>
-                            <strong>Confirm Deletion:</strong> A confirmation pop-up will appear. This is your final chance to cancel. To proceed, click the final confirmation button.
+                            <strong>Confirm Deletion:</strong> A confirmation dialog will appear explaining that this action is permanent. This is your final chance to cancel. To finalize the deletion, you must click the final confirmation button in the dialog.
                         </li>
                     </ol>
 
-                    <h3 className="text-lg font-medium text-foreground/80 pt-2">What Happens When You Delete Your Account?</h3>
-                    <p className="font-semibold text-destructive">This action is permanent and cannot be undone.</p>
-                     <ul className="list-disc list-inside space-y-2 text-foreground/90">
-                        <li>Your user profile, including your name, email, and profile picture, will be permanently deleted.</li>
-                        <li>All of your likes, comments, and follower relationships will be removed.</li>
+                    <h3 className="text-xl font-medium text-foreground/80 pt-4 border-t mt-4">What Happens When You Delete Your Account?</h3>
+                    <Alert variant="destructive" className="mt-2">
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertTitle>This action is permanent and cannot be undone.</AlertTitle>
+                    </Alert>
+                     <ul className="list-disc list-inside space-y-2 text-foreground/90 pt-2 pl-2">
+                        <li>Your user profile, including your name, email, and profile picture, will be permanently deleted from our database.</li>
+                        <li>All of your likes, comments, and follower relationships (both followers and following) will be removed.</li>
+                        <li>All of your chat conversations and messages will be deleted.</li>
                         <li>Your posts will **not** be deleted. Instead, they will become "anonymous" and will no longer be linked to your account.</li>
                      </ul>
                 </section>
