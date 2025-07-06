@@ -181,18 +181,18 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
         
         {isOwnProfile && familyMembers.length > 0 && (
           <Card className="shadow-xl border border-border/60 rounded-xl bg-card/80 backdrop-blur-sm p-0">
-            <Accordion type="single" collapsible className="w-full">
+            <Accordion type="single" collapsible className="w-full" defaultValue="family-members">
               <AccordionItem value="family-members" className="border-b-0">
                 <AccordionTrigger className="p-6 hover:no-underline">
                    <div className="flex items-center">
                         <Users className="w-6 h-6 mr-3 text-primary" />
                         <div className="text-left">
-                            <CardTitle>Family Members</CardTitle>
-                            <CardDescription className="pt-1">Manage location sharing with your family.</CardDescription>
+                            <h2 className="text-lg font-semibold leading-none tracking-tight">Family Members</h2>
+                            <p className="text-sm text-muted-foreground pt-1">Manage location sharing with your family.</p>
                         </div>
                     </div>
                 </AccordionTrigger>
-                <AccordionContent className="px-6 pb-6">
+                <AccordionContent className="px-6 pb-6 pt-0">
                   <FamilyMembersCard familyMembers={familyMembers} />
                 </AccordionContent>
               </AccordionItem>
