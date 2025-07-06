@@ -5,13 +5,13 @@
 import type { FC } from 'react';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { Post, User } from '@/lib/db-types';
-import { getPosts, registerDeviceToken, updateUserLocation } from '@/app/actions';
+import { getPosts, getFamilyPosts, registerDeviceToken, updateUserLocation } from '@/app/actions';
 import { getSession } from '@/app/auth/actions';
 import { PostCard } from '@/components/post-card';
 import { PostFeedSkeleton } from '@/components/post-feed-skeleton';
 import { HASHTAG_CATEGORIES } from '@/components/post-form';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Zap, Loader2, Filter, SlidersHorizontal, Rss, Tag, ChevronDown, Bell, BellOff, BellRing, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Zap, Loader2, Filter, SlidersHorizontal, Rss, Tag, ChevronDown, Bell, BellOff, BellRing, RefreshCw, AlertTriangle, Users } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
@@ -61,17 +61,23 @@ declare global {
 }
 
 const POSTS_PER_PAGE = 5;
-const POSTS_CACHE_KEY = 'localpulse-posts-cache';
-const CACHE_VERSION = 'v1.1'; // Increment to invalidate old cache structures
+const POSTS_CACHE_KEY_PREFIX = 'localpulse-posts-cache-';
+const CACHE_VERSION = 'v1.2'; // Increment to invalidate old cache structures
 
+
+interface PostFeedClientProps {
+  initialPosts: Post[];
+  feedType: 'public' | 'family';
+}
 
 // Helper to get initial posts from cache or server data
-const getInitialCachedPosts = (serverInitialPosts: Post[]): Post[] => {
+const getInitialCachedPosts = (serverInitialPosts: Post[], feedType: PostFeedClientProps['feedType']): Post[] => {
   if (typeof window === 'undefined') {
     return serverInitialPosts;
   }
   try {
-    const cachedItem = localStorage.getItem(POSTS_CACHE_KEY);
+    const cacheKey = `${POSTS_CACHE_KEY_PREFIX}${feedType}`;
+    const cachedItem = localStorage.getItem(cacheKey);
     if (cachedItem) {
       const cachedData = JSON.parse(cachedItem);
       if (cachedData.version === CACHE_VERSION && Array.isArray(cachedData.posts)) {
@@ -85,10 +91,6 @@ const getInitialCachedPosts = (serverInitialPosts: Post[]): Post[] => {
 };
 
 
-interface PostFeedClientProps {
-  initialPosts: Post[];
-}
-
 // --- Helper Components ---
 
 function FilterSheetContent({
@@ -100,6 +102,7 @@ function FilterSheetContent({
   filterHashtags,
   handleHashtagFilterChange,
   resetAllFilters,
+  isFamilyFeed,
 }: {
   distanceFilterKm: number;
   showAnyDistance: boolean;
@@ -109,36 +112,39 @@ function FilterSheetContent({
   filterHashtags: string[];
   handleHashtagFilterChange: (tag: string, checked: boolean) => void;
   resetAllFilters: () => void;
+  isFamilyFeed: boolean;
 }) {
   return (
     <>
       <SheetHeader>
         <SheetTitle className="flex items-center"><Filter className="w-5 h-5 mr-2 text-accent" /> Filter Pulses</SheetTitle>
         <SheetDescription>
-          Adjust filters to find relevant pulses. Your current location is used for distance.
+          Adjust filters to find relevant pulses. {isFamilyFeed ? "" : "Your current location is used for distance."}
         </SheetDescription>
       </SheetHeader>
       <ScrollArea className="h-[calc(100vh-16rem)] pr-3">
         <div className="space-y-6 py-4">
-          <div className="space-y-3">
-            <Label htmlFor="distance-filter-slider" className="text-muted-foreground flex justify-between items-center">
-              <span>Max Distance:</span>
-              <span className="font-semibold text-primary">
-                {showAnyDistance ? "Any Distance" : `${distanceFilterKm} km`}
-              </span>
-            </Label>
-            <Slider
-              id="distance-filter-slider"
-              min={1}
-              max={101}
-              step={1}
-              value={[distanceFilterKm]}
-              onValueChange={handleDistanceChange}
-              disabled={!location || isLoadingMore}
-              aria-label="Distance filter"
-            />
-            {!location && <p className="text-xs text-destructive mt-1">Enable location services to use distance filter.</p>}
-          </div>
+          {!isFamilyFeed && (
+            <div className="space-y-3">
+              <Label htmlFor="distance-filter-slider" className="text-muted-foreground flex justify-between items-center">
+                <span>Max Distance:</span>
+                <span className="font-semibold text-primary">
+                  {showAnyDistance ? "Any Distance" : `${distanceFilterKm} km`}
+                </span>
+              </Label>
+              <Slider
+                id="distance-filter-slider"
+                min={1}
+                max={101}
+                step={1}
+                value={[distanceFilterKm]}
+                onValueChange={handleDistanceChange}
+                disabled={!location || isLoadingMore}
+                aria-label="Distance filter"
+              />
+              {!location && <p className="text-xs text-destructive mt-1">Enable location services to use distance filter.</p>}
+            </div>
+          )}
 
           <div className="space-y-3">
             <Label className="text-muted-foreground flex items-center mb-1">
@@ -213,24 +219,33 @@ function NotificationButtonContent({
 function NoPostsContent({
   isLoading,
   activeFilterCount,
+  feedType,
 }: {
   isLoading: boolean;
   activeFilterCount: number;
+  feedType: 'public' | 'family';
 }) {
   if (isLoading) return null; // Don't show this if we are still loading
 
   const hasFilters = activeFilterCount > 0;
+  const Icon = feedType === 'family' ? Users : Zap;
+  const title = feedType === 'family' ? 'Family Feed is Quiet' : 'The air is quiet here...';
+  let description;
+
+  if (hasFilters) {
+    description = 'No posts found for your current filters. Try adjusting them!';
+  } else if (feedType === 'family') {
+    description = 'No family posts yet. Add family members and ask them to share!';
+  } else {
+    description = 'No pulses found nearby. Be the first to post!';
+  }
 
   return (
     <Card className="text-center py-16 rounded-xl shadow-xl border border-border/40 bg-card/80 backdrop-blur-sm">
       <CardContent className="flex flex-col items-center">
-        <Zap className="mx-auto h-20 w-20 text-muted-foreground/30 mb-6" />
-        <p className="text-2xl text-muted-foreground font-semibold">The air is quiet here...</p>
-        {hasFilters ? (
-          <p className="text-md text-muted-foreground/80 mt-2">No pulses found for your current filters. Try adjusting them!</p>
-        ) : (
-          <p className="text-md text-muted-foreground/80 mt-2">No pulses found nearby. Be the first to post!</p>
-        )}
+        <Icon className="mx-auto h-20 w-20 text-muted-foreground/30 mb-6" />
+        <p className="text-2xl text-muted-foreground font-semibold">{title}</p>
+        <p className="text-md text-muted-foreground/80 mt-2">{description}</p>
       </CardContent>
     </Card>
   );
@@ -239,10 +254,11 @@ function NoPostsContent({
 
 // --- Main Component ---
 
-const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
+const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts, feedType }) => {
   const { toast } = useToast();
+  const cacheKey = `${POSTS_CACHE_KEY_PREFIX}${feedType}`;
   
-  const [allPosts, setAllPosts] = useState<Post[]>(() => getInitialCachedPosts(initialPosts));
+  const [allPosts, setAllPosts] = useState<Post[]>(() => getInitialCachedPosts(initialPosts, feedType));
   const [sessionUser, setSessionUser] = useState<User | null>(null);
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [isLoading, setIsLoading] = useState(allPosts.length === 0);
@@ -256,6 +272,8 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
   const [notificationPermissionStatus, setNotificationPermissionStatus] = useState<'default' | 'loading' | 'granted' | 'denied'>('default');
   const [showTroubleshootingDialog, setShowTroubleshootingDialog] = useState(false);
   
+  const fetchPostsFunction = feedType === 'family' ? getFamilyPosts : getPosts;
+
   const calculateDistance = useCallback((lat1: number, lon1: number, lat2: number, lon2: number) => {
     if (!lat1 || !lon1 || !lat2 || !lon2) return Infinity;
     const R = 6371; // Radius of the Earth in km
@@ -278,11 +296,11 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
         timestamp: new Date().toISOString(),
         posts: allPosts.slice(0, POSTS_PER_PAGE * 2), // Cache up to 2 pages of posts
       };
-      localStorage.setItem(POSTS_CACHE_KEY, JSON.stringify(cacheData));
+      localStorage.setItem(cacheKey, JSON.stringify(cacheData));
     } catch (error) {
       console.warn("Failed to save posts to cache:", error);
     }
-  }, [allPosts]);
+  }, [allPosts, cacheKey]);
 
 
   // Effect for initial load (stale-while-revalidate)
@@ -320,7 +338,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
         }
 
         // NOW fetch posts with the location data
-        const freshPosts = await getPosts({ 
+        const freshPosts = await fetchPostsFunction({ 
             page: 1, 
             limit: POSTS_PER_PAGE,
             latitude: loc?.latitude, // Pass location if available
@@ -342,7 +360,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
     loadInitialData();
   // We only want this effect to run once on mount.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [feedType]);
 
 
   const handleNotificationRegistration = async () => {
@@ -412,7 +430,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
   const refreshPosts = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const newInitialPosts = await getPosts({ 
+      const newInitialPosts = await fetchPostsFunction({ 
         page: 1, 
         limit: POSTS_PER_PAGE, 
         latitude: location?.latitude, 
@@ -429,7 +447,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
     } finally {
       setIsRefreshing(false);
     }
-  }, [location]);
+  }, [location, fetchPostsFunction]);
   
   const handleLoadMore = useCallback(async () => {
     if (isLoadingMore || !hasMorePosts) return;
@@ -437,7 +455,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
     setIsLoadingMore(true);
     const nextPage = currentPage + 1;
     try {
-        const newPosts = await getPosts({ 
+        const newPosts = await fetchPostsFunction({ 
           page: nextPage, 
           limit: POSTS_PER_PAGE, 
           latitude: location?.latitude, 
@@ -461,7 +479,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
     } finally {
         setIsLoadingMore(false);
     }
-  }, [currentPage, hasMorePosts, isLoadingMore, location]);
+  }, [currentPage, hasMorePosts, isLoadingMore, location, fetchPostsFunction]);
 
 
   const observer = useRef<IntersectionObserver>();
@@ -486,8 +504,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
 
     let processedPosts = [...allPosts];
     
-    // FILTERING ONLY - primary sorting is now done on the server.
-    if (location && !showAnyDistance) {
+    if (feedType === 'public' && location && !showAnyDistance) {
       processedPosts = processedPosts.filter(p => 
         p.latitude != null && p.longitude != null && 
         calculateDistance(location.latitude, location.longitude, p.latitude, p.longitude) <= distanceFilterKm
@@ -501,7 +518,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
     }
 
     return processedPosts;
-  }, [allPosts, location, distanceFilterKm, showAnyDistance, filterHashtags, calculateDistance, isLoading]);
+  }, [allPosts, location, distanceFilterKm, showAnyDistance, filterHashtags, calculateDistance, isLoading, feedType]);
   
   const handleRefresh = async () => {
     if (isLoading || isLoadingMore || isRefreshing) return;
@@ -539,7 +556,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
     return <PostFeedSkeleton />;
   }
   
-  const activeFilterCount = (filterHashtags.length > 0 ? 1 : 0) + (!showAnyDistance ? 1 : 0);
+  const activeFilterCount = (filterHashtags.length > 0 ? 1 : 0) + (!showAnyDistance && feedType === 'public' ? 1 : 0);
 
   return (
     <div {...swipeHandlers}>
@@ -573,10 +590,13 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
         </AlertDialogContent>
       </AlertDialog>
 
-      <div className="flex justify-between items-center border-b-2 border-primary/30 pb-3 mb-4">
+      <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl sm:text-2xl font-bold text-primary pl-1 flex items-center">
-          <Rss className="w-5 h-5 sm:w-6 sm:h-6 mr-2 text-accent opacity-90" />
-          Nearby Pulses
+           {feedType === 'public' ? (
+                <><Rss className="w-5 h-5 sm:w-6 sm:h-6 mr-2 text-accent opacity-90" /> Nearby Pulses</>
+            ) : (
+                <><Users className="w-5 h-5 sm:w-6 sm:h-6 mr-2 text-accent opacity-90" /> Family Pulses</>
+            )}
         </h2>
         <div className="flex items-center gap-1">
             <Button
@@ -607,6 +627,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
                       filterHashtags={filterHashtags}
                       handleHashtagFilterChange={handleHashtagFilterChange}
                       resetAllFilters={resetAllFilters}
+                      isFamilyFeed={feedType === 'family'}
                     />
                 </SheetContent>
             </Sheet>
@@ -644,7 +665,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
               )}
             </>
         ) : (
-          <NoPostsContent isLoading={isLoading} activeFilterCount={activeFilterCount} />
+          <NoPostsContent isLoading={isLoading} activeFilterCount={activeFilterCount} feedType={feedType}/>
         )}
       </div>
     </div>

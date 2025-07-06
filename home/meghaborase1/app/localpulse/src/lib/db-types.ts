@@ -65,6 +65,7 @@ export interface Post {
   isLikedByCurrentUser?: boolean; // Added to track if the session user liked this post
   isAuthorFollowedByCurrentUser?: boolean;
   mentions?: { id: number; name: string; }[];
+  is_family_post: boolean;
 }
 
 // For creating a new post from the client
@@ -77,6 +78,7 @@ export type NewPost = {
   hashtags: string[];
   authorId?: number;
   mentionedUserIds?: number[];
+  is_family_post: boolean;
 };
 
 // For inserting a new post into the DB
@@ -90,6 +92,7 @@ export type DbNewPost = {
   hashtags: string[];
   authorid: number | null; 
   mentionedUserIds?: number[];
+  is_family_post: boolean;
 };
 
 

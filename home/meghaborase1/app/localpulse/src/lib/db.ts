@@ -98,9 +98,11 @@ async function initializeDbSchema(): Promise<void> {
             notifiedcount INTEGER DEFAULT 0,
             city VARCHAR(255),
             hashtags TEXT[],
-            authorid INTEGER REFERENCES users(id) ON DELETE SET NULL
+            authorid INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            is_family_post BOOLEAN NOT NULL DEFAULT false
         );
         `);
+         await initClient.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS is_family_post BOOLEAN NOT NULL DEFAULT false;`);
         
         // Post Likes Table
         await initClient.query(`CREATE TABLE IF NOT EXISTS post_likes ( id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE, createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, post_id));`);
@@ -162,6 +164,7 @@ async function initializeDbSchema(): Promise<void> {
         await initClient.query('CREATE INDEX IF NOT EXISTS idx_family_relationships_user1 ON family_relationships(user_id_1)');
         await initClient.query('CREATE INDEX IF NOT EXISTS idx_family_relationships_user2 ON family_relationships(user_id_2)');
         await initClient.query('CREATE INDEX IF NOT EXISTS idx_device_tokens_location ON device_tokens (user_id, last_updated DESC) WHERE latitude IS NOT NULL AND longitude IS NOT NULL');
+        await initClient.query('CREATE INDEX IF NOT EXISTS idx_posts_is_family_post ON posts (is_family_post, createdat DESC);');
 
         await initClient.query('COMMIT');
         console.log('Database schema initialized successfully via dedicated client.');
@@ -200,7 +203,7 @@ function ensureDbInitialized() {
 const POST_COLUMNS_SANITIZED = `
   p.id, p.content, p.latitude, p.longitude, p.createdat, p.likecount, 
   p.commentcount, p.viewcount, p.notifiedcount, p.city, p.hashtags, 
-  p.authorid, p.mediatype, p.mediaurls,
+  p.authorid, p.mediatype, p.mediaurls, p.is_family_post,
   u.name as authorname, u.role as authorrole,
   u.profilepictureurl as authorprofilepictureurl
 `;
@@ -242,6 +245,7 @@ export async function getPostsDb(
       SELECT ${POST_COLUMNS_SANITIZED}
       FROM posts p
       LEFT JOIN users u ON p.authorid = u.id
+      WHERE p.is_family_post = false
       ORDER BY ${orderByClause}
       LIMIT $1 OFFSET $2
     `;
@@ -252,6 +256,40 @@ export async function getPostsDb(
     client.release();
   }
 }
+
+export async function getFamilyPostsDb(userId: number, options: { limit: number; offset: number }): Promise<Post[]> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return [];
+
+    const client = await dbPool.connect();
+    try {
+        const familyQuery = `
+            SELECT user_id_2 AS member_id FROM family_relationships WHERE user_id_1 = $1 AND status = 'approved'
+            UNION
+            SELECT user_id_1 AS member_id FROM family_relationships WHERE user_id_2 = $1 AND status = 'approved'
+        `;
+        const familyResult = await client.query(familyQuery, [userId]);
+        const familyIds = new Set(familyResult.rows.map(r => r.member_id));
+        familyIds.add(userId); // User can see their own family posts
+
+        if (familyIds.size === 0) return [];
+        
+        const postsQuery = `
+            SELECT ${POST_COLUMNS_SANITIZED}
+            FROM posts p
+            LEFT JOIN users u ON p.authorid = u.id
+            WHERE p.is_family_post = true AND p.authorid = ANY($1::int[])
+            ORDER BY p.createdat DESC
+            LIMIT $2 OFFSET $3
+        `;
+        const postsResult = await client.query(postsQuery, [Array.from(familyIds), options.limit, options.offset]);
+        return postsResult.rows;
+    } finally {
+        client.release();
+    }
+}
+
 
 export async function getMediaPostsDb(options: { limit: number; offset: number; } = { limit: 10, offset: 0 }): Promise<Post[]> {
   await ensureDbInitialized();
@@ -265,6 +303,7 @@ export async function getMediaPostsDb(options: { limit: number; offset: number; 
       FROM posts p
       LEFT JOIN users u ON p.authorid = u.id
       WHERE 
+        p.is_family_post = false AND
         p.mediaurls IS NOT NULL 
         AND array_length(p.mediaurls, 1) > 0 
         AND p.mediaurls[1] IS NOT NULL
@@ -288,11 +327,11 @@ export async function addPostDb(newPost: DbNewPost): Promise<Post> {
     await client.query('BEGIN');
 
     const postQuery = `
-      INSERT INTO posts(content, latitude, longitude, mediaurls, mediatype, hashtags, city, authorid)
-      VALUES($1, $2, $3, $4, $5, $6, $7, $8)
+      INSERT INTO posts(content, latitude, longitude, mediaurls, mediatype, hashtags, city, authorid, is_family_post)
+      VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING *;
     `;
-    const postValues = [newPost.content, newPost.latitude, newPost.longitude, newPost.mediaurls, newPost.mediatype, newPost.hashtags, newPost.city, newPost.authorid];
+    const postValues = [newPost.content, newPost.latitude, newPost.longitude, newPost.mediaurls, newPost.mediatype, newPost.hashtags, newPost.city, newPost.authorid, newPost.is_family_post];
     const postResult: QueryResult<Post> = await client.query(postQuery, postValues);
     const addedPost = postResult.rows[0];
 
@@ -774,8 +813,8 @@ export async function getPostsByUserIdDb(userId: number): Promise<Post[]> {
     const query = `
       SELECT ${POST_COLUMNS_SANITIZED}
       FROM posts p
-      JOIN users u ON p.authorid = u.id
-      WHERE p.authorid = $1
+      LEFT JOIN users u ON p.authorid = u.id
+      WHERE p.authorid = $1 AND p.is_family_post = false
       ORDER BY p.createdat DESC;
     `;
     const result: QueryResult<Post> = await client.query(query, [userId]);

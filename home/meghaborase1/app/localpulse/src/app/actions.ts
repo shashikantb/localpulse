@@ -58,6 +58,38 @@ export async function getPosts(options?: { page: number; limit: number; latitude
   }
 }
 
+export async function getFamilyPosts(options: { page: number; limit: number }): Promise<Post[]> {
+    try {
+        const { user } = await getSession();
+        if (!user) return [];
+
+        const dbOptions = { limit: options.limit, offset: (options.page - 1) * options.limit };
+        let posts = await db.getFamilyPostsDb(user.id, dbOptions);
+
+        if (posts.length > 0) {
+            const postIds = posts.map(p => p.id);
+            const authorIds = [...new Set(posts.map(p => p.authorid).filter((id): id is number => id !== null))];
+
+            const [likedPostIds, mentionsMap, followedAuthorIds] = await Promise.all([
+                user ? db.getLikedPostIdsForUserDb(user.id, postIds) : Promise.resolve(new Set<number>()),
+                db.getMentionsForPostsDb(postIds),
+                (user && authorIds.length > 0) ? db.getFollowedUserIdsDb(user.id, authorIds) : Promise.resolve(new Set<number>())
+            ]);
+
+            posts.forEach((post: any) => {
+                post.isLikedByCurrentUser = likedPostIds.has(post.id);
+                post.mentions = mentionsMap.get(post.id) || [];
+                post.isAuthorFollowedByCurrentUser = followedAuthorIds.has(post.authorid);
+            });
+        }
+        return posts;
+    } catch (error: any) {
+        console.error("Server action error fetching family posts:", error.message);
+        return [];
+    }
+}
+
+
 export async function getAdminPosts(options?: { page: number; limit: number }): Promise<Post[]> {
   try {
     const dbOptions = options ? {
@@ -278,6 +310,7 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
       city: cityName,
       authorid: user ? user.id : null,
       mentionedUserIds: newPostData.mentionedUserIds || [],
+      is_family_post: newPostData.is_family_post,
     };
 
     const addedPostDb = await db.addPostDb(postDataForDb);
@@ -290,9 +323,11 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
 
     revalidatePath('/');
     
-    sendNotificationsForNewPost(finalPost, postDataForDb.mentionedUserIds).catch(err => {
-      console.error("Background notification sending failed:", err);
-    });
+    if (!finalPost.is_family_post) {
+        sendNotificationsForNewPost(finalPost, postDataForDb.mentionedUserIds).catch(err => {
+            console.error("Background notification sending failed:", err);
+        });
+    }
 
     return { post: finalPost };
   } catch (error: any) {
@@ -857,49 +892,12 @@ export async function getFamilyLocations(): Promise<FamilyMemberLocation[]> {
 }
 
 
-// --- Global Chat Actions ---
-
-async function sendChatNotification(conversationId: number, sender: User, content: string, title?: string) {
-  try {
-    const partner = await db.getConversationPartnerDb(conversationId, sender.id);
-    if (!partner) return;
-
-    const deviceTokens = await db.getDeviceTokensForUsersDb([partner.id]);
-    if (deviceTokens.length === 0) return;
-
-    const notificationPayload = {
-      notification: {
-        title: title || `New message from ${sender.name}`,
-        body: content.length > 100 ? `${content.substring(0, 97)}...` : content,
-      },
-      data: {
-        conversationId: String(conversationId),
-        type: 'chat_message',
-      },
-      tokens: deviceTokens,
-      android: {
-        priority: 'high' as const,
-      },
-    };
-
-    const response = await firebaseAdmin.messaging().sendEachForMulticast(notificationPayload);
-
-    if (response.failureCount > 0) {
-      const failedTokens: string[] = [];
-      response.responses.forEach((resp, idx) => {
-        if (!resp.success) {
-          failedTokens.push(deviceTokens[idx]);
-        }
-      });
-      console.error('List of tokens that failed for chat notification:', failedTokens);
-      for (const token of failedTokens) {
-        await db.deleteDeviceTokenDb(token);
-      }
-    }
-  } catch (error) {
-    console.error('Error sending chat notification:', error);
-  }
+// This function is defined in `chat/actions.ts` but needs a stub here for SOS.
+async function sendChatNotification(conversationId: number, sender: User, content: string, title?: string): Promise<void> {
+    const { sendChatNotification: realSendChatNotification } = await import('@/app/chat/actions');
+    return realSendChatNotification(conversationId, sender, content, title);
 }
+
 
 export async function sendSosMessage(latitude: number, longitude: number): Promise<{ success: boolean; error?: string; message?: string }> {
   const { user } = await getSession();
