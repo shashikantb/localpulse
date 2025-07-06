@@ -11,13 +11,14 @@ import { PostCard } from '@/components/post-card';
 import { PostFeedSkeleton } from '@/components/post-feed-skeleton';
 import { HASHTAG_CATEGORIES } from '@/components/post-form';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Terminal, Zap, Loader2, Filter, SlidersHorizontal, Rss, Tag, ChevronDown, Bell, BellOff, BellRing, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Zap, Loader2, Filter, SlidersHorizontal, Rss, Tag, ChevronDown, Bell, BellOff, BellRing, RefreshCw, AlertTriangle } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useSwipeable } from 'react-swipeable';
 import {
   Sheet,
   SheetContent,
@@ -502,6 +503,21 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
     return processedPosts;
   }, [allPosts, location, distanceFilterKm, showAnyDistance, filterHashtags, calculateDistance, isLoading]);
   
+  const handleRefresh = async () => {
+    if (isLoading || isLoadingMore || isRefreshing) return;
+    await refreshPosts();
+  };
+
+  const swipeHandlers = useSwipeable({
+    onSwipedDown: () => {
+      // Only refresh if scrolled to the very top of the page
+      if (window.scrollY === 0) {
+        handleRefresh();
+      }
+    },
+    trackMouse: true,
+  });
+
   const handleDistanceChange = (value: number[]) => {
     setDistanceFilterKm(value[0]);
     setShowAnyDistance(value[0] > 100);
@@ -526,7 +542,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
   const activeFilterCount = (filterHashtags.length > 0 ? 1 : 0) + (!showAnyDistance ? 1 : 0);
 
   return (
-    <div>
+    <div {...swipeHandlers}>
       <AlertDialog open={showTroubleshootingDialog} onOpenChange={setShowTroubleshootingDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -557,15 +573,16 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
         </AlertDialogContent>
       </AlertDialog>
 
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-2xl font-bold text-primary pl-1 flex items-center">
-          <Rss className="w-6 h-6 mr-3 text-accent opacity-90" />
+      <div className="flex justify-between items-center border-b-2 border-primary/30 pb-3 mb-4">
+        <h2 className="text-xl sm:text-2xl font-bold text-primary pl-1 flex items-center">
+          <Rss className="w-5 h-5 sm:w-6 sm:h-6 mr-2 text-accent opacity-90" />
           Nearby Pulses
         </h2>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
             <Button
                 variant="outline"
-                className="shadow-lg hover:shadow-xl transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary"
+                size="sm"
+                className="shadow-md hover:shadow-lg transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary"
                 onClick={handleNotificationRegistration}
                 disabled={notificationPermissionStatus === 'loading'}
                 aria-label="Toggle Notifications"
@@ -574,9 +591,10 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
             </Button>
             <Sheet>
                 <SheetTrigger asChild>
-                    <Button variant="outline" className="shadow-lg hover:shadow-xl transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary" aria-label="Open filters">
-                    <SlidersHorizontal className="w-5 h-5 mr-2" />
-                    Filters {activeFilterCount > 0 && <span className="ml-2 bg-accent text-accent-foreground text-xs px-1.5 py-0.5 rounded-full">{activeFilterCount}</span>}
+                    <Button variant="outline" size="sm" className="shadow-md hover:shadow-lg transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary" aria-label="Open filters">
+                    <SlidersHorizontal className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Filters</span>
+                    {activeFilterCount > 0 && <span className="ml-2 bg-accent text-accent-foreground text-xs px-1.5 py-0.5 rounded-full">{activeFilterCount}</span>}
                     </Button>
                 </SheetTrigger>
                 <SheetContent className="bg-card/95 backdrop-blur-md border-border w-full sm:max-w-md flex flex-col">
