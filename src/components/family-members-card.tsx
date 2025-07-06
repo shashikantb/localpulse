@@ -1,4 +1,6 @@
 
+'use client';
+
 import type { FC } from 'react';
 import Link from 'next/link';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
