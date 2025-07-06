@@ -1,3 +1,4 @@
+
 'use server';
 
 import { cookies } from 'next/headers';
@@ -223,6 +224,8 @@ export async function deleteCurrentUserAccount(): Promise<{ success: boolean; er
   }
   
   try {
+    // Note: The database is configured with ON DELETE SET NULL for posts.authorid
+    // and ON DELETE CASCADE for related data like likes, follows, etc.
     await deleteUserDb(user.id);
     // The logout will clear the cookie and revalidate the layout
     await logout(); 
