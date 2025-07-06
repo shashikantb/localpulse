@@ -125,7 +125,7 @@ sudo systemctl reload nginx
 
 ## Troubleshooting
 
-### Login works, but I'm immediately logged out, or features like "Add Family" or "SOS" are missing.
+### Login works, but I'm immediately logged out.
 
 This is the classic symptom of your NGINX reverse proxy not correctly telling the Next.js application that the connection is secure (HTTPS). The application then creates a session cookie that the browser refuses to send back, causing you to be logged out.
 
@@ -160,3 +160,15 @@ This error means you recently changed your `JWT_SECRET` environment variable, bu
 **The Solution: Clear Browser Cookies**
 
 Clear your browser's cookies and site data for `localpulse.in`, then log in again. This will create a new, valid cookie signed with the new secret.
+
+### I see `Error: Failed to find Server Action "..."` in my server logs.
+
+This error typically happens after you have deployed new code, but your browser is still running an older version of the application. The page in your browser is trying to call a server function that has a different ID in the new deployment.
+
+**The Solution: Hard Refresh Your Browser**
+
+The solution is to force your browser to load the latest version of the application.
+- On Windows/Linux: Press `Ctrl+Shift+R`.
+- On Mac: Press `Cmd+Shift+R`.
+
+This will clear the cache for the page and resolve the mismatch.
