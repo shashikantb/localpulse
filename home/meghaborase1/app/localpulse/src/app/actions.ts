@@ -2,7 +2,7 @@
 'use server';
 
 import * as db from '@/lib/db';
-import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus, FamilyMember, FamilyMemberLocation, PendingFamilyRequest, Message } from '@/lib/db-types';
+import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus, FamilyMember, FamilyMemberLocation, PendingFamilyRequest } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 import { admin as firebaseAdmin } from '@/lib/firebase-admin';
 import { getSession } from '@/app/auth/actions';
@@ -856,7 +856,8 @@ export async function getFamilyLocations(): Promise<FamilyMemberLocation[]> {
     }
 }
 
-// --- Functions moved from chat/actions.ts ---
+
+// --- Global Chat Actions ---
 
 async function sendChatNotification(conversationId: number, sender: User, content: string, title?: string) {
   try {
@@ -951,5 +952,3 @@ export async function getUnreadMessageCount(): Promise<number> {
         return 0;
     }
 }
-
-    
