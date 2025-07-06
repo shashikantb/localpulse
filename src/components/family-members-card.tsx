@@ -30,9 +30,9 @@ const FamilyMembersCard: FC<FamilyMembersCardProps> = ({ familyMembers }) => {
                 <div className="flex-1 min-w-0">
                     <p className="font-semibold text-foreground truncate">{member.name}</p>
                     {member.they_are_sharing_with_me && member.latitude && member.longitude ? (
-                        <a 
-                            href={`https://www.google.com/maps/dir/?api=1&destination=${member.latitude},${member.longitude}`} 
-                            target="_blank" 
+                        <a
+                            href={`https://www.google.com/maps/dir/?api=1&destination=${member.latitude},${member.longitude}`}
+                            target="_blank"
                             rel="noopener noreferrer"
                             className="text-xs text-blue-500 hover:underline flex items-center mt-0.5"
                             onClick={(e) => e.stopPropagation()}
@@ -49,9 +49,9 @@ const FamilyMembersCard: FC<FamilyMembersCardProps> = ({ familyMembers }) => {
             {/* Right side: Toggle */}
             <div className="flex items-center gap-2 flex-shrink-0 self-end sm:self-center">
                 <span className="text-sm text-muted-foreground">Share My Location</span>
-                <LocationSharingToggle 
-                    targetUserId={member.id} 
-                    initialIsSharing={member.i_am_sharing_with_them} 
+                <LocationSharingToggle
+                    targetUserId={member.id}
+                    initialIsSharing={member.i_am_sharing_with_them}
                 />
             </div>
           </div>
@@ -62,3 +62,5 @@ const FamilyMembersCard: FC<FamilyMembersCardProps> = ({ familyMembers }) => {
 };
 
 export default FamilyMembersCard;
+
+    
