@@ -2,7 +2,7 @@
 'use server';
 
 import * as db from '@/lib/db';
-import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus, Conversation, Message, ConversationParticipant } from '@/lib/db-types';
+import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus, FamilyMember, FamilyMemberLocation, PendingFamilyRequest, Conversation, Message, ConversationParticipant } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 import { admin as firebaseAdmin } from '@/lib/firebase-admin';
 import { getSession } from '@/app/auth/actions';
@@ -498,6 +498,20 @@ export async function registerDeviceToken(
   }
 }
 
+export async function updateUserLocation(latitude?: number, longitude?: number): Promise<void> {
+    if (latitude === undefined || longitude === undefined) return;
+    try {
+        const { user } = await getSession();
+        if (user) {
+            await db.updateUserLocationDb(user.id, latitude, longitude);
+        }
+    } catch (error: any) {
+        // Fail silently
+        console.error('Failed to update user location in background:', error.message);
+    }
+}
+
+
 export async function checkForNewerPosts(latestPostIdClientKnows: number): Promise<{ hasNewerPosts: boolean; count: number }> {
   try {
     // If the client doesn't know about any posts yet (e.g., initial load),
@@ -692,6 +706,158 @@ export async function getStatusesForFeed(): Promise<UserWithStatuses[]> {
   }
 }
 
+// --- Family Relationship Actions ---
+
+export async function getFamilyRelationshipStatus(sessionUser: User | null, targetUserId: number): Promise<{ status: 'none' | 'pending_from_me' | 'pending_from_them' | 'approved' }> {
+  if (!sessionUser || sessionUser.id === targetUserId) {
+    return { status: 'none' };
+  }
+
+  try {
+    const relationship = await db.getFamilyRelationshipDb(sessionUser.id, targetUserId);
+    if (!relationship) {
+      return { status: 'none' };
+    }
+
+    if (relationship.status === 'approved') {
+      return { status: 'approved' };
+    }
+
+    if (relationship.status === 'pending') {
+      if (relationship.requester_id === sessionUser.id) {
+        return { status: 'pending_from_me' };
+      } else {
+        return { status: 'pending_from_them' };
+      }
+    }
+    
+    // 'rejected' status is treated as 'none' for a new request
+    return { status: 'none' }; 
+  } catch (error) {
+    console.error(`Error fetching family relationship status for user ${targetUserId}:`, error);
+    return { status: 'none' };
+  }
+}
+
+export async function sendFamilyRequest(targetUserId: number): Promise<{ success: boolean; error?: string }> {
+  const { user: sessionUser } = await getSession();
+  if (!sessionUser) {
+    return { success: false, error: 'You must be logged in to send a request.' };
+  }
+  if (sessionUser.id === targetUserId) {
+    return { success: false, error: 'You cannot add yourself as family.' };
+  }
+
+  try {
+    const existingRelationship = await db.getFamilyRelationshipDb(sessionUser.id, targetUserId);
+    if (existingRelationship && existingRelationship.status !== 'rejected') {
+        return { success: false, error: 'A request already exists or you are already family members.' };
+    }
+    
+    await db.sendFamilyRequestDb(sessionUser.id, targetUserId);
+    revalidatePath(`/users/${targetUserId}`);
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to send request.' };
+  }
+}
+
+export async function cancelFamilyRequest(targetUserId: number): Promise<{ success: boolean; error?: string }> {
+    const { user: sessionUser } = await getSession();
+    if (!sessionUser) {
+        return { success: false, error: 'You must be logged in.' };
+    }
+
+    try {
+        const relationship = await db.getFamilyRelationshipDb(sessionUser.id, targetUserId);
+        if (!relationship || relationship.status !== 'pending' || relationship.requester_id !== sessionUser.id) {
+            return { success: false, error: 'No pending request found to cancel.' };
+        }
+        await db.deleteFamilyRelationshipDb(relationship.id);
+        revalidatePath(`/users/${targetUserId}`);
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: 'Failed to cancel request.' };
+    }
+}
+
+
+export async function respondToFamilyRequest(otherUserId: number, response: 'approve' | 'reject'): Promise<{ success: boolean; error?: string }> {
+  const { user: sessionUser } = await getSession();
+  if (!sessionUser) {
+    return { success: false, error: 'You must be logged in.' };
+  }
+
+  try {
+    const relationship = await db.getFamilyRelationshipDb(sessionUser.id, otherUserId);
+
+    if (!relationship || relationship.status !== 'pending' || relationship.requester_id === sessionUser.id) {
+        return { success: false, error: 'No pending request found from this user.' };
+    }
+    
+    if (response === 'approve') {
+        await db.updateFamilyRequestStatusDb(relationship.id, 'approved');
+    } else {
+        // If rejected, we'll just delete the request to allow for a new one in the future.
+        await db.deleteFamilyRelationshipDb(relationship.id);
+    }
+    
+    revalidatePath(`/users/${otherUserId}`);
+    revalidatePath(`/users/${sessionUser.id}`);
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to respond to request.' };
+  }
+}
+
+export async function getFamilyMembers(userId: number): Promise<FamilyMember[]> {
+    try {
+        return await db.getFamilyMembersForUserDb(userId);
+    } catch (error) {
+        console.error(`Error fetching family members for user ${userId}:`, error);
+        return [];
+    }
+}
+
+export async function getPendingFamilyRequests(): Promise<PendingFamilyRequest[]> {
+    const { user } = await getSession();
+    if (!user) return [];
+    try {
+        return await db.getPendingFamilyRequestsForUserDb(user.id);
+    } catch (error) {
+        console.error(`Error fetching pending family requests for user ${user.id}:`, error);
+        return [];
+    }
+}
+
+export async function toggleLocationSharing(targetUserId: number, share: boolean): Promise<{ success: boolean; error?: string }> {
+  const { user: sessionUser } = await getSession();
+  if (!sessionUser) {
+    return { success: false, error: 'You must be logged in.' };
+  }
+  
+  try {
+    await db.toggleLocationSharingDb(sessionUser.id, targetUserId, share);
+    revalidatePath(`/users/${sessionUser.id}`);
+    return { success: true };
+  } catch (error: any) {
+    console.error(`Error toggling location sharing for user ${targetUserId}:`, error);
+    return { success: false, error: 'An unexpected server error occurred.' };
+  }
+}
+
+export async function getFamilyLocations(): Promise<FamilyMemberLocation[]> {
+    const { user } = await getSession();
+    if (!user) return [];
+    try {
+        return await db.getFamilyLocationsForUserDb(user.id);
+    } catch (error) {
+        console.error(`Error fetching family locations for user ${user.id}:`, error);
+        return [];
+    }
+}
+
+
 // --- Chat Actions ---
 
 export async function startChatAndRedirect(formData: FormData): Promise<void> {
@@ -732,6 +898,7 @@ export async function getMessages(conversationId: number): Promise<Message[]> {
   const { user } = await getSession();
   if (!user) return [];
   try {
+    // This check is now performed inside the DB function
     return await db.getMessagesForConversationDb(conversationId, user.id);
   } catch (error) {
     console.error(`Server action error fetching messages for conversation ${conversationId}:`, error);
@@ -739,7 +906,7 @@ export async function getMessages(conversationId: number): Promise<Message[]> {
   }
 }
 
-async function sendChatNotification(conversationId: number, sender: User, content: string) {
+async function sendChatNotification(conversationId: number, sender: User, content: string, title?: string) {
   try {
     const partner = await db.getConversationPartnerDb(conversationId, sender.id);
     if (!partner) return;
@@ -749,7 +916,7 @@ async function sendChatNotification(conversationId: number, sender: User, conten
 
     const notificationPayload = {
       notification: {
-        title: `New message from ${sender.name}`,
+        title: title || `New message from ${sender.name}`,
         body: content.length > 100 ? `${content.substring(0, 97)}...` : content,
       },
       data: {
@@ -792,7 +959,7 @@ export async function sendMessage(conversationId: number, content: string): Prom
       content,
     });
     
-    // Send notification in the background without blocking the response
+    // Send notification in the background with the default title
     sendChatNotification(conversationId, user, content).catch(err => {
         console.error("Background task to send chat notification failed:", err);
     });
@@ -804,6 +971,50 @@ export async function sendMessage(conversationId: number, content: string): Prom
     return { error: 'Failed to send message due to a server error.' };
   }
 }
+
+export async function sendSosMessage(latitude: number, longitude: number): Promise<{ success: boolean; error?: string; message?: string }> {
+  const { user } = await getSession();
+  if (!user) {
+    return { success: false, error: 'You must be logged in to send an SOS.' };
+  }
+
+  try {
+    const recipients = await db.getRecipientsForSosDb(user.id);
+    if (recipients.length === 0) {
+      return { success: false, error: 'You are not sharing your location with any family members. SOS not sent.' };
+    }
+
+    const sosMessageContent = `🔴 SOS EMERGENCY ALERT 🔴\nFrom: ${user.name}\nMy current location is: https://www.google.com/maps?q=${latitude},${longitude}`;
+    const notificationTitle = `🔴 SOS from ${user.name}`;
+    
+    let sentCount = 0;
+    for (const recipient of recipients) {
+      const conversationId = await db.findOrCreateConversationDb(user.id, recipient.id);
+      
+      // Directly add message to DB
+      await db.addMessageDb({
+          conversationId,
+          senderId: user.id,
+          content: sosMessageContent,
+      });
+
+      // Directly send notification with custom title
+      sendChatNotification(conversationId, user, sosMessageContent, notificationTitle).catch(err => {
+          console.error("Background task to send SOS chat notification failed:", err);
+      });
+      
+      sentCount++;
+    }
+    
+    revalidatePath('/chat', 'layout'); // Use layout revalidation to update sidebar and unread counts
+    return { success: true, message: `SOS alert sent to ${sentCount} family member(s).` };
+
+  } catch (error: any) {
+    console.error('Error sending SOS message:', error);
+    return { success: false, error: 'Failed to send SOS message due to a server error.' };
+  }
+}
+
 
 export async function getConversationPartner(conversationId: number, currentUserId: number): Promise<ConversationParticipant | null> {
     try {

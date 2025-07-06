@@ -54,8 +54,8 @@ export interface Post {
   mediatype?: 'image' | 'video' | 'gallery' | null;
   likecount: number;
   commentcount: number;
-  notifiedcount: number;
   viewcount: number;
+  notifiedcount: number;
   city?: string | null;
   hashtags?: string[] | null;
   authorid: number | null; // This will come from the posts table
@@ -185,4 +185,42 @@ export interface ConversationParticipant {
     id: number;
     name: string;
     profilepictureurl?: string | null;
+}
+
+// --- Family Relationship Types ---
+export type FamilyRelationshipStatus = 'none' | 'pending_from_me' | 'pending_from_them' | 'approved';
+
+export interface FamilyRelationship {
+    id: number;
+    user_id_1: number;
+    user_id_2: number;
+    requester_id: number;
+    status: 'pending' | 'approved' | 'rejected';
+    created_at: string;
+    share_location_from_1_to_2: boolean;
+    share_location_from_2_to_1: boolean;
+}
+
+export interface PendingFamilyRequest {
+    id: number; // The relationship ID
+    requester_id: number;
+    requester_name: string;
+    requester_profile_picture_url?: string | null;
+}
+
+export interface FamilyMember extends User {
+    i_am_sharing_with_them: boolean;
+    they_are_sharing_with_me: boolean;
+    latitude?: number | null;
+    longitude?: number | null;
+    last_updated?: string | null;
+}
+
+export interface FamilyMemberLocation {
+    id: number;
+    name: string;
+    profilepictureurl?: string | null;
+    latitude: number;
+    longitude: number;
+    last_updated: string;
 }

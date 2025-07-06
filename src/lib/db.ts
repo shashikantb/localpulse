@@ -1,7 +1,6 @@
 
-
 import { Pool, Client, type QueryResult } from 'pg';
-import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Status, Conversation, Message, NewMessage, ConversationParticipant } from './db-types';
+import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Status, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest, FamilyMember, FamilyMemberLocation } from '@/lib/db-types';
 import bcrypt from 'bcryptjs';
 
 // Re-export db-types
@@ -79,6 +78,10 @@ async function initializeDbSchema(): Promise<void> {
         );
         `);
         
+        // Add mobilenumber column to users table if it doesn't exist to support older schemas.
+        // This is a safe, non-destructive operation.
+        await initClient.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS mobilenumber VARCHAR(20);`);
+        
         // Posts Table
         await initClient.query(`
         CREATE TABLE IF NOT EXISTS posts (
@@ -118,6 +121,23 @@ async function initializeDbSchema(): Promise<void> {
         await initClient.query(`CREATE TABLE IF NOT EXISTS conversations ( id SERIAL PRIMARY KEY, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, last_message_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP );`);
         await initClient.query(`CREATE TABLE IF NOT EXISTS conversation_participants ( conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, unread_count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (conversation_id, user_id) );`);
         await initClient.query(`CREATE TABLE IF NOT EXISTS messages ( id SERIAL PRIMARY KEY, conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, content TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP );`);
+        // Family Relationships Table
+        await initClient.query(`
+          CREATE TABLE IF NOT EXISTS family_relationships (
+            id SERIAL PRIMARY KEY,
+            user_id_1 INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            user_id_2 INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            requester_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+            created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT user_order_check CHECK (user_id_1 < user_id_2),
+            UNIQUE (user_id_1, user_id_2)
+          );
+        `);
+        // Add location sharing columns to family_relationships table if they don't exist
+        await initClient.query(`ALTER TABLE family_relationships ADD COLUMN IF NOT EXISTS share_location_from_1_to_2 BOOLEAN NOT NULL DEFAULT false;`);
+        await initClient.query(`ALTER TABLE family_relationships ADD COLUMN IF NOT EXISTS share_location_from_2_to_1 BOOLEAN NOT NULL DEFAULT false;`);
+
 
         // --- Indexes for performance ---
         await initClient.query('CREATE INDEX IF NOT EXISTS idx_posts_createdat ON posts (createdat DESC)');
@@ -139,6 +159,9 @@ async function initializeDbSchema(): Promise<void> {
         await initClient.query('CREATE INDEX IF NOT EXISTS idx_conversations_last_message_at ON conversations(last_message_at DESC)');
         await initClient.query('CREATE INDEX IF NOT EXISTS idx_conversation_participants_user_id ON conversation_participants(user_id)');
         await initClient.query('CREATE INDEX IF NOT EXISTS idx_messages_conversation_id_created_at ON messages(conversation_id, created_at DESC)');
+        await initClient.query('CREATE INDEX IF NOT EXISTS idx_family_relationships_user1 ON family_relationships(user_id_1)');
+        await initClient.query('CREATE INDEX IF NOT EXISTS idx_family_relationships_user2 ON family_relationships(user_id_2)');
+        await initClient.query('CREATE INDEX IF NOT EXISTS idx_device_tokens_location ON device_tokens (user_id, last_updated DESC) WHERE latitude IS NOT NULL AND longitude IS NOT NULL');
 
         await initClient.query('COMMIT');
         console.log('Database schema initialized successfully via dedicated client.');
@@ -451,6 +474,24 @@ export async function addOrUpdateDeviceTokenDb(token: string, latitude?: number,
             last_updated = NOW();
     `;
     await client.query(query, [token, latitude, longitude, userId]);
+  } finally {
+    client.release();
+  }
+}
+
+export async function updateUserLocationDb(userId: number, latitude: number, longitude: number): Promise<void> {
+  await ensureDbInitialized();
+  const dbPool = getDbPool();
+  if (!dbPool) return;
+  const client = await dbPool.connect();
+  try {
+    // This query updates all tokens for a user. If they have none, it does nothing.
+    const query = `
+      UPDATE device_tokens 
+      SET latitude = $1, longitude = $2, last_updated = NOW()
+      WHERE user_id = $3;
+    `;
+    await client.query(query, [latitude, longitude, userId]);
   } finally {
     client.release();
   }
@@ -1304,6 +1345,233 @@ export async function updateUserMobileDb(userId: number, mobileNumber: string): 
         `;
         const result = await client.query(query, [mobileNumber, userId]);
         return result.rows[0] || null;
+    } finally {
+        client.release();
+    }
+}
+
+// --- Family Relationship Functions ---
+
+export async function getFamilyRelationshipDb(userId1: number, userId2: number): Promise<FamilyRelationship | null> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return null;
+
+    const client = await dbPool.connect();
+    try {
+        const [u1, u2] = userId1 < userId2 ? [userId1, userId2] : [userId2, userId1];
+        const query = `SELECT * FROM family_relationships WHERE user_id_1 = $1 AND user_id_2 = $2`;
+        const result = await client.query(query, [u1, u2]);
+        return result.rows[0] || null;
+    } finally {
+        client.release();
+    }
+}
+
+export async function sendFamilyRequestDb(requesterId: number, receiverId: number): Promise<void> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) throw new Error("Database not configured.");
+
+    const client = await dbPool.connect();
+    try {
+        const [u1, u2] = requesterId < receiverId ? [requesterId, receiverId] : [receiverId, requesterId];
+        const query = `
+            INSERT INTO family_relationships (user_id_1, user_id_2, requester_id, status)
+            VALUES ($1, $2, $3, 'pending')
+            ON CONFLICT (user_id_1, user_id_2) DO UPDATE
+            SET requester_id = $3, status = 'pending', created_at = NOW()
+            WHERE family_relationships.status = 'rejected';
+        `;
+        await client.query(query, [u1, u2, requesterId]);
+    } finally {
+        client.release();
+    }
+}
+
+export async function updateFamilyRequestStatusDb(relationshipId: number, status: 'approved' | 'rejected'): Promise<void> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) throw new Error("Database not configured.");
+
+    const client = await dbPool.connect();
+    try {
+        const query = `UPDATE family_relationships SET status = $1 WHERE id = $2`;
+        await client.query(query, [status, relationshipId]);
+    } finally {
+        client.release();
+    }
+}
+
+export async function deleteFamilyRelationshipDb(relationshipId: number): Promise<void> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) throw new Error("Database not configured.");
+
+    const client = await dbPool.connect();
+    try {
+        await client.query('DELETE FROM family_relationships WHERE id = $1', [relationshipId]);
+    } finally {
+        client.release();
+    }
+}
+
+export async function getPendingFamilyRequestsForUserDb(userId: number): Promise<PendingFamilyRequest[]> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return [];
+
+    const client = await dbPool.connect();
+    try {
+        const query = `
+            SELECT fr.id, fr.requester_id, u.name as requester_name, u.profilepictureurl as requester_profile_picture_url
+            FROM family_relationships fr
+            JOIN users u ON fr.requester_id = u.id
+            WHERE (fr.user_id_1 = $1 OR fr.user_id_2 = $1)
+            AND fr.status = 'pending'
+            AND fr.requester_id != $1;
+        `;
+        const result = await client.query(query, [userId]);
+        return result.rows;
+    } finally {
+        client.release();
+    }
+}
+
+export async function getFamilyMembersForUserDb(userId: number): Promise<FamilyMember[]> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return [];
+
+    const client = await dbPool.connect();
+    try {
+        const query = `
+            SELECT
+                u.*,
+                CASE
+                    WHEN fr.user_id_1 = $1 THEN fr.share_location_from_1_to_2
+                    ELSE fr.share_location_from_2_to_1
+                END AS i_am_sharing_with_them,
+                CASE
+                    WHEN fr.user_id_1 = $1 THEN fr.share_location_from_2_to_1
+                    ELSE fr.share_location_from_1_to_2
+                END AS they_are_sharing_with_me,
+                latest_token.latitude,
+                latest_token.longitude,
+                latest_token.last_updated
+            FROM family_relationships fr
+            JOIN users u ON u.id = (
+                CASE
+                    WHEN fr.user_id_1 = $1 THEN fr.user_id_2
+                    ELSE fr.user_id_1
+                END
+            )
+            LEFT JOIN LATERAL (
+                SELECT latitude, longitude, last_updated
+                FROM device_tokens
+                WHERE user_id = u.id AND latitude IS NOT NULL AND longitude IS NOT NULL
+                ORDER BY last_updated DESC
+                LIMIT 1
+            ) latest_token ON true
+            WHERE (fr.user_id_1 = $1 OR fr.user_id_2 = $1) AND fr.status = 'approved';
+        `;
+        const result = await client.query(query, [userId]);
+        return result.rows;
+    } finally {
+        client.release();
+    }
+}
+
+
+export async function toggleLocationSharingDb(currentUserId: number, targetUserId: number, share: boolean): Promise<void> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) throw new Error("Database not configured.");
+
+    const client = await dbPool.connect();
+    try {
+        const [u1, u2] = currentUserId < targetUserId ? [currentUserId, targetUserId] : [targetUserId, currentUserId];
+        
+        let columnToUpdate;
+        if (currentUserId < targetUserId) {
+            columnToUpdate = 'share_location_from_1_to_2';
+        } else {
+            columnToUpdate = 'share_location_from_2_to_1';
+        }
+
+        const query = `
+            UPDATE family_relationships
+            SET ${columnToUpdate} = $1
+            WHERE user_id_1 = $2 AND user_id_2 = $3 AND status = 'approved'
+        `;
+
+        await client.query(query, [share, u1, u2]);
+    } finally {
+        client.release();
+    }
+}
+
+export async function getFamilyLocationsForUserDb(userId: number): Promise<FamilyMemberLocation[]> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return [];
+
+    const client = await dbPool.connect();
+    try {
+        const query = `
+            SELECT
+                u.id,
+                u.name,
+                u.profilepictureurl,
+                latest_token.latitude,
+                latest_token.longitude,
+                latest_token.last_updated
+            FROM family_relationships fr
+            JOIN users u ON u.id = (
+                CASE
+                    WHEN fr.user_id_1 = $1 THEN fr.user_id_2
+                    ELSE fr.user_id_1
+                END
+            )
+            -- This join finds the most recent location for the family member
+            JOIN LATERAL (
+                SELECT latitude, longitude, last_updated
+                FROM device_tokens
+                WHERE user_id = u.id AND latitude IS NOT NULL AND longitude IS NOT NULL
+                ORDER BY last_updated DESC
+                LIMIT 1
+            ) latest_token ON true
+            -- This condition checks if the family member is sharing their location with the current user
+            WHERE (
+                (fr.user_id_1 = $1 AND fr.share_location_from_2_to_1 = TRUE)
+                OR (fr.user_id_2 = $1 AND fr.share_location_from_1_to_2 = TRUE)
+            ) AND fr.status = 'approved';
+        `;
+        const result: QueryResult<FamilyMemberLocation> = await client.query(query, [userId]);
+        return result.rows;
+    } finally {
+        client.release();
+    }
+}
+
+export async function getRecipientsForSosDb(senderId: number): Promise<{ id: number }[]> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return [];
+
+    const client = await dbPool.connect();
+    try {
+        const query = `
+            SELECT user_id_2 AS recipient_id
+            FROM family_relationships
+            WHERE user_id_1 = $1 AND status = 'approved' AND share_location_from_1_to_2 = TRUE
+            UNION
+            SELECT user_id_1 AS recipient_id
+            FROM family_relationships
+            WHERE user_id_2 = $1 AND status = 'approved' AND share_location_from_2_to_1 = TRUE;
+        `;
+        const result = await client.query(query, [senderId]);
+        return result.rows.map(row => ({ id: row.recipient_id }));
     } finally {
         client.release();
     }
