@@ -1,4 +1,6 @@
 
+'use client';
+
 import type { FC } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
