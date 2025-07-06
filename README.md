@@ -83,6 +83,10 @@ To check logs:
 ```bash
 pm2 logs localpulse-app
 ```
+To reload the app after making changes to `.env.local`:
+```bash
+pm2 reload localpulse-app --update-env
+```
 
 ### Step 3: Configure NGINX as a Reverse Proxy
 Your application **must** be served over HTTPS for secure login cookies to work correctly. Create an NGINX site configuration for your domain (`localpulse.in`) to proxy requests to your Next.js application (which runs on port 3000 by default).
@@ -123,11 +127,9 @@ sudo systemctl reload nginx
 
 ### Login works, but I'm immediately logged out. Features like "Add Family" or "SOS" are missing.
 
-This is the classic symptom of a misconfigured reverse proxy. The browser is not sending the login cookie back to the app because Next.js doesn't know it's running on HTTPS.
+This is the classic symptom of a misconfigured reverse proxy. The browser is not sending the login cookie back to the app because Next.js doesn't know it's running on HTTPS. The application code is now built to automatically detect the proxy settings, so the problem is almost certainly in your NGINX configuration.
 
-**Solution 1: The NGINX Fix (Highly Recommended)**
-- **Verify NGINX Config**: This is the best and most secure solution. Ensure the line `proxy_set_header X-Forwarded-Proto https;` is present in your NGINX configuration file for this site. Reload NGINX after making the change.
-
-**Solution 2: The Application Fallback (Currently Active)**
-- The application has been configured via `ecosystem.config.js` to use cookies that work even if NGINX isn't sending the `X-Forwarded-Proto` header. This was done to get your application working immediately. While this fixes the functionality, it is technically less secure than Solution 1. It is recommended to implement the NGINX fix for a fully secure setup.
-- **PM2 Restarts**: If you make changes to your `.env.local` file, you must reload `pm2` with the `--update-env` flag for it to see the new variables: `pm2 reload localpulse-app --update-env`.
+**The Solution:**
+1.  **Verify NGINX Config**: This is the best and most secure solution. Ensure the line `proxy_set_header X-Forwarded-Proto https;` is present in your NGINX configuration file for your site (`/etc/nginx/sites-available/localpulse.in` or similar).
+2.  **Reload NGINX**: After making any changes to the NGINX config file, you must reload the service for the changes to take effect: `sudo systemctl reload nginx`.
+3.  **Clear Browser Cache**: As a final step, clear your browser's cache and cookies for `localpulse.in` to ensure you are getting a fresh session.
