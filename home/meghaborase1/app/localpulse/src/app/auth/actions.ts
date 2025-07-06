@@ -101,14 +101,14 @@ export async function login(email: string, password: string): Promise<{ success:
     const maxAgeInSeconds = 30 * 24 * 60 * 60; // 30 days
     const expires = new Date(Date.now() + maxAgeInSeconds * 1000);
     
-    // Robustly determine if the connection is secure by checking the x-forwarded-proto header
-    // sent by a properly configured reverse proxy like NGINX.
-    const isSecure = headers().get('x-forwarded-proto') === 'https';
+    // Check headers for secure connection, but allow override for misconfigured proxies
+    const isSecureProxy = headers().get('x-forwarded-proto') === 'https';
+    const allowInsecure = process.env.ALLOW_INSECURE_LOGIN_FOR_HTTP === 'true';
     const isProduction = process.env.NODE_ENV === 'production';
-    
+
     cookies().set(USER_COOKIE_NAME, sessionToken, {
       httpOnly: true,
-      secure: isProduction ? isSecure : false, // In production, secure status depends on the proxy. In dev, it's always false.
+      secure: isProduction ? (isSecureProxy || !allowInsecure) : false,
       expires: expires,
       sameSite: 'lax',
       path: '/',

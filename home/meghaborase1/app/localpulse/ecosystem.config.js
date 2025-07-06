@@ -13,6 +13,9 @@ module.exports = {
         NODE_ENV: 'production',
         // Increase the default heap size for the Node.js process
         NODE_OPTIONS: '--max-old-space-size=2048',
+        // This forces the app to use cookies compatible with a reverse proxy that isn't passing the X-Forwarded-Proto header.
+        // It is a functional workaround, but configuring NGINX correctly is the more secure long-term solution.
+        ALLOW_INSECURE_LOGIN_FOR_HTTP: 'true',
       },
     },
   ],

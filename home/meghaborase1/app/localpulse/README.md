@@ -129,7 +129,9 @@ sudo systemctl reload nginx
 
 This is the classic symptom of a misconfigured reverse proxy. The browser is not sending the login cookie back to the app because Next.js doesn't know it's running on HTTPS.
 
-**Solution: The NGINX Fix (Highly Recommended)**
+**Solution 1: The NGINX Fix (Highly Recommended)**
 - **Verify NGINX Config**: This is the best and most secure solution. Ensure the line `proxy_set_header X-Forwarded-Proto https;` is present in your NGINX configuration file for this site. Reload NGINX after making the change.
-- The latest application code will automatically detect this header and issue a secure cookie. If this header is missing, the login will still fail. This is the correct and secure behavior for a production application.
-- **PM2 Restarts**: Remember to reload `pm2` with the `--update-env` flag for it to see any new environment variables: `pm2 reload localpulse-app --update-env`.
+
+**Solution 2: The Application Fallback (Currently Active)**
+- The application has been configured via `ecosystem.config.js` to use cookies that work even if NGINX isn't sending the `X-Forwarded-Proto` header. This was done to get your application working immediately. While this fixes the functionality, it is technically less secure than Solution 1. It is recommended to implement the NGINX fix for a fully secure setup.
+- **PM2 Restarts**: If you make changes to your `.env.local` file, you must reload `pm2` with the `--update-env` flag for it to see the new variables: `pm2 reload localpulse-app --update-env`.
