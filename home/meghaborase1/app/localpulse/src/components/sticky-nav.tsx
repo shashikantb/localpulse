@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { FC } from 'react';
@@ -7,7 +6,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, Film, User as UserIcon, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getUnreadMessageCount } from '@/app/chat/actions';
+import { getUnreadMessageCount } from '../app/chat/actions';
 import type { User } from '@/lib/db-types';
 
 const UNREAD_POLL_INTERVAL = 15000; // 15 seconds
