@@ -42,7 +42,7 @@ ADMIN_PASSWORD=password123
 
 **Important Notes:**
 - **`POSTGRES_URL`**: Ensure special characters in your username/password are URL-encoded.
-- **`JWT_SECRET`**: This MUST be set to a secure random string for production.
+- **`JWT_SECRET`**: This MUST be set to a secure random string for production. You can generate one with `openssl rand -hex 32`.
 
 ## Getting Started (Local Development)
 
@@ -125,11 +125,16 @@ sudo systemctl reload nginx
 
 ## Troubleshooting
 
-### Login works, but I'm immediately logged out. Features like "Add Family" or "SOS" are missing.
+### Login works, but I'm immediately logged out, or features like "Add Family" or "SOS" are missing.
 
-This is the classic symptom of a misconfigured reverse proxy. The browser is not sending the login cookie back to the app because Next.js doesn't know it's running on HTTPS. The application code is now built to automatically detect the proxy settings, so the problem is almost certainly in your NGINX configuration.
+This is the classic symptom of a misconfigured reverse proxy or a stale browser cookie.
 
 **The Solution:**
-1.  **Verify NGINX Config**: This is the best and most secure solution. Ensure the line `proxy_set_header X-Forwarded-Proto https;` is present in your NGINX configuration file for your site (`/etc/nginx/sites-available/localpulse.in` or similar).
-2.  **Reload NGINX**: After making any changes to the NGINX config file, you must reload the service for the changes to take effect: `sudo systemctl reload nginx`.
-3.  **Clear Browser Cache**: As a final step, clear your browser's cache and cookies for `localpulse.in` to ensure you are getting a fresh session.
+1.  **Verify NGINX Config**: This is the best and most secure solution. Ensure the line `proxy_set_header X-Forwarded-Proto https;` is present in your NGINX configuration file for your site (`/etc/nginx/sites-available/localpulse.in` or similar). Then, reload NGINX with `sudo systemctl reload nginx`.
+2.  **Clear Browser Cache**: After deploying or changing your `JWT_SECRET`, your browser might be holding an old, invalid session cookie. **Clear your browser's cache and cookies for `localpulse.in` to ensure you are getting a fresh session**, then log in again.
+
+### I see `ERR_JWS_SIGNATURE_VERIFICATION_FAILED` in my server logs.
+
+This error means you recently changed your `JWT_SECRET` environment variable, but your browser is still trying to use a cookie signed with the old secret.
+
+**The Solution:** Clear your browser's cookies and site data for `localpulse.in`, then log in again. This will create a new, valid cookie signed with the new secret.
