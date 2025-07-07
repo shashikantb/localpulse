@@ -286,6 +286,30 @@ const PostFeedClient: FC<{}> = () => {
   });
 
   const currentFeed = feeds[activeTab];
+  const renderFeedContent = (feed: FeedState, type: FeedType) => {
+    if ((feed.isLoading && feed.posts.length === 0) || isRefreshing) {
+      return <PostFeedSkeleton />;
+    }
+    
+    return (
+      <div className="space-y-6">
+        {feed.posts.length > 0 ? (
+          feed.posts.map((post, index) => (
+            <PostCard key={post.id} post={post} userLocation={location} sessionUser={sessionUser} isFirst={index === 0} />
+          ))
+        ) : (
+          <NoPostsContent feedType={type} />
+        )}
+        <div ref={loaderRef} className="h-1 w-full" />
+        {feed.isLoading && feed.posts.length > 0 && (
+          <div className="flex justify-center items-center py-6">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        )}
+      </div>
+    );
+  };
+
 
   return (
     <div {...swipeHandlers}>
@@ -335,34 +359,10 @@ const PostFeedClient: FC<{}> = () => {
         </div>
 
         <TabsContent value="nearby">
-            {(currentFeed.isLoading && currentFeed.posts.length === 0) || isRefreshing ? <PostFeedSkeleton /> : (
-                <div className="space-y-6">
-                    {currentFeed.posts.length > 0 ? (
-                        currentFeed.posts.map((post, index) => <PostCard key={post.id} post={post} userLocation={location} sessionUser={sessionUser} isFirst={index === 0} />)
-                    ) : (
-                        <NoPostsContent feedType="nearby" />
-                    )}
-                    <div ref={loaderRef} className="h-1 w-full" />
-                    {currentFeed.isLoading && currentFeed.posts.length > 0 && (
-                        <div className="flex justify-center items-center py-6"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
-                    )}
-                </div>
-            )}
+           {renderFeedContent(feeds.nearby, 'nearby')}
         </TabsContent>
         <TabsContent value="family">
-           {(currentFeed.isLoading && currentFeed.posts.length === 0)  || isRefreshing ? <PostFeedSkeleton /> : (
-                <div className="space-y-6">
-                    {currentFeed.posts.length > 0 ? (
-                        currentFeed.posts.map((post, index) => <PostCard key={post.id} post={post} userLocation={location} sessionUser={sessionUser} isFirst={index === 0} />)
-                    ) : (
-                        <NoPostsContent feedType="family" />
-                    )}
-                    <div ref={loaderRef} className="h-1 w-full" />
-                    {currentFeed.isLoading && currentFeed.posts.length > 0 && (
-                        <div className="flex justify-center items-center py-6"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
-                    )}
-                </div>
-            )}
+           {renderFeedContent(feeds.family, 'family')}
         </TabsContent>
       </Tabs>
     </div>

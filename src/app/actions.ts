@@ -19,8 +19,6 @@ async function geocodeCoordinates(latitude: number, longitude: number): Promise<
   return "Unknown City";
 }
 
-// The mapPostFromDb function is no longer needed as sanitization happens at the DB query level.
-
 async function enrichPosts(posts: Post[], user: User | null): Promise<Post[]> {
     if (!posts || posts.length === 0) {
         return [];

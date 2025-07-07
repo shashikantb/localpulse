@@ -305,6 +305,9 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
   if (isUploading) buttonText = `Uploading ${uploadProgress} / ${selectedFiles.length}...`;
   else if (submitting) buttonText = 'Pulsing...';
 
+  const isMediaUploadDisabled = submitting || isUploading || hasDetectedUrl;
+
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmitForm)} className="space-y-6">
