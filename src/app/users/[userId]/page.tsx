@@ -218,24 +218,33 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
         )}
 
         {isOwnProfile && (
-          <Card className="shadow-xl border border-border/60 rounded-xl bg-card/80 backdrop-blur-sm">
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Settings className="w-6 h-6 mr-2 text-primary" />
-                Settings
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label className="text-base">Theme</Label>
-                <ThemeSwitcher />
-              </div>
-              <Separator />
-              <div className="space-y-2">
-                <Label className="text-base text-destructive">Danger Zone</Label>
-                <DeleteAccountButton />
-              </div>
-            </CardContent>
+           <Card className="shadow-xl border border-border/60 rounded-xl bg-card/80 backdrop-blur-sm p-0">
+            <Accordion type="single" collapsible className="w-full">
+              <AccordionItem value="settings" className="border-b-0">
+                <AccordionTrigger className="p-6 hover:no-underline">
+                   <div className="flex items-center">
+                        <Settings className="w-6 h-6 mr-3 text-primary" />
+                        <div className="text-left">
+                            <h2 className="text-lg font-semibold leading-none tracking-tight">Settings</h2>
+                            <p className="text-sm text-muted-foreground pt-1">Manage theme and account settings.</p>
+                        </div>
+                    </div>
+                </AccordionTrigger>
+                <AccordionContent className="px-6 pb-6 pt-0">
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label className="text-base">Theme</Label>
+                      <ThemeSwitcher />
+                    </div>
+                    <Separator />
+                    <div className="space-y-2">
+                      <Label className="text-base text-destructive">Danger Zone</Label>
+                      <DeleteAccountButton />
+                    </div>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
           </Card>
         )}
 

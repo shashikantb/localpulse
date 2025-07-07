@@ -5,10 +5,10 @@
 import type { FC } from 'react';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { Post, User } from '@/lib/db-types';
-import { getPosts, registerDeviceToken } from '@/app/actions';
+import { getPosts, registerDeviceToken, updateUserLocation } from '@/app/actions';
 import { getSession } from '@/app/auth/actions';
 import { PostCard } from '@/components/post-card';
-import { PostFeedSkeleton } from './post-feed-skeleton';
+import { PostFeedSkeleton } from '@/components/post-feed-skeleton';
 import { HASHTAG_CATEGORIES } from '@/components/post-form';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { MapPin, Terminal, Zap, Loader2, Filter, SlidersHorizontal, Rss, Tag, ChevronDown, Bell, BellOff, BellRing, ListPlus, RefreshCw, Lock, AlertTriangle } from 'lucide-react';
@@ -311,6 +311,14 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
         setSessionUser(session.user);
         setLocation(loc);
 
+        // Update location in the background for family sharing, if user is logged in
+        if (session.user && loc) {
+            updateUserLocation(loc.latitude, loc.longitude).catch(err => {
+                // This is a background task, so we don't need to bother the user with an error.
+                console.warn("Silent location update failed:", err);
+            });
+        }
+
         // NOW fetch posts with the location data
         const freshPosts = await getPosts({ 
             page: 1, 
@@ -497,7 +505,6 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
   
   const handleRefresh = async () => {
     if (isLoading || isLoadingMore || isRefreshing) return;
-    toast({ title: "Refreshing Feed...", description: "Fetching the latest pulses for you." });
     await refreshPosts();
   };
 
@@ -566,36 +573,42 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
         </AlertDialogContent>
       </AlertDialog>
 
-      <div className="flex justify-end items-center sticky top-16 z-30 mb-4 px-1 gap-2 flex-wrap">
-          <Button
-              variant="outline"
-              className="shadow-lg hover:shadow-xl transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary"
-              onClick={handleNotificationRegistration}
-              disabled={notificationPermissionStatus === 'loading'}
-              aria-label="Toggle Notifications"
-          >
-              <NotificationButtonContent notificationPermissionStatus={notificationPermissionStatus} />
-          </Button>
-          <Sheet>
-              <SheetTrigger asChild>
-                  <Button variant="outline" className="shadow-lg hover:shadow-xl transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary" aria-label="Open filters">
-                  <SlidersHorizontal className="w-5 h-5 mr-2" />
-                  Filters {activeFilterCount > 0 && <span className="ml-2 bg-accent text-accent-foreground text-xs px-1.5 py-0.5 rounded-full">{activeFilterCount}</span>}
-                  </Button>
-              </SheetTrigger>
-              <SheetContent className="bg-card/95 backdrop-blur-md border-border w-full sm:max-w-md flex flex-col">
-                  <FilterSheetContent 
-                    distanceFilterKm={distanceFilterKm}
-                    showAnyDistance={showAnyDistance}
-                    handleDistanceChange={handleDistanceChange}
-                    location={location}
-                    isLoadingMore={isLoadingMore}
-                    filterHashtags={filterHashtags}
-                    handleHashtagFilterChange={handleHashtagFilterChange}
-                    resetAllFilters={resetAllFilters}
-                  />
-              </SheetContent>
-          </Sheet>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-2xl font-bold text-primary pl-1 flex items-center">
+          <Rss className="w-6 h-6 mr-3 text-accent opacity-90" />
+          Nearby Pulses
+        </h2>
+        <div className="flex items-center gap-2">
+            <Button
+                variant="outline"
+                className="shadow-lg hover:shadow-xl transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary"
+                onClick={handleNotificationRegistration}
+                disabled={notificationPermissionStatus === 'loading'}
+                aria-label="Toggle Notifications"
+            >
+                <NotificationButtonContent notificationPermissionStatus={notificationPermissionStatus} />
+            </Button>
+            <Sheet>
+                <SheetTrigger asChild>
+                    <Button variant="outline" className="shadow-lg hover:shadow-xl transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary" aria-label="Open filters">
+                    <SlidersHorizontal className="w-5 h-5 mr-2" />
+                    Filters {activeFilterCount > 0 && <span className="ml-2 bg-accent text-accent-foreground text-xs px-1.5 py-0.5 rounded-full">{activeFilterCount}</span>}
+                    </Button>
+                </SheetTrigger>
+                <SheetContent className="bg-card/95 backdrop-blur-md border-border w-full sm:max-w-md flex flex-col">
+                    <FilterSheetContent 
+                      distanceFilterKm={distanceFilterKm}
+                      showAnyDistance={showAnyDistance}
+                      handleDistanceChange={handleDistanceChange}
+                      location={location}
+                      isLoadingMore={isLoadingMore}
+                      filterHashtags={filterHashtags}
+                      handleHashtagFilterChange={handleHashtagFilterChange}
+                      resetAllFilters={resetAllFilters}
+                    />
+                </SheetContent>
+            </Sheet>
+        </div>
       </div>
       
       {isRefreshing && (
@@ -638,3 +651,4 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
 
 export default PostFeedClient;
 
+    

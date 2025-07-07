@@ -8,6 +8,7 @@ import { AppInstallPrompt } from '@/components/app-install-prompt';
 import Header from '@/components/layout/header';
 import StickyNav from '@/components/sticky-nav';
 import { Providers } from '@/app/providers';
+import { getSession } from '@/app/auth/actions';
 
 // The geist font package exports an object with the variable name pre-configured.
 // We just need to use it directly.
@@ -17,11 +18,13 @@ export const metadata: Metadata = {
   description: 'Share and discover what\'s happening around you',
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const { user } = await getSession();
+
   return (
     <html lang="en" className="h-full" suppressHydrationWarning>
       <head>
@@ -31,7 +34,7 @@ export default function RootLayout({
       <body className={`${GeistSans.variable} antialiased bg-background text-foreground flex flex-col min-h-svh`}>
         <Providers>
           <Header />
-          <StickyNav />
+          <StickyNav user={user} />
           <main className="flex-grow">
             {children}
           </main>
