@@ -11,13 +11,14 @@ import { getSession } from '@/app/auth/actions';
 import { getUnreadMessageCount } from '@/app/actions';
 import type { User } from '@/lib/db-types';
 import { Skeleton } from '@/components/ui/skeleton';
+import SosButton from './sos-button';
 
 const LoadingSkeleton: FC = () => (
-    <div className="container mx-auto flex h-14 max-w-2xl items-center justify-around px-4">
-        {[...Array(4)].map((_, i) => (
-            <div key={i} className="flex h-full w-full flex-col items-center justify-center space-y-1 pt-2">
-                <Skeleton className="h-5 w-5" />
-                <Skeleton className="h-4 w-12" />
+    <div className="container mx-auto flex h-14 max-w-2xl items-center justify-around px-2">
+        {[...Array(5)].map((_, i) => (
+            <div key={i} className="flex h-full w-full flex-col items-center justify-center space-y-1 sm:pt-2 px-2">
+                 <Skeleton className="h-5 w-5 rounded-full" />
+                 <Skeleton className="h-3 w-10 mt-1 hidden sm:block" />
             </div>
         ))}
     </div>
@@ -33,6 +34,7 @@ const StickyNav: FC = () => {
 
   // Effect to fetch initial session and unread count
   useEffect(() => {
+    setLoading(true);
     getSession().then(session => {
       setUser(session.user);
       if (session.user) {
@@ -44,7 +46,10 @@ const StickyNav: FC = () => {
 
   // Effect to poll for unread messages
   useEffect(() => {
-    if (!user) return; // Only poll if user is logged in
+    if (!user) {
+      setUnreadCount(0);
+      return;
+    };
     
     const intervalId = setInterval(() => {
         getUnreadMessageCount().then(setUnreadCount);
@@ -53,10 +58,12 @@ const StickyNav: FC = () => {
     return () => clearInterval(intervalId);
   }, [user]);
 
-
-  const navItems = [
+  const leadingNavItems = [
     { name: 'Home', href: '/', icon: Home, current: pathname === '/' },
     { name: 'Reels', href: '/reels', icon: Film, current: pathname === '/reels' },
+  ];
+  
+  const trailingNavItems = [
     { name: 'Chat', href: '/chat', icon: MessageSquare, current: pathname.startsWith('/chat'), requiresAuth: true, badgeCount: unreadCount },
     { 
       name: 'Profile', 
@@ -66,37 +73,46 @@ const StickyNav: FC = () => {
     }
   ];
 
+  const renderNavItem = (item: any) => {
+    if (item.requiresAuth && !user) return null;
+    return (
+      <Link
+        key={item.name}
+        href={item.href}
+        className={cn(
+            'relative flex h-full w-full flex-row items-center justify-center space-x-2 border-b-2 px-2 text-sm font-medium transition-colors sm:flex-col sm:space-x-0 sm:space-y-1 sm:pt-2',
+            item.current
+            ? 'border-primary text-primary'
+            : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'
+        )}
+        aria-current={item.current ? 'page' : undefined}
+      >
+        <item.icon className="h-5 w-5" />
+        <span className="hidden sm:inline">{item.name}</span>
+        {item.badgeCount > 0 && (
+            <span className="absolute top-1 right-2 sm:right-auto sm:left-1/2 sm:ml-4 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-accent-foreground text-[10px] font-bold ring-2 ring-background">
+                {item.badgeCount > 9 ? '9+' : item.badgeCount}
+            </span>
+        )}
+      </Link>
+    );
+  };
+
   return (
     <nav className="sticky top-14 z-40 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       {loading ? (
         <LoadingSkeleton />
       ) : (
-        <div className="container mx-auto flex h-14 max-w-2xl items-center justify-around px-4">
-            {navItems.map((item) => {
-                if (item.requiresAuth && !user) return null;
-
-                return (
-                    <Link
-                    key={item.name}
-                    href={item.href}
-                    className={cn(
-                        'relative flex h-full w-full flex-row items-center justify-center space-x-2 border-b-2 px-4 text-sm font-medium transition-colors sm:flex-col sm:space-x-0 sm:space-y-1 sm:pt-2',
-                        item.current
-                        ? 'border-primary text-primary'
-                        : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'
-                    )}
-                    aria-current={item.current ? 'page' : undefined}
-                    >
-                    <item.icon className="h-5 w-5" />
-                    <span>{item.name}</span>
-                    {item.badgeCount > 0 && (
-                        <span className="absolute top-1 right-4 sm:right-auto sm:left-1/2 sm:ml-4 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-accent-foreground text-[10px] font-bold ring-2 ring-background">
-                            {item.badgeCount > 9 ? '9+' : item.badgeCount}
-                        </span>
-                    )}
-                    </Link>
-                )
-            })}
+        <div className="container mx-auto flex h-14 max-w-2xl items-center justify-around px-2">
+            {leadingNavItems.map(renderNavItem)}
+            
+            {user && (
+              <div className="flex h-full flex-col items-center justify-center">
+                <SosButton />
+              </div>
+            )}
+            
+            {trailingNavItems.map(renderNavItem)}
         </div>
       )}
     </nav>
