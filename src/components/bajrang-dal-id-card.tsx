@@ -2,14 +2,14 @@
 'use client';
 
 import type { FC } from 'react';
-import React, { useRef, useCallback } from 'react';
+import React, { useRef, useCallback, useState } from 'react';
 import { toPng } from 'html-to-image';
-import { saveAs } from 'file-saver';
 import type { User } from '@/lib/db-types';
 import { Button } from './ui/button';
-import { Download, Phone, User as UserIcon, Shield } from 'lucide-react';
+import { Download, Phone, User as UserIcon, Shield, Loader2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { useToast } from '@/hooks/use-toast';
+import { uploadGeneratedImage } from '@/app/actions';
 
 interface BajrangDalIdCardProps {
   user: User;
@@ -25,26 +25,49 @@ const BajrangDalSymbol: FC = () => (
 const BajrangDalIdCard: FC<BajrangDalIdCardProps> = ({ user }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const [isDownloading, setIsDownloading] = useState(false);
 
-  const onDownload = useCallback(() => {
+  const onDownload = useCallback(async () => {
     if (cardRef.current === null) {
-      toast({ variant: 'destructive', title: 'Error', description: 'Could not capture ID card.' });
+      toast({ variant: 'destructive', title: 'Error', description: 'Could not capture ID card element.' });
       return;
     }
-    toPng(cardRef.current, { cacheBust: true, backgroundColor: '#ffffff' })
-      .then((dataUrl) => {
-        saveAs(dataUrl, `bajrang-dal-id-card-${user.id}.png`);
-        toast({ title: 'Success', description: 'ID Card downloaded.' });
-      })
-      .catch((err) => {
-        console.error('oops, something went wrong!', err);
-        toast({ variant: 'destructive', title: 'Download Failed', description: 'Could not generate ID card image.' });
-      });
+    
+    setIsDownloading(true);
+
+    try {
+      // 1. Generate image data URL on the client
+      const dataUrl = await toPng(cardRef.current, { cacheBust: true, backgroundColor: '#ffffff', pixelRatio: 2 });
+      
+      // 2. Upload the generated image to the server, which uploads to GCS
+      const result = await uploadGeneratedImage(dataUrl, `bajrang-dal-id-card-${user.id}.png`);
+
+      if (!result.success || !result.url) {
+        throw new Error(result.error || 'Failed to get download link from server.');
+      }
+      
+      // 3. Trigger download using the real URL from GCS
+      const link = document.createElement('a');
+      link.href = result.url;
+      // The 'download' attribute suggests a filename to the browser
+      link.download = `bajrang-dal-id-card-${user.id}.png`; 
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast({ title: 'Success', description: 'ID Card download started.' });
+
+    } catch (err: any) {
+      console.error('Download failed:', err);
+      toast({ variant: 'destructive', title: 'Download Failed', description: err.message || 'Could not generate or download the ID card.' });
+    } finally {
+      setIsDownloading(false);
+    }
   }, [cardRef, user.id, toast]);
 
   return (
     <div className="space-y-4">
-      <div ref={cardRef} className="p-4 border-2 border-orange-500 bg-orange-50 rounded-lg w-full max-w-sm mx-auto flex flex-col items-center space-y-4">
+      <div ref={cardRef} className="p-4 border-2 border-orange-500 bg-orange-50 rounded-lg w-full max-w-sm mx-auto flex flex-col items-center space-y-4 text-black">
         <div className="w-24 h-16">
           <BajrangDalSymbol />
         </div>
@@ -63,9 +86,9 @@ const BajrangDalIdCard: FC<BajrangDalIdCardProps> = ({ user }) => {
             <p className="flex items-center text-sm"><Shield className="w-4 h-4 mr-2 text-orange-700"/> <span className="font-semibold mr-2">Status:</span> {user.status}</p>
         </div>
       </div>
-      <Button onClick={onDownload} className="w-full">
-        <Download className="mr-2 h-4 w-4" />
-        Download ID Card
+      <Button onClick={onDownload} className="w-full" disabled={isDownloading}>
+        {isDownloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+        {isDownloading ? 'Generating...' : 'Download ID Card'}
       </Button>
     </div>
   );

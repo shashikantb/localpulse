@@ -361,6 +361,50 @@ export async function getSignedUploadUrl(fileName: string, fileType: string): Pr
   }
 }
 
+export async function uploadGeneratedImage(dataUrl: string, fileName: string): Promise<{ success: boolean; url?: string; error?: string }> {
+  const { user } = await getSession();
+  if (!user) {
+    return { success: false, error: 'Authentication required.' };
+  }
+
+  const storage = getGcsClient();
+  const bucketName = getGcsBucketName();
+
+  if (!storage || !bucketName) {
+    return { success: false, error: 'Google Cloud Storage is not configured on the server.' };
+  }
+
+  try {
+    const matches = dataUrl.match(/^data:(.+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+      return { success: false, error: 'Invalid data URL format.' };
+    }
+
+    const mimeType = matches[1];
+    const base64Data = matches[2];
+    const buffer = Buffer.from(base64Data, 'base64');
+    
+    // Create a unique filename to avoid collisions
+    const uniqueFileName = `${user.id}-${Date.now()}-${fileName}`;
+
+    const file = storage.bucket(bucketName).file(uniqueFileName);
+
+    await file.save(buffer, {
+      metadata: {
+        contentType: mimeType,
+      },
+      public: true, // Make the file publicly readable
+    });
+    
+    // The public URL for a publicly accessible object
+    const publicUrl = `https://storage.googleapis.com/${bucketName}/${uniqueFileName}`;
+
+    return { success: true, url: publicUrl };
+  } catch (error: any) {
+    console.error('Error uploading generated image to GCS:', error);
+    return { success: false, error: 'Failed to upload image due to a server error.' };
+  }
+}
 
 export async function toggleLikePost(postId: number): Promise<{ post?: Post; error?: string }> {
   try {
