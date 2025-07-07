@@ -392,6 +392,7 @@ export async function uploadGeneratedImage(dataUrl: string, fileName: string): P
       metadata: {
         contentType: mimeType,
       },
+      // REMOVED: public: true
     });
     
     // Generate a signed URL for temporary read access.
@@ -404,6 +405,7 @@ export async function uploadGeneratedImage(dataUrl: string, fileName: string): P
     return { success: true, url: signedUrl };
   } catch (error: any) {
     console.error('Error uploading generated image to GCS:', error);
+    // The error object from GCS is complex, so returning a generic message is safer.
     return { success: false, error: 'Failed to upload image due to a server error.' };
   }
 }
@@ -1093,5 +1095,3 @@ export async function markConversationAsRead(conversationId: number): Promise<vo
         console.error(`Server action error marking conversation ${conversationId} as read:`, error);
     }
 }
-
-    
