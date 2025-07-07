@@ -361,9 +361,11 @@ const PostFeedClient: FC<{}> = () => {
         <TabsContent value="nearby">
            {renderFeedContent(feeds.nearby, 'nearby')}
         </TabsContent>
-        <TabsContent value="family">
-           {renderFeedContent(feeds.family, 'family')}
-        </TabsContent>
+        {sessionUser && 
+            <TabsContent value="family">
+            {renderFeedContent(feeds.family, 'family')}
+            </TabsContent>
+        }
       </Tabs>
     </div>
   );

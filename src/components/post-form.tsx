@@ -124,11 +124,11 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
   });
 
   const contentValue = form.watch('content');
-  const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/;
-
+  
   React.useEffect(() => {
+    const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/;
     setHasDetectedUrl(youtubeRegex.test(contentValue));
-  }, [contentValue, youtubeRegex]);
+  }, [contentValue]);
 
   const removeSelectedFile = (indexToRemove: number) => {
     setSelectedFiles(currentFiles => {
