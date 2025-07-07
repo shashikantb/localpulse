@@ -58,6 +58,7 @@ export interface Post {
   notifiedcount: number;
   city?: string | null;
   hashtags?: string[] | null;
+  is_family_post: boolean;
   authorid: number | null; // This will come from the posts table
   authorname: string | null; // This will be joined from the users table
   authorrole: UserRole | null; // This will be joined from the users table
@@ -75,6 +76,7 @@ export type NewPost = {
   mediaUrls?: string[] | null; // The final GCS URLs
   mediaType?: 'image' | 'video' | 'gallery' | null;
   hashtags: string[];
+  isFamilyPost: boolean;
   authorId?: number;
   mentionedUserIds?: number[];
 };
@@ -88,6 +90,7 @@ export type DbNewPost = {
   mediatype?: 'image' | 'video' | 'gallery' | null;
   city?: string | null;
   hashtags: string[];
+  is_family_post: boolean;
   authorid: number | null; 
   mentionedUserIds?: number[];
 };

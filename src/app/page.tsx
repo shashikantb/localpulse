@@ -2,7 +2,6 @@
 import type { FC } from 'react';
 import { Suspense } from 'react';
 import { getSession } from './auth/actions';
-import { Rss } from 'lucide-react';
 import PostComposerLoader, { PostComposerSkeleton } from '@/components/post-composer-loader';
 import PostFeedLoader from '@/components/post-feed-loader';
 import StatusFeed from '@/components/status-feed';
@@ -33,14 +32,7 @@ const HomePage: FC = () => {
           <PostComposerWithSession />
         </Suspense>
         
-        <div className="border-b-2 border-primary/30 pb-3">
-            <h2 className="text-4xl font-bold text-primary pl-1 flex items-center">
-                <Rss className="w-9 h-9 mr-3 text-accent opacity-90" />
-                Nearby Pulses
-            </h2>
-        </div>
-
-        {/* Use the new client component loader which handles the dynamic import correctly */}
+        {/* The PostFeedLoader component now manages the "Nearby" and "Family" tabs internally */}
         <PostFeedLoader />
       </div>
     </div>

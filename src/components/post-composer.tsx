@@ -51,7 +51,7 @@ const PostComposer: FC<PostComposerProps> = ({ sessionUser, onPostSuccess }) => 
     }
   }, []);
 
-  const handleAddPost = async (content: string, hashtags: string[], mediaUrls?: string[], mediaType?: 'image' | 'video' | 'gallery', mentionedUserIds?: number[]) => {
+  const handleAddPost = async (content: string, hashtags: string[], isFamilyPost: boolean, mediaUrls?: string[], mediaType?: 'image' | 'video' | 'gallery', mentionedUserIds?: number[]) => {
     if (!location && !locationError) {
       toast({ variant: 'destructive', title: "Location Unavailable", description: "Your location is still being determined. Please wait a moment and try again." });
       return;
@@ -77,6 +77,7 @@ const PostComposer: FC<PostComposerProps> = ({ sessionUser, onPostSuccess }) => 
         mediaUrls: mediaUrls,
         mediaType: mediaType,
         hashtags: hashtags || [],
+        isFamilyPost: isFamilyPost,
         authorId: sessionUser ? sessionUser.id : undefined,
         mentionedUserIds: mentionedUserIds || [],
       };
@@ -116,7 +117,7 @@ const PostComposer: FC<PostComposerProps> = ({ sessionUser, onPostSuccess }) => 
         </div>
       )}
       
-      <PostForm onSubmit={handleAddPost} submitting={formSubmitting || loadingLocation} />
+      <PostForm onSubmit={handleAddPost} submitting={formSubmitting || loadingLocation} sessionUser={sessionUser} />
     </div>
   );
 };

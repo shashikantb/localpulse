@@ -21,6 +21,28 @@ async function geocodeCoordinates(latitude: number, longitude: number): Promise<
 
 // The mapPostFromDb function is no longer needed as sanitization happens at the DB query level.
 
+async function enrichPosts(posts: Post[], user: User | null): Promise<Post[]> {
+    if (!posts || posts.length === 0) {
+        return [];
+    }
+    const postIds = posts.map(p => p.id);
+    const authorIds = [...new Set(posts.map(p => p.authorid).filter((id): id is number => id !== null))];
+
+    const [likedPostIds, mentionsMap, followedAuthorIds] = await Promise.all([
+        user ? db.getLikedPostIdsForUserDb(user.id, postIds) : Promise.resolve(new Set<number>()),
+        db.getMentionsForPostsDb(postIds),
+        (user && authorIds.length > 0) ? db.getFollowedUserIdsDb(user.id, authorIds) : Promise.resolve(new Set<number>())
+    ]);
+
+    posts.forEach((post: any) => {
+        post.isLikedByCurrentUser = likedPostIds.has(post.id);
+        post.mentions = mentionsMap.get(post.id) || [];
+        post.isAuthorFollowedByCurrentUser = followedAuthorIds.has(post.authorid);
+    });
+
+    return posts;
+}
+
 export async function getPosts(options?: { page: number; limit: number; latitude?: number | null; longitude?: number | null; }): Promise<Post[]> {
   try {
     const { user } = await getSession();
@@ -31,33 +53,32 @@ export async function getPosts(options?: { page: number; limit: number; latitude
         longitude: options.longitude
     } : { limit: 10, offset: 0 };
 
-    let posts = await db.getPostsDb(dbOptions, user?.role);
+    const posts = await db.getPostsDb(dbOptions, user?.role);
+    return enrichPosts(posts, user);
     
-    if (posts.length > 0) {
-        const postIds = posts.map(p => p.id);
-        const authorIds = [...new Set(posts.map(p => p.authorid).filter((id): id is number => id !== null))];
-
-        const [likedPostIds, mentionsMap, followedAuthorIds] = await Promise.all([
-            user ? db.getLikedPostIdsForUserDb(user.id, postIds) : Promise.resolve(new Set<number>()),
-            db.getMentionsForPostsDb(postIds),
-            (user && authorIds.length > 0) ? db.getFollowedUserIdsDb(user.id, authorIds) : Promise.resolve(new Set<number>())
-        ]);
-
-        posts.forEach((post: any) => {
-            post.isLikedByCurrentUser = likedPostIds.has(post.id);
-            post.mentions = mentionsMap.get(post.id) || [];
-            post.isAuthorFollowedByCurrentUser = followedAuthorIds.has(post.authorid);
-        });
-    }
-    
-    return posts;
   } catch (error: any) {
     console.error("Server action error fetching posts:", error.message);
-    // In production, we don't want to throw an error to the client here.
-    // Instead, we return an empty array and the client will show cached data or an empty state.
     return [];
   }
 }
+
+export async function getFamilyPosts(options: { page: number, limit: number }): Promise<Post[]> {
+    try {
+        const { user } = await getSession();
+        if (!user) {
+            return [];
+        }
+
+        const dbOptions = { limit: options.limit, offset: (options.page - 1) * options.limit };
+        const posts = await db.getFamilyPostsDb(user.id, dbOptions);
+        return enrichPosts(posts, user);
+
+    } catch (error: any) {
+        console.error("Server action error fetching family posts:", error.message);
+        return [];
+    }
+}
+
 
 export async function getAdminPosts(options?: { page: number; limit: number }): Promise<Post[]> {
   try {
@@ -88,26 +109,9 @@ export async function getMediaPosts(options?: { page: number; limit: number }): 
     const { user } = await getSession();
     const dbOptions = options ? { limit: options.limit, offset: (options.page - 1) * options.limit } : undefined;
     
-    let posts = await db.getMediaPostsDb(dbOptions);
+    const posts = await db.getMediaPostsDb(dbOptions);
+    return enrichPosts(posts, user);
 
-    if (posts.length > 0) {
-        const postIds = posts.map(p => p.id);
-        const authorIds = [...new Set(posts.map(p => p.authorid).filter((id): id is number => id !== null))];
-
-        const [likedPostIds, mentionsMap, followedAuthorIds] = await Promise.all([
-            user ? db.getLikedPostIdsForUserDb(user.id, postIds) : Promise.resolve(new Set<number>()),
-            db.getMentionsForPostsDb(postIds),
-            (user && authorIds.length > 0) ? db.getFollowedUserIdsDb(sessionUser.id, authorIds) : Promise.resolve(new Set<number>())
-        ]);
-        
-        posts.forEach((post: any) => {
-            post.isLikedByCurrentUser = likedPostIds.has(post.id);
-            post.mentions = mentionsMap.get(post.id) || [];
-            post.isAuthorFollowedByCurrentUser = followedAuthorIds.has(post.authorid);
-        });
-    }
-
-    return posts;
   } catch (error) {
     console.error("Server action error fetching media posts:", error);
     return [];
@@ -116,6 +120,12 @@ export async function getMediaPosts(options?: { page: number; limit: number }): 
 
 async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[] = []) {
   try {
+    // If it's a family post, do not send notifications to nearby users.
+    if (post.is_family_post) {
+      // Potentially send notifications to family members in the future.
+      return; 
+    }
+      
     let successCount = 0;
     const failedTokens: string[] = [];
     const processedTokens = new Set<string>();
@@ -242,6 +252,10 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
   try {
     const { user } = await getSession(); // user can be null
 
+    if (newPostData.isFamilyPost && !user) {
+        return { error: 'You must be logged in to create a family post.' };
+    }
+      
     if (newPostData.authorId && (!user || user.id !== newPostData.authorId)) {
         return { error: 'Authentication mismatch. You can only post for yourself.' };
     }
@@ -277,6 +291,7 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
       mediatype: mediaType,
       hashtags: newPostData.hashtags || [], 
       city: cityName,
+      is_family_post: newPostData.isFamilyPost || false,
       authorid: user ? user.id : null,
       mentionedUserIds: newPostData.mentionedUserIds || [],
     };
@@ -387,14 +402,12 @@ export async function uploadGeneratedImage(dataUrl: string, fileName: string): P
     const uniqueFileName = `${user.id}-${Date.now()}-${fileName}`;
     const file = storage.bucket(bucketName).file(uniqueFileName);
 
-    // Save the file WITHOUT making it public.
     await file.save(buffer, {
       metadata: {
         contentType: mimeType,
       },
     });
     
-    // Generate a signed URL for temporary read access.
     const [signedUrl] = await file.getSignedUrl({
         action: 'read',
         expires: Date.now() + 5 * 60 * 1000, // URL is valid for 5 minutes
@@ -404,7 +417,6 @@ export async function uploadGeneratedImage(dataUrl: string, fileName: string): P
     return { success: true, url: signedUrl };
   } catch (error: any) {
     console.error('Error uploading generated image to GCS:', error);
-    // The error object from GCS is complex, so returning a generic message is safer.
     return { success: false, error: 'Failed to upload image due to a server error.' };
   }
 }
@@ -588,26 +600,8 @@ export async function getUser(userId: number): Promise<User | null> {
 export async function getPostsByUserId(userId: number): Promise<Post[]> {
   try {
     const { user: sessionUser } = await getSession();
-    let posts = await db.getPostsByUserIdDb(userId);
-    
-    if (posts.length > 0) {
-        const postIds = posts.map(p => p.id);
-        const authorIds = [...new Set(posts.map(p => p.authorid).filter((id): id is number => id !== null))];
-
-        const [likedPostIds, mentionsMap, followedAuthorIds] = await Promise.all([
-            sessionUser ? db.getLikedPostIdsForUserDb(sessionUser.id, postIds) : Promise.resolve(new Set<number>()),
-            db.getMentionsForPostsDb(postIds),
-            (sessionUser && authorIds.length > 0) ? db.getFollowedUserIdsDb(sessionUser.id, authorIds) : Promise.resolve(new Set<number>())
-        ]);
-
-        posts.forEach((post: any) => {
-            post.isLikedByCurrentUser = likedPostIds.has(post.id);
-            post.mentions = mentionsMap.get(post.id) || [];
-            post.isAuthorFollowedByCurrentUser = followedAuthorIds.has(post.authorid);
-        });
-    }
-    
-    return posts;
+    const posts = await db.getPostsByUserIdDb(userId);
+    return enrichPosts(posts, sessionUser);
   } catch (error) {
     console.error(`Server action error fetching posts for user ${userId}:`, error);
     return [];
@@ -620,21 +614,9 @@ export async function getPostById(postId: number): Promise<Post | null> {
     let post = await db.getPostByIdDb(postId, user?.role);
     if (!post) return null;
 
-    if (post) {
-        const postIds = [post.id];
-        const authorIds = post.authorid ? [post.authorid] : [];
-        const [likedPostIds, mentionsMap, followedAuthorIds] = await Promise.all([
-            user ? db.getLikedPostIdsForUserDb(user.id, postIds) : Promise.resolve(new Set<number>()),
-            db.getMentionsForPostsDb(postIds),
-            (user && authorIds.length > 0) ? db.getFollowedUserIdsDb(sessionUser.id, authorIds) : Promise.resolve(new Set<number>())
-        ]);
-        
-        (post as any).isLikedByCurrentUser = likedPostIds.has(post.id);
-        (post as any).mentions = mentionsMap.get(post.id) || [];
-        (post as any).isAuthorFollowedByCurrentUser = followedAuthorIds.has(post.authorid);
-    }
+    const enrichedPosts = await enrichPosts([post], user);
+    return enrichedPosts[0];
 
-    return post;
   } catch (error) {
     console.error(`Server action error fetching post ${postId}:`, error);
     return null;
@@ -1094,5 +1076,3 @@ export async function markConversationAsRead(conversationId: number): Promise<vo
         console.error(`Server action error marking conversation ${conversationId} as read:`, error);
     }
 }
-
-    

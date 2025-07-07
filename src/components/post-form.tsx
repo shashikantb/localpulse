@@ -30,7 +30,7 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
-import { Loader2, X, UploadCloud, Film, Image as ImageIcon, Tag, ChevronDown, Camera, User, Search, UserPlus, Video, XCircle } from 'lucide-react';
+import { Loader2, X, UploadCloud, Film, Image as ImageIcon, Tag, ChevronDown, Camera, User, Search, UserPlus, Video, XCircle, Users, Lock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
@@ -40,6 +40,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from './ui/badge';
 import { Progress } from './ui/progress';
+import { Checkbox } from './ui/checkbox';
 
 const MAX_IMAGE_COUNT = 5;
 const MAX_VIDEO_UPLOAD_LIMIT = 50 * 1024 * 1024; // 50MB
@@ -76,13 +77,15 @@ export const HASHTAG_CATEGORIES = [
 const formSchema = z.object({
   content: z.string().min(1, "Post cannot be empty").max(1000, "Post cannot exceed 1000 characters"),
   hashtags: z.array(z.string()),
+  isFamilyPost: z.boolean().default(false),
 });
 
 type FormData = z.infer<typeof formSchema>;
 
 interface PostFormProps {
-  onSubmit: (content: string, hashtags: string[], mediaUrls?: string[], mediaType?: 'image' | 'video' | 'gallery', mentionedUserIds?: number[]) => Promise<void>;
+  onSubmit: (content: string, hashtags: string[], isFamilyPost: boolean, mediaUrls?: string[], mediaType?: 'image' | 'video' | 'gallery', mentionedUserIds?: number[]) => Promise<void>;
   submitting: boolean;
+  sessionUser: UserType | null;
 }
 
 interface FilePreview {
@@ -90,7 +93,7 @@ interface FilePreview {
     url: string;
 }
 
-export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
+export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser }) => {
   const { toast } = useToast();
   const [selectedFiles, setSelectedFiles] = React.useState<FilePreview[]>([]);
   const [mediaType, setMediaType] = React.useState<'image' | 'video' | null>(null);
@@ -116,6 +119,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
     defaultValues: {
       content: '',
       hashtags: [],
+      isFamilyPost: false,
     },
   });
 
@@ -274,7 +278,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
               else if (mediaType === 'image') finalMediaType = 'image';
           }
 
-          await onSubmit(data.content, hashtagsToSubmit, uploadedUrls, finalMediaType, mentionedUserIds);
+          await onSubmit(data.content, hashtagsToSubmit, data.isFamilyPost, uploadedUrls, finalMediaType, mentionedUserIds);
 
         } catch (error: any) {
           console.error("A critical error occurred during the upload process:", error);
@@ -284,7 +288,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
           setIsUploading(false);
         }
       } else {
-        await onSubmit(data.content, hashtagsToSubmit, undefined, undefined, mentionedUserIds);
+        await onSubmit(data.content, hashtagsToSubmit, data.isFamilyPost, undefined, undefined, mentionedUserIds);
       }
       
       form.reset();
@@ -536,6 +540,33 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting }) => {
           )}
         </FormItem>
         
+        {sessionUser && (
+            <FormField
+              control={form.control}
+              name="isFamilyPost"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 shadow-sm bg-muted/50">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      disabled={isButtonDisabled}
+                    />
+                  </FormControl>
+                  <div className="space-y-1 leading-none">
+                    <FormLabel className="flex items-center">
+                        <Users className="mr-2 h-4 w-4 text-primary" />
+                        Family Post
+                    </FormLabel>
+                    <p className="text-xs text-muted-foreground">
+                      Only approved family members will see this post.
+                    </p>
+                  </div>
+                </FormItem>
+              )}
+            />
+        )}
+
         {isUploading && <Progress value={(uploadProgress / selectedFiles.length) * 100} className="w-full h-2" />}
 
         <Button type="submit" disabled={isButtonDisabled || !form.formState.isValid} className="w-full text-base py-3 shadow-md hover:shadow-lg transition-shadow bg-accent hover:bg-accent/90 text-accent-foreground rounded-lg">
