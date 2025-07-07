@@ -301,8 +301,6 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
   };
 
   const isButtonDisabled = submitting || isUploading;
-  const isMediaUploadDisabled = isButtonDisabled || hasDetectedUrl;
-
   let buttonText = 'Share Your Pulse';
   if (isUploading) buttonText = `Uploading ${uploadProgress} / ${selectedFiles.length}...`;
   else if (submitting) buttonText = 'Pulsing...';
