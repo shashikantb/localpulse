@@ -384,24 +384,27 @@ export async function uploadGeneratedImage(dataUrl: string, fileName: string): P
     const base64Data = matches[2];
     const buffer = Buffer.from(base64Data, 'base64');
     
-    // Create a unique filename to avoid collisions
     const uniqueFileName = `${user.id}-${Date.now()}-${fileName}`;
-
     const file = storage.bucket(bucketName).file(uniqueFileName);
 
+    // Save the file WITHOUT making it public.
     await file.save(buffer, {
       metadata: {
         contentType: mimeType,
       },
-      public: true, // Make the file publicly readable
     });
     
-    // The public URL for a publicly accessible object
-    const publicUrl = `https://storage.googleapis.com/${bucketName}/${uniqueFileName}`;
+    // Generate a signed URL for temporary read access.
+    const [signedUrl] = await file.getSignedUrl({
+        action: 'read',
+        expires: Date.now() + 5 * 60 * 1000, // URL is valid for 5 minutes
+        version: 'v4',
+    });
 
-    return { success: true, url: publicUrl };
+    return { success: true, url: signedUrl };
   } catch (error: any) {
     console.error('Error uploading generated image to GCS:', error);
+    // The error object from GCS is complex, so returning a generic message is safer.
     return { success: false, error: 'Failed to upload image due to a server error.' };
   }
 }
