@@ -387,7 +387,7 @@ export async function uploadGeneratedImage(dataUrl: string, fileName: string): P
     const uniqueFileName = `${user.id}-${Date.now()}-${fileName}`;
     const file = storage.bucket(bucketName).file(uniqueFileName);
 
-    // Save the file without making it public.
+    // Save the file WITHOUT making it public.
     await file.save(buffer, {
       metadata: {
         contentType: mimeType,
@@ -1095,3 +1095,5 @@ export async function markConversationAsRead(conversationId: number): Promise<vo
         console.error(`Server action error marking conversation ${conversationId} as read:`, error);
     }
 }
+
+    
