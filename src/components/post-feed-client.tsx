@@ -174,7 +174,8 @@ const PostFeedClient: FC<{}> = () => {
   
   // Fetch data for the initial tab once location is known
   useEffect(() => {
-    if (location !== null) { // Check if location has been determined
+    // This condition ensures we only fetch once location data is available.
+    if (location !== null || !navigator.geolocation) {
         fetchPosts('nearby', 1);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -334,7 +335,7 @@ const PostFeedClient: FC<{}> = () => {
         </div>
 
         <TabsContent value="nearby">
-            {currentFeed.isLoading && currentFeed.posts.length === 0 ? <PostFeedSkeleton /> : (
+            {(currentFeed.isLoading && currentFeed.posts.length === 0) || isRefreshing ? <PostFeedSkeleton /> : (
                 <div className="space-y-6">
                     {currentFeed.posts.length > 0 ? (
                         currentFeed.posts.map((post, index) => <PostCard key={post.id} post={post} userLocation={location} sessionUser={sessionUser} isFirst={index === 0} />)
@@ -349,7 +350,7 @@ const PostFeedClient: FC<{}> = () => {
             )}
         </TabsContent>
         <TabsContent value="family">
-           {currentFeed.isLoading && currentFeed.posts.length === 0 ? <PostFeedSkeleton /> : (
+           {(currentFeed.isLoading && currentFeed.posts.length === 0)  || isRefreshing ? <PostFeedSkeleton /> : (
                 <div className="space-y-6">
                     {currentFeed.posts.length > 0 ? (
                         currentFeed.posts.map((post, index) => <PostCard key={post.id} post={post} userLocation={location} sessionUser={sessionUser} isFirst={index === 0} />)

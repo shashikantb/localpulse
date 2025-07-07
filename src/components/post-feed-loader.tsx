@@ -11,8 +11,6 @@ const PostFeedClient = dynamic(() => import('@/components/post-feed-client'), {
 
 // This loader component now correctly uses dynamic import with ssr:false in a client boundary.
 export default function PostFeedLoader() {
-  // initialPosts will now be fetched inside PostFeedClient itself.
-  return <PostFeedClient initialPosts={[]} />;
+  // PostFeedClient fetches its own data, so no props are needed.
+  return <PostFeedClient />;
 }
-
-    

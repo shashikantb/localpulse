@@ -268,10 +268,9 @@ export async function getFamilyPostsDb(
     const client = await dbPool.connect();
     try {
         const familyQuery = `
-            SELECT p.*,
-                   u.name as authorname, u.role as authorrole, u.profilepictureurl as authorprofilepictureurl
+            SELECT ${POST_COLUMNS_SANITIZED}
             FROM posts p
-            JOIN users u ON p.authorid = u.id
+            LEFT JOIN users u ON p.authorid = u.id
             WHERE p.is_family_post = TRUE
               AND (
                 p.authorid = $1 OR

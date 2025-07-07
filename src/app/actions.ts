@@ -410,7 +410,7 @@ export async function uploadGeneratedImage(dataUrl: string, fileName: string): P
     
     const [signedUrl] = await file.getSignedUrl({
         action: 'read',
-        expires: Date.now() + 5 * 60 * 1000, // URL is valid for 5 minutes
+        expires: Date.now() + 5 * 60 * 1000,
         version: 'v4',
     });
 
