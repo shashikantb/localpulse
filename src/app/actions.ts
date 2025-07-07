@@ -406,6 +406,7 @@ export async function uploadGeneratedImage(dataUrl: string, fileName: string): P
   }
 }
 
+
 export async function toggleLikePost(postId: number): Promise<{ post?: Post; error?: string }> {
   try {
     const { user } = await getSession();
@@ -1090,5 +1091,3 @@ export async function markConversationAsRead(conversationId: number): Promise<vo
         console.error(`Server action error marking conversation ${conversationId} as read:`, error);
     }
 }
-
-    
