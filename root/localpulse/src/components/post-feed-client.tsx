@@ -505,7 +505,6 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ initialPosts }) => {
   
   const handleRefresh = async () => {
     if (isLoading || isLoadingMore || isRefreshing) return;
-    toast({ title: "Refreshing Feed...", description: "Fetching the latest pulses for you." });
     await refreshPosts();
   };
 
