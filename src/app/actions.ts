@@ -392,8 +392,6 @@ export async function uploadGeneratedImage(dataUrl: string, fileName: string): P
       metadata: {
         contentType: mimeType,
       },
-      // This is removed because the bucket uses Uniform Bucket-Level Access
-      // public: true, 
     });
     
     // Generate a signed URL for temporary read access.
