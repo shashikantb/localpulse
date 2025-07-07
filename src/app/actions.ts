@@ -97,7 +97,7 @@ export async function getMediaPosts(options?: { page: number; limit: number }): 
         const [likedPostIds, mentionsMap, followedAuthorIds] = await Promise.all([
             user ? db.getLikedPostIdsForUserDb(user.id, postIds) : Promise.resolve(new Set<number>()),
             db.getMentionsForPostsDb(postIds),
-            (user && authorIds.length > 0) ? db.getFollowedUserIdsDb(user.id, authorIds) : Promise.resolve(new Set<number>())
+            (user && authorIds.length > 0) ? db.getFollowedUserIdsDb(sessionUser.id, authorIds) : Promise.resolve(new Set<number>())
         ]);
         
         posts.forEach((post: any) => {
@@ -392,7 +392,6 @@ export async function uploadGeneratedImage(dataUrl: string, fileName: string): P
       metadata: {
         contentType: mimeType,
       },
-      // REMOVED: public: true
     });
     
     // Generate a signed URL for temporary read access.
@@ -627,7 +626,7 @@ export async function getPostById(postId: number): Promise<Post | null> {
         const [likedPostIds, mentionsMap, followedAuthorIds] = await Promise.all([
             user ? db.getLikedPostIdsForUserDb(user.id, postIds) : Promise.resolve(new Set<number>()),
             db.getMentionsForPostsDb(postIds),
-            (user && authorIds.length > 0) ? db.getFollowedUserIdsDb(user.id, authorIds) : Promise.resolve(new Set<number>())
+            (user && authorIds.length > 0) ? db.getFollowedUserIdsDb(sessionUser.id, authorIds) : Promise.resolve(new Set<number>())
         ]);
         
         (post as any).isLikedByCurrentUser = likedPostIds.has(post.id);
