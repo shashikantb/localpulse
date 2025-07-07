@@ -400,12 +400,14 @@ export async function uploadGeneratedImage(dataUrl: string, fileName: string): P
     const uniqueFileName = `${user.id}-${Date.now()}-${fileName}`;
     const file = storage.bucket(bucketName).file(uniqueFileName);
 
+    // Save the file WITHOUT making it public.
     await file.save(buffer, {
       metadata: {
         contentType: mimeType,
       },
     });
     
+    // Generate a signed URL for temporary read access.
     const [signedUrl] = await file.getSignedUrl({
         action: 'read',
         expires: Date.now() + 5 * 60 * 1000, // URL is valid for 5 minutes
@@ -415,6 +417,7 @@ export async function uploadGeneratedImage(dataUrl: string, fileName: string): P
     return { success: true, url: signedUrl };
   } catch (error: any) {
     console.error('Error uploading generated image to GCS:', error);
+    // The error object from GCS is complex, so returning a generic message is safer.
     return { success: false, error: 'Failed to upload image due to a server error.' };
   }
 }
@@ -1035,7 +1038,7 @@ export async function sendSosMessage(latitude: number, longitude: number): Promi
     }
     
     revalidatePath('/chat', 'layout'); // Use layout revalidation to update sidebar and unread counts
-    return { success: true, message: `SOS alert to ${sentCount} family member(s).` };
+    return { success: true, message: `SOS alert sent to ${sentCount} family member(s).` };
 
   } catch (error: any) {
     console.error('Error sending SOS message:', error);

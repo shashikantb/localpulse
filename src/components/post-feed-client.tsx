@@ -285,7 +285,6 @@ const PostFeedClient: FC<{}> = () => {
     trackMouse: true,
   });
 
-  const currentFeed = feeds[activeTab];
   const renderFeedContent = (feed: FeedState, type: FeedType) => {
     if ((feed.isLoading && feed.posts.length === 0) || isRefreshing) {
       return <PostFeedSkeleton />;
