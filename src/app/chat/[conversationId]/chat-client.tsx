@@ -139,7 +139,7 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
   };
 
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div className="flex flex-1 flex-col bg-background">
       <header className="flex items-center p-3 border-b bg-card">
         <Link href={`/users/${partner.id}`} className="flex items-center gap-3 hover:bg-muted p-2 rounded-md">
             <Avatar>

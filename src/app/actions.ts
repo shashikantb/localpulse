@@ -2,7 +2,7 @@
 'use server';
 
 import * as db from '@/lib/db';
-import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus, FamilyMember, FamilyMemberLocation, PendingFamilyRequest, Conversation, Message, ConversationParticipant } from '@/lib/db-types';
+import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus, FamilyMember, FamilyMemberLocation, PendingFamilyRequest, Conversation, Message, ConversationParticipant, SortOption } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 import { admin as firebaseAdmin } from '@/lib/firebase-admin';
 import { getSession } from '@/app/auth/actions';
@@ -41,15 +41,16 @@ async function enrichPosts(posts: Post[], user: User | null): Promise<Post[]> {
     return posts;
 }
 
-export async function getPosts(options?: { page: number; limit: number; latitude?: number | null; longitude?: number | null; }): Promise<Post[]> {
+export async function getPosts(options?: { page: number; limit: number; latitude?: number | null; longitude?: number | null; sortBy?: SortOption; }): Promise<Post[]> {
   try {
     const { user } = await getSession();
     const dbOptions = options ? {
         limit: options.limit,
         offset: (options.page - 1) * options.limit,
         latitude: options.latitude,
-        longitude: options.longitude
-    } : { limit: 10, offset: 0 };
+        longitude: options.longitude,
+        sortBy: options.sortBy
+    } : { limit: 10, offset: 0, sortBy: 'newest' as SortOption };
 
     const posts = await db.getPostsDb(dbOptions, user?.role);
     return enrichPosts(posts, user);
@@ -60,14 +61,14 @@ export async function getPosts(options?: { page: number; limit: number; latitude
   }
 }
 
-export async function getFamilyPosts(options: { page: number, limit: number }): Promise<Post[]> {
+export async function getFamilyPosts(options: { page: number, limit: number, sortBy?: SortOption }): Promise<Post[]> {
     try {
         const { user } = await getSession();
         if (!user) {
             return [];
         }
 
-        const dbOptions = { limit: options.limit, offset: (options.page - 1) * options.limit };
+        const dbOptions = { limit: options.limit, offset: (options.page - 1) * options.limit, sortBy: options.sortBy || 'newest' };
         const posts = await db.getFamilyPostsDb(user.id, dbOptions);
         return enrichPosts(posts, user);
 

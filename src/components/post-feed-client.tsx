@@ -3,12 +3,12 @@
 
 import type { FC } from 'react';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { Post, User } from '@/lib/db-types';
+import type { Post, User, SortOption } from '@/lib/db-types';
 import { getPosts, getFamilyPosts, registerDeviceToken, updateUserLocation } from '@/app/actions';
 import { PostCard } from '@/components/post-card';
 import { PostFeedSkeleton } from '@/components/post-feed-skeleton';
 import { Card, CardContent } from '@/components/ui/card';
-import { Zap, Loader2, Bell, BellOff, BellRing, AlertTriangle, Users, Rss } from 'lucide-react';
+import { Zap, Loader2, Bell, BellOff, BellRing, AlertTriangle, Users, Rss, Filter } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { useSwipeable } from 'react-swipeable';
@@ -23,6 +23,15 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem
+} from '@/components/ui/dropdown-menu';
 
 
 interface AndroidInterface {
@@ -110,19 +119,20 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser }) => {
     family: { ...initialFeedState, isLoading: false }, // Family feed doesn't load initially
   });
   const [activeTab, setActiveTab] = useState<FeedType>('nearby');
+  const [sortBy, setSortBy] = useState<SortOption>('newest');
   
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [notificationPermissionStatus, setNotificationPermissionStatus] = useState<'default' | 'loading' | 'granted' | 'denied'>('default');
   const [showTroubleshootingDialog, setShowTroubleshootingDialog] = useState(false);
   
-  const fetchPosts = useCallback(async (feed: FeedType, page: number) => {
+  const fetchPosts = useCallback(async (feed: FeedType, page: number, sort: SortOption) => {
     setFeeds(prev => ({ ...prev, [feed]: { ...prev[feed], isLoading: true } }));
 
     try {
         const fetcher = feed === 'nearby'
-            ? getPosts({ page, limit: POSTS_PER_PAGE, latitude: location?.latitude, longitude: location?.longitude })
-            : getFamilyPosts({ page, limit: POSTS_PER_PAGE });
+            ? getPosts({ page, limit: POSTS_PER_PAGE, latitude: location?.latitude, longitude: location?.longitude, sortBy: sort })
+            : getFamilyPosts({ page, limit: POSTS_PER_PAGE, sortBy: sort });
 
         const newPosts = await fetcher;
       
@@ -172,7 +182,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser }) => {
   // Fetch data for the initial tab once location is known
   useEffect(() => {
     if (location !== null || !navigator.geolocation) {
-        fetchPosts('nearby', 1);
+        fetchPosts('nearby', 1, sortBy);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location]);
@@ -182,7 +192,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser }) => {
     setActiveTab(newTab);
     // Fetch data for the new tab only if it hasn't been loaded before
     if (feeds[newTab].posts.length === 0 && !feeds[newTab].isLoading) {
-        fetchPosts(newTab, 1);
+        fetchPosts(newTab, 1, sortBy);
     }
   };
 
@@ -250,16 +260,16 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser }) => {
 
   const refreshPosts = useCallback(async () => {
     setIsRefreshing(true);
-    await fetchPosts(activeTab, 1);
+    await fetchPosts(activeTab, 1, sortBy);
     setIsRefreshing(false);
     if (window) window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [activeTab, fetchPosts]);
+  }, [activeTab, fetchPosts, sortBy]);
   
   const handleLoadMore = useCallback(async () => {
     const currentFeed = feeds[activeTab];
     if (currentFeed.isLoading || !currentFeed.hasMore) return;
-    fetchPosts(activeTab, currentFeed.page + 1);
-  }, [feeds, activeTab, fetchPosts]);
+    fetchPosts(activeTab, currentFeed.page + 1, sortBy);
+  }, [feeds, activeTab, fetchPosts, sortBy]);
 
   const observer = useRef<IntersectionObserver>();
   const loaderRef = useCallback((node: HTMLDivElement | null) => {
@@ -281,6 +291,12 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser }) => {
     },
     trackMouse: true,
   });
+
+  const handleSortChange = (newSortBy: SortOption) => {
+    if (newSortBy === sortBy) return;
+    setSortBy(newSortBy);
+    fetchPosts(activeTab, 1, newSortBy);
+  };
 
   const renderFeedContent = (feed: FeedState, type: FeedType) => {
     if ((feed.isLoading && feed.posts.length === 0) || isRefreshing) {
@@ -337,21 +353,41 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser }) => {
       </AlertDialog>
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
             <TabsList>
                 <TabsTrigger value="nearby" className="flex items-center gap-2"><Rss className="w-4 h-4"/> Nearby</TabsTrigger>
                 {sessionUser && <TabsTrigger value="family" className="flex items-center gap-2"><Users className="w-4 h-4"/> Family</TabsTrigger>}
             </TabsList>
-            <Button
-                variant="outline"
-                size="icon"
-                className="h-9 w-9 shadow-md hover:shadow-lg transition-all duration-300 bg-card/80 backdrop-blur-sm border-border hover:border-primary/70 hover:text-primary"
-                onClick={handleNotificationRegistration}
-                disabled={notificationPermissionStatus === 'loading'}
-                aria-label="Toggle Notifications"
-            >
-                <NotificationButtonContent notificationPermissionStatus={notificationPermissionStatus} />
-            </Button>
+            <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-9 shadow-sm">
+                    <Filter className="w-4 h-4 mr-2" />
+                    <span>Filter</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>Sort By</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuRadioGroup value={sortBy} onValueChange={(v) => handleSortChange(v as SortOption)}>
+                    <DropdownMenuRadioItem value="newest">Newest</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="likes">Most Popular</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="comments">Most Discussed</DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shadow-sm"
+                  onClick={handleNotificationRegistration}
+                  disabled={notificationPermissionStatus === 'loading'}
+                  aria-label="Toggle Notifications"
+              >
+                  <NotificationButtonContent notificationPermissionStatus={notificationPermissionStatus} />
+              </Button>
+            </div>
         </div>
 
         <TabsContent value="nearby">

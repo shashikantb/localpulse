@@ -1,6 +1,6 @@
 
 import { Pool, Client, type QueryResult } from 'pg';
-import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Status, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest, FamilyMember, FamilyMemberLocation } from '@/lib/db-types';
+import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Status, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest, FamilyMember, FamilyMemberLocation, SortOption } from '@/lib/db-types';
 import bcrypt from 'bcryptjs';
 
 // Re-export db-types
@@ -218,7 +218,8 @@ export async function getPostsDb(
     offset: number;
     latitude?: number | null;
     longitude?: number | null;
-  } = { limit: 10, offset: 0 },
+    sortBy?: SortOption;
+  } = { limit: 10, offset: 0, sortBy: 'newest' },
   userRole?: UserRole
 ): Promise<Post[]> {
   await ensureDbInitialized();
@@ -229,8 +230,9 @@ export async function getPostsDb(
   try {
     let orderByClause: string;
     const queryParams: (string | number)[] = [options.limit, options.offset];
+    const sortBy = options.sortBy || 'newest';
 
-    if (options.latitude != null && options.longitude != null) {
+    if (sortBy === 'newest' && options.latitude != null && options.longitude != null) {
       const distanceCalc = `earth_distance(ll_to_earth(p.latitude, p.longitude), ll_to_earth($3, $4))`;
       queryParams.push(options.latitude, options.longitude);
       
@@ -246,8 +248,19 @@ export async function getPostsDb(
         p.createdat DESC
       `;
     } else {
-      // Fallback to sort by date if no location is available
-      orderByClause = 'p.createdat DESC';
+      // Handle other sorts or default to createdat
+      switch(sortBy) {
+        case 'likes':
+          orderByClause = 'p.likecount DESC, p.createdat DESC';
+          break;
+        case 'comments':
+          orderByClause = 'p.commentcount DESC, p.createdat DESC';
+          break;
+        case 'newest':
+        default:
+          orderByClause = 'p.createdat DESC';
+          break;
+      }
     }
 
     const postsQuery = `
@@ -268,7 +281,7 @@ export async function getPostsDb(
 
 export async function getFamilyPostsDb(
     userId: number,
-    options: { limit: number; offset: number } = { limit: 10, offset: 0 }
+    options: { limit: number; offset: number; sortBy?: SortOption } = { limit: 10, offset: 0, sortBy: 'newest' }
 ): Promise<Post[]> {
     await ensureDbInitialized();
     const dbPool = getDbPool();
@@ -276,6 +289,22 @@ export async function getFamilyPostsDb(
 
     const client = await dbPool.connect();
     try {
+        const sortBy = options.sortBy || 'newest';
+        let orderByClause: string;
+        
+        switch(sortBy) {
+          case 'likes':
+            orderByClause = 'p.likecount DESC, p.createdat DESC';
+            break;
+          case 'comments':
+            orderByClause = 'p.commentcount DESC, p.createdat DESC';
+            break;
+          case 'newest':
+          default:
+            orderByClause = 'p.createdat DESC';
+            break;
+        }
+
         const familyQuery = `
             SELECT ${POST_COLUMNS_SANITIZED}
             FROM posts p
@@ -289,7 +318,7 @@ export async function getFamilyPostsDb(
                     SELECT user_id_1 FROM family_relationships WHERE user_id_2 = $1 AND status = 'approved'
                 )
               )
-            ORDER BY p.createdat DESC
+            ORDER BY ${orderByClause}
             LIMIT $2 OFFSET $3;
         `;
         const postsResult = await client.query(familyQuery, [userId, options.limit, options.offset]);

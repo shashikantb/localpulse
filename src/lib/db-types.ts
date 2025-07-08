@@ -1,5 +1,8 @@
 
+
 export type UserRole = 'Business' | 'Gorakshak' | 'Admin' | 'Public(जनता)';
+
+export type SortOption = 'newest' | 'likes' | 'comments';
 
 // Define the structure of a User for client-side use (omitting password)
 export interface User {
