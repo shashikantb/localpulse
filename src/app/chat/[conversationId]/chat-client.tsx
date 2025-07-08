@@ -22,6 +22,35 @@ interface ChatClientProps {
 
 const POLLING_INTERVAL = 3000; // 3 seconds
 
+// Helper function to render message content with clickable links
+const renderChatMessageContent = (content: string) => {
+  if (!content) return content;
+
+  // Regex to find URLs
+  const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
+  const parts = content.split(urlRegex);
+
+  return parts.map((part, index) => {
+    if (part && part.match(urlRegex)) {
+      const href = part.startsWith('www.') ? `https://${part}` : part;
+      return (
+        <a
+          key={`link-${index}`}
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-400 hover:underline font-medium"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {part}
+        </a>
+      );
+    }
+    return part;
+  });
+};
+
+
 export default function ChatClient({ initialMessages, partner, sessionUser, conversationId }: ChatClientProps) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [newMessage, setNewMessage] = useState('');
@@ -143,7 +172,7 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
                     : 'bg-muted text-foreground rounded-bl-none'
                 )}
               >
-                <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
+                <p className="text-sm whitespace-pre-wrap break-words">{renderChatMessageContent(message.content)}</p>
                 <span className={cn('text-xs mt-1.5 opacity-70', isSender ? 'self-end' : 'self-start')}>
                   {format(new Date(message.created_at), 'p')}
                 </span>
