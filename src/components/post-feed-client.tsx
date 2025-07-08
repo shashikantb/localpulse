@@ -5,7 +5,6 @@ import type { FC } from 'react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Post, User } from '@/lib/db-types';
 import { getPosts, getFamilyPosts, registerDeviceToken, updateUserLocation } from '@/app/actions';
-import { getSession } from '@/app/auth/actions';
 import { PostCard } from '@/components/post-card';
 import { PostFeedSkeleton } from '@/components/post-feed-skeleton';
 import { Card, CardContent } from '@/components/ui/card';
@@ -99,7 +98,11 @@ function NoPostsContent({ feedType }: { feedType: FeedType }) {
 
 // --- Main Component ---
 
-const PostFeedClient: FC<{}> = () => {
+interface PostFeedClientProps {
+  sessionUser: User | null;
+}
+
+const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser }) => {
   const { toast } = useToast();
   
   const [feeds, setFeeds] = useState<{ [key in FeedType]: FeedState }>({
@@ -108,7 +111,6 @@ const PostFeedClient: FC<{}> = () => {
   });
   const [activeTab, setActiveTab] = useState<FeedType>('nearby');
   
-  const [sessionUser, setSessionUser] = useState<User | null>(null);
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [notificationPermissionStatus, setNotificationPermissionStatus] = useState<'default' | 'loading' | 'granted' | 'denied'>('default');
@@ -145,11 +147,9 @@ const PostFeedClient: FC<{}> = () => {
     }
   }, [location?.latitude, location?.longitude]);
 
-  // Initial session and location fetch
+  // Initial location fetch
   useEffect(() => {
-    const loadInitialData = async () => {
-      const sessionPromise = getSession();
-      const locationPromise = new Promise<{ latitude: number; longitude: number } | null>(resolve => {
+    const locationPromise = new Promise<{ latitude: number; longitude: number } | null>(resolve => {
         if (navigator.geolocation) {
           navigator.geolocation.getCurrentPosition(
             (position) => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
@@ -159,22 +159,18 @@ const PostFeedClient: FC<{}> = () => {
         } else {
           resolve(null);
         }
-      });
+    });
 
-      const [session, loc] = await Promise.all([sessionPromise, locationPromise]);
-      setSessionUser(session.user);
-      setLocation(loc);
-
-      if (session.user && loc) {
-        updateUserLocation(loc.latitude, loc.longitude).catch(err => console.warn("Silent location update failed:", err));
-      }
-    };
-    loadInitialData();
-  }, []);
+    locationPromise.then(loc => {
+        setLocation(loc);
+        if (sessionUser && loc) {
+            updateUserLocation(loc.latitude, loc.longitude).catch(err => console.warn("Silent location update failed:", err));
+        }
+    });
+  }, [sessionUser]);
   
   // Fetch data for the initial tab once location is known
   useEffect(() => {
-    // This condition ensures we only fetch once location data is available.
     if (location !== null || !navigator.geolocation) {
         fetchPosts('nearby', 1);
     }
@@ -184,6 +180,7 @@ const PostFeedClient: FC<{}> = () => {
   const handleTabChange = (value: string) => {
     const newTab = value as FeedType;
     setActiveTab(newTab);
+    // Fetch data for the new tab only if it hasn't been loaded before
     if (feeds[newTab].posts.length === 0 && !feeds[newTab].isLoading) {
         fetchPosts(newTab, 1);
     }

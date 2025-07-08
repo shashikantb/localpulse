@@ -2,6 +2,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import type { User } from '@/lib/db-types';
 import { PostFeedSkeleton } from './post-feed-skeleton';
 
 const PostFeedClient = dynamic(() => import('@/components/post-feed-client'), {
@@ -9,8 +10,10 @@ const PostFeedClient = dynamic(() => import('@/components/post-feed-client'), {
   loading: () => <PostFeedSkeleton />,
 });
 
-// This loader component now correctly uses dynamic import with ssr:false in a client boundary.
-export default function PostFeedLoader() {
-  // PostFeedClient fetches its own data, so no props are needed.
-  return <PostFeedClient />;
+interface PostFeedLoaderProps {
+  sessionUser: User | null;
+}
+
+export default function PostFeedLoader({ sessionUser }: PostFeedLoaderProps) {
+  return <PostFeedClient sessionUser={sessionUser} />;
 }
