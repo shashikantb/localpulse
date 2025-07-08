@@ -26,7 +26,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import FollowButton from './follow-button';
@@ -395,7 +394,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
             </CardDescription>
           </div>
 
-            {post.city && post.city !== "Unknown City" && (
+            {!post.hide_location && post.city && post.city !== "Unknown City" && (
                  <p className="text-sm text-muted-foreground flex items-center mt-0.5">
                     <MapPin className="w-4 h-4 mr-1.5 text-primary/70 flex-shrink-0" /> {post.city}
                 </p>
@@ -546,19 +545,21 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
         </div>
       )}
 
-      <CardFooter className="text-xs text-muted-foreground flex flex-wrap items-center justify-between pt-2 pb-3 px-5 border-t border-border/40 mt-1 gap-y-2 bg-card/50">
-        <a href={`https://www.google.com/maps/dir/?api=1&destination=${post.latitude},${post.longitude}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 flex-wrap cursor-pointer hover:text-primary transition-colors group" title="Click to get directions">
-          <Map className="w-4 h-4 text-primary/70 flex-shrink-0 transition-colors group-hover:text-primary" />
-           <span className="font-medium text-muted-foreground transition-colors group-hover:text-primary group-hover:underline">
-            Location: {post.latitude.toFixed(3)}, {post.longitude.toFixed(3)}
-          </span>
-          {distance !== null && (
-            <span className="ml-1 text-accent font-semibold transition-colors group-hover:underline">
-              (approx. {distance < 0.1 ? '<100m' : `${distance.toFixed(1)} km`} away)
+      {!post.hide_location && (
+        <CardFooter className="text-xs text-muted-foreground flex flex-wrap items-center justify-between pt-2 pb-3 px-5 border-t border-border/40 mt-1 gap-y-2 bg-card/50">
+            <a href={`https://www.google.com/maps/dir/?api=1&destination=${post.latitude},${post.longitude}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 flex-wrap cursor-pointer hover:text-primary transition-colors group" title="Click to get directions">
+            <Map className="w-4 h-4 text-primary/70 flex-shrink-0 transition-colors group-hover:text-primary" />
+            <span className="font-medium text-muted-foreground transition-colors group-hover:text-primary group-hover:underline">
+                Location: {post.latitude.toFixed(3)}, {post.longitude.toFixed(3)}
             </span>
-          )}
-        </a>
-      </CardFooter>
+            {distance !== null && (
+                <span className="ml-1 text-accent font-semibold transition-colors group-hover:underline">
+                (approx. {distance < 0.1 ? '<100m' : `${distance.toFixed(1)} km`} away)
+                </span>
+            )}
+            </a>
+        </CardFooter>
+      )}
 
       {sessionUser && sessionUser.id === post.authorid && (
         <div className="px-5 py-3 border-t border-border/30 bg-primary/5">

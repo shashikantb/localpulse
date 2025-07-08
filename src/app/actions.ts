@@ -290,6 +290,7 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
       hashtags: newPostData.hashtags || [], 
       city: cityName,
       is_family_post: newPostData.isFamilyPost || false,
+      hide_location: newPostData.hideLocation || false,
       authorid: user ? user.id : null,
       mentionedUserIds: newPostData.mentionedUserIds || [],
     };

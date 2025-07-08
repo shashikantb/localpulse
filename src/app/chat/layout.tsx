@@ -19,8 +19,8 @@ const ChatSidebarSkeleton = () => (
 
 const ChatLayout: FC<PropsWithChildren> = ({ children }) => {
   return (
-    <div className="flex h-[calc(100vh-7rem)] border-t">
-      <aside className="w-full md:w-80 lg:w-96 border-r flex-col hidden md:flex">
+    <div className="flex flex-1 border-t overflow-hidden">
+      <aside className="w-full md:w-80 lg:w-96 border-r flex-col hidden md:flex overflow-y-auto">
         <Suspense fallback={<ChatSidebarSkeleton />}>
            <ChatSidebar />
         </Suspense>

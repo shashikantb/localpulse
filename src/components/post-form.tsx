@@ -30,7 +30,7 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
-import { Loader2, X, UploadCloud, Film, Image as ImageIcon, Tag, ChevronDown, Camera, User, Search, UserPlus, Video, XCircle, Users } from 'lucide-react';
+import { Loader2, X, UploadCloud, Film, Image as ImageIcon, Tag, ChevronDown, Camera, User, Search, UserPlus, Video, XCircle, Users, MapPinOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
@@ -78,12 +78,13 @@ const formSchema = z.object({
   content: z.string().min(1, "Post cannot be empty").max(1000, "Post cannot exceed 1000 characters"),
   hashtags: z.array(z.string()),
   isFamilyPost: z.boolean().default(false),
+  hideLocation: z.boolean().default(false),
 });
 
 type FormData = z.infer<typeof formSchema>;
 
 interface PostFormProps {
-  onSubmit: (content: string, hashtags: string[], isFamilyPost: boolean, mediaUrls?: string[], mediaType?: 'image' | 'video' | 'gallery', mentionedUserIds?: number[]) => Promise<void>;
+  onSubmit: (content: string, hashtags: string[], isFamilyPost: boolean, hideLocation: boolean, mediaUrls?: string[], mediaType?: 'image' | 'video' | 'gallery', mentionedUserIds?: number[]) => Promise<void>;
   submitting: boolean;
   sessionUser: UserType | null;
 }
@@ -120,6 +121,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
       content: '',
       hashtags: [],
       isFamilyPost: false,
+      hideLocation: false,
     },
   });
 
@@ -278,7 +280,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
               else if (mediaType === 'image') finalMediaType = 'image';
           }
 
-          await onSubmit(data.content, hashtagsToSubmit, data.isFamilyPost, uploadedUrls, finalMediaType, mentionedUserIds);
+          await onSubmit(data.content, hashtagsToSubmit, data.isFamilyPost, data.hideLocation, uploadedUrls, finalMediaType, mentionedUserIds);
 
         } catch (error: any) {
           console.error("A critical error occurred during the upload process:", error);
@@ -288,7 +290,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
           setIsUploading(false);
         }
       } else {
-        await onSubmit(data.content, hashtagsToSubmit, data.isFamilyPost, undefined, undefined, mentionedUserIds);
+        await onSubmit(data.content, hashtagsToSubmit, data.isFamilyPost, data.hideLocation, undefined, undefined, mentionedUserIds);
       }
       
       form.reset();
@@ -541,32 +543,59 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
           )}
         </FormItem>
         
-        {sessionUser && (
-            <FormField
-              control={form.control}
-              name="isFamilyPost"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 shadow-sm bg-muted/50">
-                  <FormControl>
-                    <Checkbox
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                      disabled={isButtonDisabled}
-                    />
-                  </FormControl>
-                  <div className="space-y-1 leading-none">
-                    <FormLabel className="flex items-center">
-                        <Users className="mr-2 h-4 w-4 text-primary" />
-                        Family Post
-                    </FormLabel>
-                    <p className="text-xs text-muted-foreground">
-                      Only approved family members will see this post.
-                    </p>
-                  </div>
-                </FormItem>
-              )}
-            />
-        )}
+        <div className="space-y-4">
+          {sessionUser && (
+              <FormField
+                control={form.control}
+                name="isFamilyPost"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 shadow-sm bg-muted/50">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        disabled={isButtonDisabled}
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel className="flex items-center">
+                          <Users className="mr-2 h-4 w-4 text-primary" />
+                          Family Post
+                      </FormLabel>
+                      <p className="text-xs text-muted-foreground">
+                        Only approved family members will see this post.
+                      </p>
+                    </div>
+                  </FormItem>
+                )}
+              />
+          )}
+
+          <FormField
+            control={form.control}
+            name="hideLocation"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 shadow-sm bg-muted/50">
+                <FormControl>
+                  <Checkbox
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                    disabled={isButtonDisabled}
+                  />
+                </FormControl>
+                <div className="space-y-1 leading-none">
+                  <FormLabel className="flex items-center">
+                      <MapPinOff className="mr-2 h-4 w-4 text-primary" />
+                      Don't Display Location
+                  </FormLabel>
+                  <p className="text-xs text-muted-foreground">
+                    Your location will still be used for nearby sorting.
+                  </p>
+                </div>
+              </FormItem>
+            )}
+          />
+        </div>
 
         {isUploading && <Progress value={(uploadProgress / selectedFiles.length) * 100} className="w-full h-2" />}
 

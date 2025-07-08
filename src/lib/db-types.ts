@@ -59,6 +59,7 @@ export interface Post {
   city?: string | null;
   hashtags?: string[] | null;
   is_family_post: boolean;
+  hide_location: boolean;
   authorid: number | null; // This will come from the posts table
   authorname: string | null; // This will be joined from the users table
   authorrole: UserRole | null; // This will be joined from the users table
@@ -77,6 +78,7 @@ export type NewPost = {
   mediaType?: 'image' | 'video' | 'gallery' | null;
   hashtags: string[];
   isFamilyPost: boolean;
+  hideLocation: boolean;
   authorId?: number;
   mentionedUserIds?: number[];
 };
@@ -91,6 +93,7 @@ export type DbNewPost = {
   city?: string | null;
   hashtags: string[];
   is_family_post: boolean;
+  hide_location: boolean;
   authorid: number | null; 
   mentionedUserIds?: number[];
 };

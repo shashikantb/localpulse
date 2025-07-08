@@ -97,10 +97,12 @@ async function initializeDbSchema(): Promise<void> {
             city VARCHAR(255),
             hashtags TEXT[],
             authorid INTEGER REFERENCES users(id) ON DELETE SET NULL,
-            is_family_post BOOLEAN DEFAULT false NOT NULL
+            is_family_post BOOLEAN DEFAULT false NOT NULL,
+            hide_location BOOLEAN DEFAULT false NOT NULL
         );
         `);
          await initClient.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS is_family_post BOOLEAN DEFAULT false NOT NULL;`);
+         await initClient.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS hide_location BOOLEAN DEFAULT false NOT NULL;`);
         
         // Post Likes Table
         await initClient.query(`CREATE TABLE IF NOT EXISTS post_likes ( id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE, createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, post_id));`);
@@ -201,7 +203,7 @@ function ensureDbInitialized() {
 const POST_COLUMNS_SANITIZED = `
   p.id, p.content, p.latitude, p.longitude, p.createdat, p.likecount, 
   p.commentcount, p.viewcount, p.notifiedcount, p.city, p.hashtags, 
-  p.is_family_post, p.authorid, p.mediatype, p.mediaurls,
+  p.is_family_post, p.hide_location, p.authorid, p.mediatype, p.mediaurls,
   u.name as authorname, u.role as authorrole,
   u.profilepictureurl as authorprofilepictureurl
 `;
@@ -228,14 +230,23 @@ export async function getPostsDb(
     let orderByClause: string;
     const queryParams: (string | number)[] = [options.limit, options.offset];
 
-    if (userRole === 'Gorakshak') {
-      orderByClause = 'p.createdat DESC';
-    } else if (options.latitude != null && options.longitude != null) {
-      // Sort by distance if location is provided
-      orderByClause = `earth_distance(ll_to_earth(p.latitude, p.longitude), ll_to_earth($3, $4)) ASC`;
+    if (options.latitude != null && options.longitude != null) {
+      const distanceCalc = `earth_distance(ll_to_earth(p.latitude, p.longitude), ll_to_earth($3, $4))`;
       queryParams.push(options.latitude, options.longitude);
+      
+      orderByClause = `
+        CASE
+          WHEN ${distanceCalc} < 20000 THEN 1
+          WHEN ${distanceCalc} < 40000 THEN 2
+          WHEN ${distanceCalc} < 60000 THEN 3
+          WHEN ${distanceCalc} < 80000 THEN 4
+          WHEN ${distanceCalc} < 100000 THEN 5
+          ELSE 6
+        END,
+        p.createdat DESC
+      `;
     } else {
-      // Fallback to sort by date
+      // Fallback to sort by date if no location is available
       orderByClause = 'p.createdat DESC';
     }
 
@@ -325,11 +336,11 @@ export async function addPostDb(newPost: DbNewPost): Promise<Post> {
     await client.query('BEGIN');
 
     const postQuery = `
-      INSERT INTO posts(content, latitude, longitude, mediaurls, mediatype, hashtags, city, authorid, is_family_post)
-      VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      INSERT INTO posts(content, latitude, longitude, mediaurls, mediatype, hashtags, city, authorid, is_family_post, hide_location)
+      VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *;
     `;
-    const postValues = [newPost.content, newPost.latitude, newPost.longitude, newPost.mediaurls, newPost.mediatype, newPost.hashtags, newPost.city, newPost.authorid, newPost.is_family_post];
+    const postValues = [newPost.content, newPost.latitude, newPost.longitude, newPost.mediaurls, newPost.mediatype, newPost.hashtags, newPost.city, newPost.authorid, newPost.is_family_post, newPost.hide_location];
     const postResult: QueryResult<Post> = await client.query(postQuery, postValues);
     const addedPost = postResult.rows[0];
 
