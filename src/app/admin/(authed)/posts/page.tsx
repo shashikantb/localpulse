@@ -7,6 +7,8 @@ import { FileText, PlusCircle, Search } from 'lucide-react';
 import { getAdminPosts } from '@/app/actions';
 import PostActions from '@/components/admin/post-actions';
 
+export const dynamic = 'force-dynamic';
+
 const AdminManagePostsPage: FC = async () => {
   const posts = await getAdminPosts({ page: 1, limit: 100 }); // Fetch posts for admin view
 

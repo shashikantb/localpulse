@@ -7,6 +7,8 @@ import { UserCheck, UserX, Building, ShieldCheck, Mail, Calendar } from 'lucide-
 import { Badge } from '@/components/ui/badge';
 import { revalidatePath } from 'next/cache';
 
+export const dynamic = 'force-dynamic';
+
 const UserApprovalCard: FC<{ user: Awaited<ReturnType<typeof getPendingUsers>>[0] }> = ({ user }) => {
 
   const handleApprove = async () => {

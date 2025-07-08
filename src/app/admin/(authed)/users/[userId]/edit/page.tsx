@@ -8,6 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ArrowLeft, UserCog } from 'lucide-react';
 import UserEditForm from './edit-form-client';
 
+export const dynamic = 'force-dynamic';
+
 interface EditUserPageProps {
   params: { userId: string };
 }

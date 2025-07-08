@@ -8,6 +8,7 @@ import { getAllUsersDb } from '@/lib/db';
 import { Badge } from '@/components/ui/badge';
 import UserActions from '@/components/admin/user-actions';
 
+export const dynamic = 'force-dynamic';
 
 const AdminManageUsersPage: FC = async () => {
   const users = await getAllUsersDb();
