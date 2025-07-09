@@ -9,6 +9,7 @@ import Header from '@/components/layout/header';
 import StickyNav from '@/components/sticky-nav';
 import { Providers } from '@/app/providers';
 import { getSession } from '@/app/auth/actions';
+import FirebaseMessagingClient from '@/components/firebase-messaging-client';
 
 // The geist font package exports an object with the variable name pre-configured.
 // We just need to use it directly.
@@ -33,6 +34,7 @@ export default async function RootLayout({
       </head>
       <body className={`${GeistSans.variable} antialiased bg-background text-foreground flex flex-col min-h-svh`}>
         <Providers>
+          <FirebaseMessagingClient />
           <Header />
           <StickyNav user={user} />
           <main className="flex-grow">

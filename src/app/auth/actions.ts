@@ -36,7 +36,7 @@ async function encrypt(payload: any) {
   return await new jose.SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime('30d')
+    .setExpirationTime('10y') // Set session to expire in 10 years
     .sign(JWT_SECRET);
 }
 
@@ -98,7 +98,7 @@ export async function login(email: string, password: string): Promise<{ success:
 
     const sessionPayload = { userId: user.id };
     const sessionToken = await encrypt(sessionPayload);
-    const maxAgeInSeconds = 30 * 24 * 60 * 60; // 30 days
+    const maxAgeInSeconds = 10 * 365 * 24 * 60 * 60; // 10 years
     const expires = new Date(Date.now() + maxAgeInSeconds * 1000);
     
     const isProduction = process.env.NODE_ENV === 'production';

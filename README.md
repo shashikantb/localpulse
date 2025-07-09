@@ -38,6 +38,22 @@ GOOGLE_GENAI_API_KEY=your_google_genai_api_key
 # Admin Credentials (change these for production)
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=password123
+
+# --- Firebase Configuration (for Web Push Notifications) ---
+# This is required for handling notification clicks on the web.
+# To find these values:
+# 1. Go to your Firebase project: https://console.firebase.google.com/
+# 2. Go to Project Settings (click the gear icon).
+# 3. Under the "General" tab, scroll down to "Your apps".
+# 4. If you haven't already, add a "Web" app.
+# 5. In the app's configuration, you will find these values.
+NEXT_PUBLIC_FIREBASE_API_KEY="your-api-key"
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN="your-auth-domain"
+NEXT_PUBLIC_FIREBASE_PROJECT_ID="your-project-id"
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET="your-storage-bucket"
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID="your-messaging-sender-id"
+NEXT_PUBLIC_FIREBASE_APP_ID="your-app-id"
+
 ```
 
 **Important Notes:**
