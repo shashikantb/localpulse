@@ -9,8 +9,6 @@ import { Button } from './ui/button';
 import { Download, Phone, User as UserIcon, Shield, Loader2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { useToast } from '@/hooks/use-toast';
-import { uploadGeneratedImage } from '@/app/actions';
-import Image from 'next/image';
 
 interface BajrangDalIdCardProps {
   user: User;
@@ -27,23 +25,28 @@ const BajrangDalIdCard: FC<BajrangDalIdCardProps> = ({ user }) => {
     }
     setIsDownloading(true);
     try {
-      const dataUrl = await toPng(cardRef.current, { cacheBust: true, quality: 0.95 });
-      const result = await uploadGeneratedImage(dataUrl, `bajrang-dal-id-card-${user.id}.png`);
+      // Generate image data URL directly in the browser
+      const dataUrl = await toPng(cardRef.current, { 
+          cacheBust: true, 
+          quality: 0.98,
+          pixelRatio: 2 // Increase resolution for better quality
+      });
+      
+      // Create a temporary link element to trigger the download
+      const link = document.createElement('a');
+      link.href = dataUrl;
+      link.download = `BajrangDal-ID-Card-${user.name.replace(/\s/g, '_')}.png`;
+      
+      // Trigger the download
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
 
-      if (result.success && result.url) {
-        const link = document.createElement('a');
-        link.href = result.url;
-        link.download = `BajrangDal-ID-Card-${user.name}.png`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        toast({
-          title: 'Download Ready!',
-          description: 'Your ID card image has been downloaded.',
-        });
-      } else {
-        throw new Error(result.error || 'Failed to prepare image for download.');
-      }
+      toast({
+        title: 'Download Started!',
+        description: 'Your ID card is being downloaded.',
+      });
+
     } catch (err) {
       console.error('Failed to download ID card:', err);
       toast({
@@ -54,50 +57,53 @@ const BajrangDalIdCard: FC<BajrangDalIdCardProps> = ({ user }) => {
     } finally {
       setIsDownloading(false);
     }
-  }, [cardRef, user.id, user.name, toast]);
+  }, [cardRef, user.name, toast]);
 
   return (
     <div className="space-y-4">
       <div 
         ref={cardRef} 
-        className="relative p-4 border-2 border-orange-500 rounded-lg w-full max-w-sm mx-auto flex flex-col items-center space-y-3 text-black overflow-hidden"
+        className="relative p-4 border rounded-lg w-full max-w-sm mx-auto flex flex-col h-[550px] text-black overflow-hidden" // Fixed height for consistent layout
         style={{
           backgroundImage: `url('/images/bajrang-dal-id-card-bg.jpg')`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           color: '#5D4037', // Dark brown for better readability
-          textShadow: '0px 0px 5px rgba(255,255,255,0.7)', // Subtle white shadow
         }}
       >
-        <div className="text-center">
-          <h2 className="text-xl font-bold">बजरंग दल</h2>
-          <p className="text-xs font-semibold">सेवा, सुरक्षा, संस्कार</p>
+        {/* Header Section */}
+        <div className="text-center pt-8">
+            {/* The header is now part of the background image */}
         </div>
-        
-        <Avatar className="h-24 w-24 border-4 border-orange-400 shadow-md">
-          <AvatarImage src={user.profilepictureurl || undefined} alt={user.name} />
-          <AvatarFallback className="text-3xl bg-orange-100">
-            {user.name.charAt(0)}
-          </AvatarFallback>
-        </Avatar>
-        
-        <div className="text-center">
-          <p className="text-2xl font-bold">{user.name}</p>
-          <p className="text-lg font-semibold">{user.role}</p>
-        </div>
-        
-        <div className="w-full text-center space-y-1 pt-2">
-          <div className="flex items-center justify-center space-x-2">
-            <UserIcon className="w-5 h-5" />
-            <p className="font-semibold text-base">User ID: BD-{user.id}</p>
+
+        {/* Main Content Section - Using flex-grow to push footer down */}
+        <div className="flex flex-col items-center justify-center flex-grow space-y-3">
+          <Avatar className="h-32 w-32 border-4 border-orange-400 shadow-lg">
+            <AvatarImage src={user.profilepictureurl || undefined} alt={user.name} />
+            <AvatarFallback className="text-4xl bg-orange-100">
+              {user.name.charAt(0)}
+            </AvatarFallback>
+          </Avatar>
+          
+          <div className="text-center">
+            <p className="text-3xl font-bold" style={{textShadow: '0px 1px 2px rgba(255,255,255,0.7)'}}>{user.name}</p>
+            <p className="text-xl font-semibold opacity-90">{user.role}</p>
           </div>
-          <div className="flex items-center justify-center space-x-2">
-            <Phone className="w-5 h-5" />
-            <p className="font-semibold text-base">{user.mobilenumber}</p>
+          
+          <div className="w-full text-center space-y-2 pt-4">
+            <div className="flex items-center justify-center space-x-2">
+              <UserIcon className="w-5 h-5" />
+              <p className="font-semibold text-lg">User ID: BD-{user.id}</p>
+            </div>
+            <div className="flex items-center justify-center space-x-2">
+              <Phone className="w-5 h-5" />
+              <p className="font-semibold text-lg">{user.mobilenumber}</p>
+            </div>
           </div>
         </div>
 
-        <div className="absolute bottom-2 right-2 flex items-center space-x-1 opacity-80">
+        {/* Footer Section */}
+        <div className="flex items-center justify-end space-x-1 opacity-90 pb-2">
           <Shield className="w-5 h-5 text-orange-600"/>
           <p className="text-xs font-bold">Gorakshak</p>
         </div>
