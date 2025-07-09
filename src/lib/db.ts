@@ -176,7 +176,7 @@ async function initializeDbSchema(): Promise<void> {
         await initClient.query('CREATE INDEX IF NOT EXISTS idx_device_tokens_location ON device_tokens (user_id, last_updated DESC) WHERE latitude IS NOT NULL AND longitude IS NOT NULL');
         await initClient.query('CREATE INDEX IF NOT EXISTS idx_posts_is_family_post ON posts (is_family_post)');
         await initClient.query('CREATE INDEX IF NOT EXISTS users_geo_idx ON users USING gist (ll_to_earth(latitude, longitude)) WHERE role = \'Business\'');
-        await initClient.query('CREATE INDEX IF NOT EXISTS users_gorakshak_geo_idx ON users USING gist (ll_to_earth(latitude, longitude)) WHERE role = \'Gorakshak\'');
+        await initClient.query('CREATE INDEX IF NOT EXISTS users_gorakshak_geo_idx ON users USING gist (ll_to_earth(latitude, longitude)) WHERE role = \'Gorakshak\' OR role = \'Gorakshak Admin\'');
 
 
         await initClient.query('COMMIT');
@@ -1755,17 +1755,24 @@ export async function getGorakshaksSortedByDistanceDb(adminLat: number, adminLon
 
   const client = await dbPool.connect();
   try {
-    const distanceCalc = `earth_distance(ll_to_earth(latitude, longitude), ll_to_earth($1, $2))`;
     const query = `
       SELECT
         id, name, mobilenumber, latitude, longitude,
-        ${distanceCalc} as distance
+        CASE
+            WHEN latitude IS NOT NULL AND longitude IS NOT NULL
+            THEN earth_distance(ll_to_earth(latitude, longitude), ll_to_earth($1, $2))
+            ELSE NULL
+        END as distance
       FROM users
-      WHERE role = 'Gorakshak'
+      WHERE (role = 'Gorakshak' OR role = 'Gorakshak Admin')
         AND status = 'approved'
-        AND latitude IS NOT NULL
-        AND longitude IS NOT NULL
-      ORDER BY distance ASC;
+      ORDER BY
+        CASE
+            WHEN latitude IS NOT NULL AND longitude IS NOT NULL THEN 1
+            ELSE 2
+        END,
+        distance ASC,
+        name ASC;
     `;
     const result = await client.query(query, [adminLat, adminLon]);
     return result.rows;

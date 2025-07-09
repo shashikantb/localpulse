@@ -31,7 +31,7 @@ const GorakshakReportPage: FC = async () => {
                             <Info className="h-4 w-4" />
                             <AlertTitle>Location Services Needed</AlertTitle>
                             <AlertDescription>
-                                To view this report, please enable location services in your browser and for this site, then return to your <Link href={`/users/${user.id}`} className="underline">profile page</Link> and try again.
+                                To view this report, please enable location services in your browser and for this site, then return to your <Link href={`/users/${user.id}`} className="underline">profile page</Link> and try again. The report is sorted by your location.
                             </AlertDescription>
                         </Alert>
                     </CardContent>
@@ -57,7 +57,7 @@ const GorakshakReportPage: FC = async () => {
                     <CardHeader>
                         <CardTitle>Gorakshak Users</CardTitle>
                         <CardDescription>
-                            Found {gorakshaks.length} Gorakshak(s) with available location data.
+                            Found {gorakshaks.length} Gorakshak(s). Users with location data are listed first.
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -84,20 +84,24 @@ const GorakshakReportPage: FC = async () => {
                                                     <a href={`tel:${g.mobilenumber}`} className="flex items-center gap-2 hover:underline">
                                                         <Phone className="w-4 h-4 text-primary"/> {g.mobilenumber}
                                                     </a>
-                                                ) : 'N/A'}
+                                                ) : <span className="text-muted-foreground">N/A</span>}
                                             </TableCell>
-                                            <TableCell>{(g.distance / 1000).toFixed(2)} km</TableCell>
+                                            <TableCell>{g.distance != null ? `${(g.distance / 1000).toFixed(2)} km` : <span className="text-muted-foreground">N/A</span>}</TableCell>
                                             <TableCell>
-                                                 <a href={`https://www.google.com/maps?q=${g.latitude},${g.longitude}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 hover:underline text-blue-500">
-                                                    <MapPin className="w-4 h-4"/> View on Map
-                                                </a>
+                                                 {g.latitude != null && g.longitude != null ? (
+                                                    <a href={`https://www.google.com/maps?q=${g.latitude},${g.longitude}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 hover:underline text-blue-500">
+                                                        <MapPin className="w-4 h-4"/> View on Map
+                                                    </a>
+                                                 ) : (
+                                                    <span className="text-muted-foreground">Location not available</span>
+                                                 )}
                                             </TableCell>
                                         </TableRow>
                                     ))}
                                     {gorakshaks.length === 0 && (
                                         <TableRow>
                                             <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                                                No Gorakshaks with location data found.
+                                                No Gorakshaks found.
                                             </TableCell>
                                         </TableRow>
                                     )}
