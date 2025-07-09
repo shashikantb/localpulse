@@ -313,7 +313,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmitForm)} className="space-y-6">
-        <ScrollArea className="max-h-[60vh] pr-4">
+        <ScrollArea className="max-h-[60vh] -mr-4 pr-4">
           <div className="space-y-6">
             <FormField
               control={form.control}
@@ -598,16 +598,20 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
                 )}
               />
             </div>
+            
+            <div className="space-y-4 pt-2">
+              {isUploading && <Progress value={(uploadProgress / selectedFiles.length) * 100} className="w-full h-2" />}
+
+              <Button type="submit" disabled={isButtonDisabled || !form.formState.isValid} className="w-full text-base py-3 shadow-md hover:shadow-lg transition-shadow bg-accent hover:bg-accent/90 text-accent-foreground rounded-lg">
+                {(isUploading || submitting) && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
+                {buttonText}
+              </Button>
+            </div>
           </div>
         </ScrollArea>
-
-        {isUploading && <Progress value={(uploadProgress / selectedFiles.length) * 100} className="w-full h-2" />}
-
-        <Button type="submit" disabled={isButtonDisabled || !form.formState.isValid} className="w-full text-base py-3 shadow-md hover:shadow-lg transition-shadow bg-accent hover:bg-accent/90 text-accent-foreground rounded-lg">
-          {(isUploading || submitting) && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
-          {buttonText}
-        </Button>
       </form>
     </Form>
   );
 };
+
+    
