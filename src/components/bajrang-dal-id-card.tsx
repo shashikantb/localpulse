@@ -25,19 +25,16 @@ const BajrangDalIdCard: FC<BajrangDalIdCardProps> = ({ user }) => {
     }
     setIsDownloading(true);
     try {
-      // Generate image data URL directly in the browser
-      const dataUrl = await toPng(cardRef.current, { 
-          cacheBust: true, 
-          quality: 0.98,
-          pixelRatio: 2 // Increase resolution for better quality
+      const dataUrl = await toPng(cardRef.current, {
+        cacheBust: true,
+        quality: 0.98,
+        pixelRatio: 2,
       });
       
-      // Create a temporary link element to trigger the download
       const link = document.createElement('a');
       link.href = dataUrl;
       link.download = `BajrangDal-ID-Card-${user.name.replace(/\s/g, '_')}.png`;
       
-      // Trigger the download
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -63,22 +60,22 @@ const BajrangDalIdCard: FC<BajrangDalIdCardProps> = ({ user }) => {
     <div className="space-y-4">
       <div 
         ref={cardRef} 
-        className="relative p-4 border rounded-lg w-full max-w-sm mx-auto flex flex-col h-[550px] text-black overflow-hidden" // Fixed height for consistent layout
+        className="relative p-4 border rounded-lg w-full max-w-sm mx-auto flex flex-col h-[550px] text-black overflow-hidden"
         style={{
           backgroundImage: `url('/images/bajrang-dal-id-card-bg.jpg')`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
-          color: '#5D4037', // Dark brown for better readability
+          color: '#5D4037',
         }}
       >
         {/* Header Section */}
-        <div className="text-center pt-8">
+        <div className="text-center pt-8 h-[140px] flex-shrink-0">
             {/* The header is now part of the background image */}
         </div>
 
-        {/* Main Content Section - Using flex-grow to push footer down */}
-        <div className="flex flex-col items-center justify-center flex-grow space-y-3">
-          <Avatar className="h-32 w-32 border-4 border-orange-400 shadow-lg">
+        {/* Main Content Section */}
+        <div className="flex flex-col items-center justify-start flex-grow space-y-3 pt-4">
+          <Avatar className="h-32 w-32 border-4 border-orange-400 shadow-lg -mt-8">
             <AvatarImage src={user.profilepictureurl || undefined} alt={user.name} />
             <AvatarFallback className="text-4xl bg-orange-100">
               {user.name.charAt(0)}
@@ -103,7 +100,7 @@ const BajrangDalIdCard: FC<BajrangDalIdCardProps> = ({ user }) => {
         </div>
 
         {/* Footer Section */}
-        <div className="flex items-center justify-end space-x-1 opacity-90 pb-2">
+        <div className="flex items-center justify-end space-x-1 opacity-90 pb-2 flex-shrink-0">
           <Shield className="w-5 h-5 text-orange-600"/>
           <p className="text-xs font-bold">Gorakshak</p>
         </div>
