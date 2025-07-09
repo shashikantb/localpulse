@@ -26,7 +26,7 @@ const UpdateUserDetailsModal: React.FC<UpdateUserDetailsModalProps> = ({ user })
   const needsCategory = user.role === 'Business' && !user.business_category;
 
   useEffect(() => {
-    // This effect now correctly sets the dialog to open or closed
+    // This effect correctly sets the dialog to open or closed
     // based on the user prop it receives from the server.
     setIsOpen(needsMobile || needsCategory);
   }, [user, needsMobile, needsCategory]);
@@ -37,10 +37,6 @@ const UpdateUserDetailsModal: React.FC<UpdateUserDetailsModalProps> = ({ user })
     // The useEffect above will then run again with the new props and close the dialog
     // automatically if the update conditions (needsMobile, needsCategory) are now false.
   };
-
-  if (!isOpen) {
-    return null;
-  }
 
   return (
     <Dialog open={isOpen}>
