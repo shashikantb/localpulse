@@ -1,11 +1,12 @@
 
+
 import type { FC } from 'react';
 import { notFound } from 'next/navigation';
 import { getPostsByUserId, getFamilyMembers, getPendingFamilyRequests, getFamilyRelationshipStatus, getUserWithFollowInfo, startChatAndRedirect } from '@/app/actions';
 import { getSession } from '@/app/auth/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardHeader, CardContent, CardTitle, CardDescription } from '@/components/ui/card';
-import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, MessageSquare, Settings, Users, Briefcase, Phone } from 'lucide-react';
+import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, MessageSquare, Settings, Users, Briefcase, Phone, FileBarChart } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { PostCard } from '@/components/post-card';
@@ -27,6 +28,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import DeleteAccountButton from '@/components/delete-account-button';
 import { Separator } from '@/components/ui/separator';
 import UpdateUserDetailsModal from '@/components/update-user-details-modal';
+import Link from 'next/link';
 
 interface UserProfilePageProps {
   params: {
@@ -69,11 +71,12 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
     switch (role) {
       case 'Business': return <Building className="h-8 w-8 text-primary" />;
       case 'Gorakshak': return <ShieldCheck className="h-8 w-8 text-primary" />;
+      case 'Gorakshak Admin': return <ShieldCheck className="h-8 w-8 text-primary" />;
       default: return <UserIcon className="h-8 w-8 text-primary" />;
     }
   };
 
-  const isGorakshak = profileUser.role === 'Gorakshak';
+  const isGorakshak = profileUser.role === 'Gorakshak' || profileUser.role === 'Gorakshak Admin';
   const isBusiness = profileUser.role === 'Business';
 
   const needsProfileUpdate = isOwnProfile && (!sessionUser?.mobilenumber || (sessionUser?.role === 'Business' && !sessionUser?.business_category));
@@ -231,6 +234,25 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
               )}
             </CardContent>
           </Card>
+        )}
+
+        {isOwnProfile && profileUser.role === 'Gorakshak Admin' && (
+            <Card className="shadow-xl border border-border/60 rounded-xl bg-card/80 backdrop-blur-sm">
+                <CardHeader>
+                    <CardTitle className="flex items-center">
+                        <FileBarChart className="mr-3 h-6 w-6 text-primary" />
+                        Admin Reports
+                    </CardTitle>
+                    <CardDescription>
+                        Access special reports available for your role.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Button asChild>
+                        <Link href="/reports/gorakshaks">View Gorakshak Report</Link>
+                    </Button>
+                </CardContent>
+            </Card>
         )}
 
         {isOwnProfile && (

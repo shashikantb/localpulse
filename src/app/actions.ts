@@ -1,8 +1,9 @@
 
+
 'use server';
 
 import * as db from '@/lib/db';
-import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus, FamilyMember, FamilyMemberLocation, PendingFamilyRequest, Conversation, Message, ConversationParticipant, SortOption, BusinessUser } from '@/lib/db-types';
+import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus, FamilyMember, FamilyMemberLocation, PendingFamilyRequest, Conversation, Message, ConversationParticipant, SortOption, BusinessUser, GorakshakReportUser } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 import { admin as firebaseAdmin } from '@/lib/firebase-admin';
 import { getSession } from '@/app/auth/actions';
@@ -713,7 +714,7 @@ export async function toggleFollow(targetUserId: number): Promise<{ success: boo
     }
     
     revalidatePath(`/users/${targetUserId}`);
-    revalidatePath('/'); // Revalidate home page feed as well
+    revalidatePath('/', 'layout'); // Revalidate home page feed as well
     return { success: true, isFollowing: !isCurrentlyFollowing };
 
   } catch (error: any) {
@@ -1096,6 +1097,17 @@ export async function getNearbyBusinesses(options: { page: number; limit: number
     return businesses;
   } catch (error) {
     console.error("Server action error fetching nearby businesses:", error);
+    return [];
+  }
+}
+
+// --- Gorakshak Admin Actions ---
+export async function getGorakshakReport(adminLat: number, adminLon: number): Promise<GorakshakReportUser[]> {
+  try {
+    const gorakshaks = await db.getGorakshaksSortedByDistanceDb(adminLat, adminLon);
+    return gorakshaks;
+  } catch (error) {
+    console.error("Server action error fetching Gorakshak report:", error);
     return [];
   }
 }

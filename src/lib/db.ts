@@ -1,6 +1,7 @@
 
+
 import { Pool, Client, type QueryResult } from 'pg';
-import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Status, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest, FamilyMember, FamilyMemberLocation, SortOption, UpdateBusinessCategory, BusinessUser } from '@/lib/db-types';
+import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest, FamilyMember, FamilyMemberLocation, SortOption, UpdateBusinessCategory, BusinessUser, GorakshakReportUser } from '@/lib/db-types';
 import bcrypt from 'bcryptjs';
 
 // Re-export db-types
@@ -70,7 +71,7 @@ async function initializeDbSchema(): Promise<void> {
             name VARCHAR(255) NOT NULL,
             email VARCHAR(255) UNIQUE NOT NULL,
             passwordhash VARCHAR(255) NOT NULL,
-            role VARCHAR(50) NOT NULL CHECK (role IN ('Business', 'Gorakshak', 'Admin', 'Public(जनता)')),
+            role VARCHAR(50) NOT NULL CHECK (role IN ('Business', 'Gorakshak', 'Gorakshak Admin', 'Admin', 'Public(जनता)')),
             status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
             createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
             profilepictureurl TEXT,
@@ -175,6 +176,8 @@ async function initializeDbSchema(): Promise<void> {
         await initClient.query('CREATE INDEX IF NOT EXISTS idx_device_tokens_location ON device_tokens (user_id, last_updated DESC) WHERE latitude IS NOT NULL AND longitude IS NOT NULL');
         await initClient.query('CREATE INDEX IF NOT EXISTS idx_posts_is_family_post ON posts (is_family_post)');
         await initClient.query('CREATE INDEX IF NOT EXISTS users_geo_idx ON users USING gist (ll_to_earth(latitude, longitude)) WHERE role = \'Business\'');
+        await initClient.query('CREATE INDEX IF NOT EXISTS users_gorakshak_geo_idx ON users USING gist (ll_to_earth(latitude, longitude)) WHERE role = \'Gorakshak\'');
+
 
         await initClient.query('COMMIT');
         console.log('Database schema initialized successfully via dedicated client.');
@@ -1738,6 +1741,33 @@ export async function getNearbyBusinessesDb(options: {
     `;
 
     const result = await client.query(query, queryParams);
+    return result.rows;
+  } finally {
+    client.release();
+  }
+}
+
+// --- Gorakshak Admin Functions ---
+export async function getGorakshaksSortedByDistanceDb(adminLat: number, adminLon: number): Promise<GorakshakReportUser[]> {
+  await ensureDbInitialized();
+  const dbPool = getDbPool();
+  if (!dbPool) return [];
+
+  const client = await dbPool.connect();
+  try {
+    const distanceCalc = `earth_distance(ll_to_earth(latitude, longitude), ll_to_earth($1, $2))`;
+    const query = `
+      SELECT
+        id, name, mobilenumber, latitude, longitude,
+        ${distanceCalc} as distance
+      FROM users
+      WHERE role = 'Gorakshak'
+        AND status = 'approved'
+        AND latitude IS NOT NULL
+        AND longitude IS NOT NULL
+      ORDER BY distance ASC;
+    `;
+    const result = await client.query(query, [adminLat, adminLon]);
     return result.rows;
   } finally {
     client.release();

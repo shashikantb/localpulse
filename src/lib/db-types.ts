@@ -1,5 +1,6 @@
 
-export type UserRole = 'Business' | 'Gorakshak' | 'Admin' | 'Public(जनता)';
+
+export type UserRole = 'Business' | 'Gorakshak' | 'Gorakshak Admin' | 'Admin' | 'Public(जनता)';
 
 export type SortOption = 'newest' | 'likes' | 'comments';
 
@@ -60,6 +61,16 @@ export interface User {
 export interface BusinessUser extends User {
     distance?: number | null;
 }
+
+export interface GorakshakReportUser {
+    id: number;
+    name: string;
+    mobilenumber?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
+    distance: number;
+}
+
 
 // For displaying in the following list
 export interface FollowUser {

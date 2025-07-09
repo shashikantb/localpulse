@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import type { FC } from 'react';
@@ -21,7 +22,7 @@ import { Loader2, Save } from 'lucide-react';
 const userUpdateSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters.'),
   email: z.string().email('Please enter a valid email address.'),
-  role: z.enum(['Business', 'Gorakshak', 'Public(जनता)', 'Admin']),
+  role: z.enum(['Business', 'Gorakshak', 'Public(जनता)', 'Admin', 'Gorakshak Admin']),
   status: z.enum(['pending', 'approved', 'rejected']),
 });
 
@@ -109,6 +110,7 @@ const UserEditForm: FC<UserEditFormProps> = ({ user }) => {
                 <SelectContent>
                   <SelectItem value="Public(जनता)">Public(जनता)</SelectItem>
                   <SelectItem value="Gorakshak">Gorakshak</SelectItem>
+                  <SelectItem value="Gorakshak Admin">Gorakshak Admin</SelectItem>
                   <SelectItem value="Business">Business</SelectItem>
                   <SelectItem value="Admin">Admin</SelectItem>
                 </SelectContent>
