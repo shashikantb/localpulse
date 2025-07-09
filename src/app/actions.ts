@@ -198,6 +198,49 @@ async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[
   }
 }
 
+async function sendChatNotification(conversationId: number, sender: User, content: string, title?: string) {
+  try {
+    const partner = await db.getConversationPartnerDb(conversationId, sender.id);
+    if (!partner) return;
+
+    const deviceTokens = await db.getDeviceTokensForUsersDb([partner.id]);
+    if (deviceTokens.length === 0) return;
+
+    const notificationPayload = {
+      notification: {
+        title: title || `New message from ${sender.name}`,
+        body: content.length > 100 ? `${content.substring(0, 97)}...` : content,
+      },
+      data: {
+        conversationId: String(conversationId),
+        type: 'chat_message',
+      },
+      tokens: deviceTokens,
+      android: {
+        priority: 'high' as const,
+      },
+    };
+
+    const response = await firebaseAdmin.messaging().sendEachForMulticast(notificationPayload);
+
+    if (response.failureCount > 0) {
+      const failedTokens: string[] = [];
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success) {
+          failedTokens.push(deviceTokens[idx]);
+        }
+      });
+      console.error('List of tokens that failed for chat notification:', failedTokens);
+      for (const token of failedTokens) {
+        await db.deleteDeviceTokenDb(token);
+      }
+    }
+  } catch (error) {
+    console.error('Error sending chat notification:', error);
+  }
+}
+
+
 async function sendNotificationForNewComment(comment: Comment, post: Post) {
   try {
     // Basic checks: ensure there is a post author and the commenter is not the author
@@ -670,6 +713,7 @@ export async function toggleFollow(targetUserId: number): Promise<{ success: boo
     }
     
     revalidatePath(`/users/${targetUserId}`);
+    revalidatePath('/'); // Revalidate home page feed as well
     return { success: true, isFollowing: !isCurrentlyFollowing };
 
   } catch (error: any) {
@@ -937,47 +981,6 @@ export async function getMessages(conversationId: number): Promise<Message[]> {
   }
 }
 
-async function sendChatNotification(conversationId: number, sender: User, content: string, title?: string) {
-  try {
-    const partner = await db.getConversationPartnerDb(conversationId, sender.id);
-    if (!partner) return;
-
-    const deviceTokens = await db.getDeviceTokensForUsersDb([partner.id]);
-    if (deviceTokens.length === 0) return;
-
-    const notificationPayload = {
-      notification: {
-        title: title || `New message from ${sender.name}`,
-        body: content.length > 100 ? `${content.substring(0, 97)}...` : content,
-      },
-      data: {
-        conversationId: String(conversationId),
-        type: 'chat_message',
-      },
-      tokens: deviceTokens,
-      android: {
-        priority: 'high' as const,
-      },
-    };
-
-    const response = await firebaseAdmin.messaging().sendEachForMulticast(notificationPayload);
-
-    if (response.failureCount > 0) {
-      const failedTokens: string[] = [];
-      response.responses.forEach((resp, idx) => {
-        if (!resp.success) {
-          failedTokens.push(deviceTokens[idx]);
-        }
-      });
-      console.error('List of tokens that failed for chat notification:', failedTokens);
-      for (const token of failedTokens) {
-        await db.deleteDeviceTokenDb(token);
-      }
-    }
-  } catch (error) {
-    console.error('Error sending chat notification:', error);
-  }
-}
 
 export async function sendMessage(conversationId: number, content: string): Promise<{ message?: Message; error?: string }> {
   const { user } = await getSession();
