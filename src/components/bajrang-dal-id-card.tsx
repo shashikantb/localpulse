@@ -10,6 +10,7 @@ import { Download, Phone, User as UserIcon, Shield, Loader2 } from 'lucide-react
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 import { uploadGeneratedImage } from '@/app/actions';
+import UpdateMobileForm from './update-mobile-form';
 
 interface BajrangDalIdCardProps {
   user: User;

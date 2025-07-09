@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Loader2, Phone, Save } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
+import type { UserRole } from '@/lib/db-types';
 
 const formSchema = z.object({
   mobilenumber: z.string().regex(/^\d{10}$/, {
@@ -23,9 +24,10 @@ type FormData = z.infer<typeof formSchema>;
 
 interface UpdateMobileFormProps {
     onUpdate?: () => void;
+    userRole: UserRole;
 }
 
-export default function UpdateMobileForm({ onUpdate }: UpdateMobileFormProps) {
+export default function UpdateMobileForm({ onUpdate, userRole }: UpdateMobileFormProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -49,7 +51,7 @@ export default function UpdateMobileForm({ onUpdate }: UpdateMobileFormProps) {
     if (result.success) {
       toast({
         title: 'Mobile Number Updated!',
-        description: 'Your ID card is now available.',
+        description: userRole === 'Gorakshak' ? 'Your ID card is now available.' : 'Your profile has been updated.',
       });
       if (onUpdate) onUpdate();
     } else {
@@ -57,6 +59,8 @@ export default function UpdateMobileForm({ onUpdate }: UpdateMobileFormProps) {
     }
     setIsSubmitting(false);
   };
+
+  const buttonText = userRole === 'Gorakshak' ? 'Save & Generate ID Card' : 'Save Number';
 
   return (
     <Form {...form}>
@@ -87,7 +91,7 @@ export default function UpdateMobileForm({ onUpdate }: UpdateMobileFormProps) {
           {isSubmitting ? (
             <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</>
           ) : (
-            <><Save className="mr-2 h-4 w-4" /> Save & Generate ID Card</>
+            <><Save className="mr-2 h-4 w-4" /> {buttonText}</>
           )}
         </Button>
       </form>

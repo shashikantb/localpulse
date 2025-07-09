@@ -57,7 +57,7 @@ const UpdateUserDetailsModal: React.FC<UpdateUserDetailsModalProps> = ({ user })
                         Please enter your 10-digit mobile number.
                     </AlertDescription>
                 </Alert>
-                <UpdateMobileForm onUpdate={handleUpdate} />
+                <UpdateMobileForm onUpdate={handleUpdate} userRole={user.role} />
             </div>
           )}
           {needsCategory && !needsMobile && ( // Show category form only if mobile is already filled

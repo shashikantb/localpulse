@@ -9,7 +9,7 @@ import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, MessageS
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { PostCard } from '@/components/post-card';
-import type { User, FamilyMember } from '@/lib/db-types';
+import type { User, FamilyMember, UserRole } from '@/lib/db-types';
 import ProfilePictureUpdater from '@/components/profile-picture-updater';
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -83,7 +83,7 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
     <div className="flex flex-col items-center p-4 sm:p-6 md:p-8 lg:p-16 bg-gradient-to-br from-background to-muted/30">
       <div className="container mx-auto max-w-2xl space-y-8 py-8 mb-20">
 
-        {needsProfileUpdate && <UpdateUserDetailsModal user={sessionUser!} />}
+        {isOwnProfile && <UpdateUserDetailsModal user={sessionUser!} />}
 
         <Card className="shadow-xl border border-border/60 rounded-xl bg-card/80 backdrop-blur-sm">
           <CardHeader className="flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-6 p-6">
@@ -227,7 +227,7 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
               {profileUser.mobilenumber ? (
                 <BajrangDalIdCard user={profileUser} />
               ) : (
-                <UpdateMobileForm />
+                <UpdateMobileForm userRole={profileUser.role} />
               )}
             </CardContent>
           </Card>
