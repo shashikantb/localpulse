@@ -30,6 +30,19 @@ const StatusViewer: React.FC<StatusViewerProps> = ({ users, initialUserIndex, on
 
   const currentUser = users[currentUserIndex];
   const currentStatus = currentUser?.statuses[currentStatusIndex];
+  
+  const getNextStatus = useCallback(() => {
+    if (!currentUser) return null;
+    if (currentStatusIndex < currentUser.statuses.length - 1) {
+      return currentUser.statuses[currentStatusIndex + 1];
+    }
+    if (currentUserIndex < users.length - 1) {
+      return users[currentUserIndex + 1]?.statuses[0] || null;
+    }
+    return null;
+  }, [currentUser, currentStatusIndex, currentUserIndex, users]);
+
+  const nextStatusToPreload = getNextStatus();
 
   const goToNextUser = useCallback(() => {
     if (currentUserIndex < users.length - 1) {
@@ -41,7 +54,7 @@ const StatusViewer: React.FC<StatusViewerProps> = ({ users, initialUserIndex, on
   }, [currentUserIndex, users.length, onClose]);
   
   const goToNextStatus = useCallback(() => {
-    if (currentStatusIndex < currentUser.statuses.length - 1) {
+    if (currentUser?.statuses.length > 0 && currentStatusIndex < currentUser.statuses.length - 1) {
       setCurrentStatusIndex(currentStatusIndex + 1);
     } else {
       goToNextUser();
@@ -50,22 +63,29 @@ const StatusViewer: React.FC<StatusViewerProps> = ({ users, initialUserIndex, on
 
   useEffect(() => {
     setProgress(0);
-    setIsPaused(false);
+    // Don't reset isPaused here, allow it to persist across status changes
     clearTimeout(timerRef.current);
     clearInterval(progressTimerRef.current);
 
-    if (!currentStatus) return;
+    if (!currentStatus || isPaused) return;
 
     if (currentStatus.media_type === 'image') {
       const duration = STATUS_DURATIONS.image;
-      if (!isPaused) {
-        timerRef.current = setTimeout(goToNextStatus, duration);
-        const startTime = Date.now();
-        progressTimerRef.current = setInterval(() => {
-            const elapsedTime = Date.now() - startTime;
-            setProgress((elapsedTime / duration) * 100);
-        }, 100);
-      }
+      timerRef.current = setTimeout(goToNextStatus, duration);
+      const startTime = Date.now();
+      
+      const updateProgress = () => {
+          const elapsedTime = Date.now() - startTime;
+          if (elapsedTime >= duration) {
+              setProgress(100);
+              clearInterval(progressTimerRef.current);
+          } else {
+              setProgress((elapsedTime / duration) * 100);
+          }
+      };
+      
+      progressTimerRef.current = setInterval(updateProgress, 50);
+
     } else if (videoRef.current) {
         videoRef.current.currentTime = 0;
         videoRef.current.play().catch(e => console.error("Video play failed", e));
@@ -94,6 +114,10 @@ const StatusViewer: React.FC<StatusViewerProps> = ({ users, initialUserIndex, on
   };
   
   const handleTap = (e: React.MouseEvent<HTMLDivElement>) => {
+      if (isPaused) {
+          togglePause(e);
+          return;
+      }
       const { clientX, currentTarget } = e;
       const { width } = currentTarget.getBoundingClientRect();
       const isRightSide = clientX > width / 2;
@@ -111,14 +135,36 @@ const StatusViewer: React.FC<StatusViewerProps> = ({ users, initialUserIndex, on
   
   const togglePause = (e: React.MouseEvent) => {
       e.stopPropagation();
-      setIsPaused(!isPaused);
-      if(videoRef.current) {
-          isPaused ? videoRef.current.play() : videoRef.current.pause();
-      }
+      setIsPaused(currentIsPaused => {
+          const newIsPaused = !currentIsPaused;
+          if(videoRef.current) {
+              newIsPaused ? videoRef.current.pause() : videoRef.current.play();
+          }
+          // The useEffect will handle restarting timers when un-paused
+          return newIsPaused;
+      });
   };
 
   return (
     <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center animate-in fade-in-0" onClick={onClose}>
+      
+      {/* Preloader for the next status */}
+      {nextStatusToPreload && nextStatusToPreload.media_type === 'image' && (
+        <div style={{ display: 'none' }}>
+            <Image
+                src={nextStatusToPreload.media_url}
+                alt="" // Alt text is empty as it's not visible
+                width={1024} // Preload a reasonable size for quality
+                height={1024}
+                priority={false}
+                data-ai-hint="user status"
+            />
+        </div>
+      )}
+      {nextStatusToPreload && nextStatusToPreload.media_type === 'video' && (
+         <link rel="preload" as="video" href={nextStatusToPreload.media_url} />
+      )}
+      
       <div className="relative w-full h-full max-w-md max-h-[95vh] sm:max-h-screen sm:rounded-lg overflow-hidden flex flex-col items-center justify-center" onClick={(e) => e.stopPropagation()}>
           {/* Main content area */}
           <div className="absolute inset-0 w-full h-full" onClick={handleTap}>
@@ -126,7 +172,7 @@ const StatusViewer: React.FC<StatusViewerProps> = ({ users, initialUserIndex, on
               <Image src={currentStatus.media_url} alt="Status" fill style={{ objectFit: 'contain' }} priority data-ai-hint="user status" />
             )}
             {currentStatus.media_type === 'video' && (
-              <video ref={videoRef} src={currentStatus.media_url} className="w-full h-full object-contain" onEnded={goToNextStatus} onTimeUpdate={handleVideoUpdate} playsInline autoPlay />
+              <video ref={videoRef} src={currentStatus.media_url} className="w-full h-full object-contain" onEnded={goToNextStatus} onTimeUpdate={handleVideoUpdate} playsInline />
             )}
           </div>
           
@@ -135,7 +181,7 @@ const StatusViewer: React.FC<StatusViewerProps> = ({ users, initialUserIndex, on
               <div className="flex items-center gap-2 mb-2">
                   {currentUser.statuses.map((_, index) => (
                       <div key={index} className="flex-1 h-1 bg-white/30 rounded-full overflow-hidden">
-                           <div className="h-full bg-white rounded-full" style={{ width: `${index < currentStatusIndex ? 100 : index === currentStatusIndex ? progress : 0}%`, transition: index === currentStatusIndex && progress > 0 ? 'width 0.1s linear' : 'none' }} />
+                           <div className="h-full bg-white rounded-full" style={{ width: `${index < currentStatusIndex ? 100 : index === currentStatusIndex ? progress : 0}%`, transition: index === currentStatusIndex && progress > 0 ? 'width 0.05s linear' : 'none' }} />
                       </div>
                   ))}
               </div>
