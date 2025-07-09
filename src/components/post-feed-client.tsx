@@ -1,7 +1,7 @@
 
 'use client';
 
-import type { FC } from 'react';
+import React, { type FC } from 'react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Post, User, SortOption, BusinessUser } from '@/lib/db-types';
 import { getPosts, getFamilyPosts, getNearbyBusinesses, registerDeviceToken, updateUserLocation } from '@/app/actions';
