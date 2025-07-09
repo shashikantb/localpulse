@@ -312,306 +312,301 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmitForm)} className="space-y-6">
-        <ScrollArea className="max-h-[60vh] -mr-4 pr-4">
-          <div className="space-y-6">
-            <FormField
-              control={form.control}
-              name="content"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel htmlFor="post-content" className="sr-only">What's happening?</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      id="post-content"
-                      placeholder="Share your local pulse, or paste a YouTube link..."
-                      className="resize-none min-h-[100px] text-base shadow-sm focus:ring-2 focus:ring-primary/50 rounded-lg"
-                      rows={4}
-                      {...field}
-                      disabled={isButtonDisabled}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            
-            {hasDetectedUrl && (
-              <Alert variant="default" className="p-2 border-primary/30 bg-primary/5 text-primary">
-                <Video className="h-4 w-4" />
-                <AlertDescription className="text-xs font-semibold">
-                  YouTube link detected! This will be attached as video media. File uploads are disabled.
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {taggedUsers.length > 0 && (
-              <div className="space-y-2">
-                <FormLabel className="text-xs text-muted-foreground">Tagged Users:</FormLabel>
-                <div className="flex flex-wrap gap-2">
-                  {taggedUsers.map(user => (
-                    <Badge key={user.id} variant="secondary" className="pl-1 pr-2 py-1">
-                      <Avatar className="h-5 w-5 mr-2">
-                        <AvatarImage src={user.profilepictureurl || undefined} />
-                        <AvatarFallback className="text-[10px]">{user.name.charAt(0)}</AvatarFallback>
-                      </Avatar>
-                      {user.name}
-                      <button type="button" onClick={() => removeTaggedUser(user.id)} className="ml-1.5 rounded-full hover:bg-background/70">
-                        <XCircle className="h-3 w-3"/>
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="hashtags"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormControl>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="outline" className="w-full justify-between" disabled={isButtonDisabled}>
-                              <div className="flex items-center gap-2">
-                                <Tag className="w-4 h-4 text-primary" />
-                                <span>Hashtags ({field.value?.length || 0})</span>
-                              </div>
-                              <ChevronDown className="ml-2 h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent className="w-[calc(var(--radix-dropdown-menu-trigger-width))] max-h-80 overflow-y-auto">
-                            {HASHTAG_CATEGORIES.map((category, catIndex) => (
-                              <DropdownMenuGroup key={category.name}>
-                                <DropdownMenuLabel>{category.name}</DropdownMenuLabel>
-                                {category.hashtags.map((tag) => (
-                                  <DropdownMenuCheckboxItem
-                                    key={tag}
-                                    checked={field.value?.includes(tag)}
-                                    onCheckedChange={(checked) => {
-                                      const currentTags = field.value || [];
-                                      const newTags = checked
-                                        ? [...currentTags, tag]
-                                        : currentTags.filter(
-                                            (value) => value !== tag
-                                          );
-                                      field.onChange(newTags);
-                                    }}
-                                    disabled={isButtonDisabled}
-                                  >
-                                    {tag}
-                                  </DropdownMenuCheckboxItem>
-                                ))}
-                                {catIndex < HASHTAG_CATEGORIES.length - 1 && <DropdownMenuSeparator />}
-                              </DropdownMenuGroup>
-                            ))}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <Dialog open={isTaggingDialogOpen} onOpenChange={setIsTaggingDialogOpen}>
-                    <DialogTrigger asChild>
-                        <Button type="button" variant="outline" disabled={isButtonDisabled}>
-                            <UserPlus className="mr-2 h-4 w-4" />
-                            Tag People ({taggedUsers.length})
-                        </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-[425px]">
-                        <DialogHeader>
-                            <DialogTitle>Tag People</DialogTitle>
-                            <DialogDescription>
-                                Search for people to mention in your pulse. They will be notified.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div className="py-4 space-y-4">
-                            <div className="relative">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                <Input 
-                                    placeholder="Search for users..." 
-                                    className="pl-10"
-                                    value={mentionQuery}
-                                    onChange={(e) => setMentionQuery(e.target.value)}
-                                />
-                            </div>
-                            <ScrollArea className="h-48 border rounded-md">
-                                {isSearching ? (
-                                    <div className="p-4 text-center text-sm text-muted-foreground">Searching...</div>
-                                ) : mentionResults.length > 0 ? (
-                                    <div className="p-1">
-                                        {mentionResults.map(user => (
-                                            <button
-                                                key={user.id}
-                                                type="button"
-                                                onClick={() => addTaggedUser(user)}
-                                                className="w-full flex items-center gap-2 p-2 rounded-md text-left hover:bg-muted"
-                                            >
-                                                <Avatar className="h-8 w-8"><AvatarImage src={user.profilepictureurl || undefined} /><AvatarFallback>{user.name.charAt(0)}</AvatarFallback></Avatar>
-                                                <span className="text-sm font-medium">{user.name}</span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="p-4 text-center text-sm text-muted-foreground">
-                                        {mentionQuery ? "No users found." : "Type to search."}
-                                    </div>
-                                )}
-                            </ScrollArea>
-                        </div>
-                        <DialogFooter>
-                            <DialogClose asChild>
-                                <Button type="button">Done</Button>
-                            </DialogClose>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
-            </div>
-
-            <FormItem>
-              <FormLabel htmlFor="media-upload" className="text-sm font-medium text-muted-foreground mb-1 block">
-                Attach Media (Optional)
-              </FormLabel>
-                <>
-                  <Input id="file-upload" type="file" accept="image/*,video/*" ref={fileInputRef} onChange={handleFileChange} className="hidden" disabled={isMediaUploadDisabled} multiple />
-                  <Input id="image-capture" type="file" accept="image/*" capture="environment" ref={imageCaptureInputRef} onChange={handleFileChange} className="hidden" disabled={isMediaUploadDisabled} />
-                  <Input id="video-capture" type="file" accept="video/*" capture="environment" ref={videoCaptureInputRef} onChange={handleFileChange} className="hidden" disabled={isMediaUploadDisabled} />
-                </>
-              
-              {selectedFiles.length > 0 ? (
-                <div className="w-full p-2 border-2 border-dashed rounded-lg border-primary/50 space-y-2">
-                    <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-                        {selectedFiles.map((f, i) => (
-                            <div key={f.url} className="relative aspect-square group">
-                                {mediaType === 'image' && <Image src={f.url} alt={`Preview ${i+1}`} fill sizes="10vw" className="object-cover rounded-md" data-ai-hint="user uploaded image"/>}
-                                {mediaType === 'video' && <video src={f.url} className="w-full h-full object-cover rounded-md bg-black" />}
-                                <Button type="button" variant="destructive" size="icon" onClick={() => removeSelectedFile(i)} className="absolute -top-1 -right-1 h-5 w-5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <X className="h-3 w-3" />
-                                </Button>
-                            </div>
-                        ))}
-                    </div>
-                     <Button type="button" variant="ghost" size="sm" onClick={(e) => {
-                         e.preventDefault();
-                         setSelectedFiles(prev => {
-                           prev.forEach(f => URL.revokeObjectURL(f.url));
-                           return [];
-                         });
-                         setMediaType(null);
-                         if (fileInputRef.current) fileInputRef.current.value = "";
-                     }} className="w-full text-destructive">
-                        <XCircle className="mr-2 h-4 w-4" /> Clear All
-                    </Button>
-                </div>
-              ) : (
-                <div className="p-4 border-2 border-dashed rounded-lg">
-                  <div className={cn("grid gap-2", showCameraOptions ? "grid-cols-1" : "grid-cols-2")}>
-                    {!showCameraOptions && (
-                      <>
-                        <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isMediaUploadDisabled}>
-                          <UploadCloud className="mr-2 h-4 w-4" /> Upload File(s)
-                        </Button>
-                        <Button type="button" variant="outline" onClick={() => setShowCameraOptions(true)} disabled={isMediaUploadDisabled}>
-                          <Camera className="mr-2 h-4 w-4" /> Use Camera
-                        </Button>
-                      </>
-                    )}
-                    {showCameraOptions && (
-                      <div className="space-y-2 text-center">
-                        <p className="text-sm text-muted-foreground">Choose a capture option:</p>
-                        <div className="grid grid-cols-2 gap-2">
-                           <Button type="button" variant="secondary" onClick={() => imageCaptureInputRef.current?.click()} disabled={isMediaUploadDisabled}>
-                              <ImageIcon className="mr-2 h-4 w-4" /> Take Photo
-                          </Button>
-                          <Button type="button" variant="secondary" onClick={() => videoCaptureInputRef.current?.click()} disabled={isMediaUploadDisabled}>
-                              <Film className="mr-2 h-4 w-4" /> Record Video
-                          </Button>
-                        </div>
-                        <Button type="button" variant="ghost" size="sm" onClick={() => setShowCameraOptions(false)} disabled={isMediaUploadDisabled}>
-                          Cancel
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-              {fileError && (
-                <Alert variant="destructive" className="mt-2 p-2 text-sm">
-                  <AlertDescription>{fileError}</AlertDescription>
-                </Alert>
-              )}
-            </FormItem>
-            
-            <div className="space-y-4">
-              {sessionUser && (
-                  <FormField
-                    control={form.control}
-                    name="isFamilyPost"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 shadow-sm bg-muted/50">
-                        <FormControl>
-                          <Checkbox
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                            disabled={isButtonDisabled}
-                          />
-                        </FormControl>
-                        <div className="space-y-1 leading-none">
-                          <FormLabel className="flex items-center">
-                              <Users className="mr-2 h-4 w-4 text-primary" />
-                              Family Post
-                          </FormLabel>
-                          <p className="text-xs text-muted-foreground">
-                            Only approved family members will see this post.
-                          </p>
-                        </div>
-                      </FormItem>
-                    )}
+      <form onSubmit={form.handleSubmit(handleSubmitForm)} className="flex flex-col max-h-[75vh]">
+        <div className="flex-grow overflow-y-auto pr-4 -mr-4 space-y-6">
+          <FormField
+            control={form.control}
+            name="content"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel htmlFor="post-content" className="sr-only">What's happening?</FormLabel>
+                <FormControl>
+                  <Textarea
+                    id="post-content"
+                    placeholder="Share your local pulse, or paste a YouTube link..."
+                    className="resize-none min-h-[100px] text-base shadow-sm focus:ring-2 focus:ring-primary/50 rounded-lg"
+                    rows={4}
+                    {...field}
+                    disabled={isButtonDisabled}
                   />
-              )}
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          
+          {hasDetectedUrl && (
+            <Alert variant="default" className="p-2 border-primary/30 bg-primary/5 text-primary">
+              <Video className="h-4 w-4" />
+              <AlertDescription className="text-xs font-semibold">
+                YouTube link detected! This will be attached as video media. File uploads are disabled.
+              </AlertDescription>
+            </Alert>
+          )}
 
+          {taggedUsers.length > 0 && (
+            <div className="space-y-2">
+              <FormLabel className="text-xs text-muted-foreground">Tagged Users:</FormLabel>
+              <div className="flex flex-wrap gap-2">
+                {taggedUsers.map(user => (
+                  <Badge key={user.id} variant="secondary" className="pl-1 pr-2 py-1">
+                    <Avatar className="h-5 w-5 mr-2">
+                      <AvatarImage src={user.profilepictureurl || undefined} />
+                      <AvatarFallback className="text-[10px]">{user.name.charAt(0)}</AvatarFallback>
+                    </Avatar>
+                    {user.name}
+                    <button type="button" onClick={() => removeTaggedUser(user.id)} className="ml-1.5 rounded-full hover:bg-background/70">
+                      <XCircle className="h-3 w-3"/>
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
-                name="hideLocation"
+                name="hashtags"
                 render={({ field }) => (
-                  <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 shadow-sm bg-muted/50">
+                  <FormItem>
                     <FormControl>
-                      <Checkbox
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                        disabled={isButtonDisabled}
-                      />
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" className="w-full justify-between" disabled={isButtonDisabled}>
+                            <div className="flex items-center gap-2">
+                              <Tag className="w-4 h-4 text-primary" />
+                              <span>Hashtags ({field.value?.length || 0})</span>
+                            </div>
+                            <ChevronDown className="ml-2 h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-[calc(var(--radix-dropdown-menu-trigger-width))] max-h-80 overflow-y-auto">
+                          {HASHTAG_CATEGORIES.map((category, catIndex) => (
+                            <DropdownMenuGroup key={category.name}>
+                              <DropdownMenuLabel>{category.name}</DropdownMenuLabel>
+                              {category.hashtags.map((tag) => (
+                                <DropdownMenuCheckboxItem
+                                  key={tag}
+                                  checked={field.value?.includes(tag)}
+                                  onCheckedChange={(checked) => {
+                                    const currentTags = field.value || [];
+                                    const newTags = checked
+                                      ? [...currentTags, tag]
+                                      : currentTags.filter(
+                                          (value) => value !== tag
+                                        );
+                                    field.onChange(newTags);
+                                  }}
+                                  disabled={isButtonDisabled}
+                                >
+                                  {tag}
+                                </DropdownMenuCheckboxItem>
+                              ))}
+                              {catIndex < HASHTAG_CATEGORIES.length - 1 && <DropdownMenuSeparator />}
+                            </DropdownMenuGroup>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel className="flex items-center">
-                          <MapPinOff className="mr-2 h-4 w-4 text-primary" />
-                          Don't Display Location
-                      </FormLabel>
-                      <p className="text-xs text-muted-foreground">
-                        Your location will still be used for nearby sorting.
-                      </p>
-                    </div>
+                    <FormMessage />
                   </FormItem>
                 )}
               />
-            </div>
-            
-            <div className="space-y-4 pt-2">
-              {isUploading && <Progress value={(uploadProgress / selectedFiles.length) * 100} className="w-full h-2" />}
+              <Dialog open={isTaggingDialogOpen} onOpenChange={setIsTaggingDialogOpen}>
+                  <DialogTrigger asChild>
+                      <Button type="button" variant="outline" disabled={isButtonDisabled}>
+                          <UserPlus className="mr-2 h-4 w-4" />
+                          Tag People ({taggedUsers.length})
+                      </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[425px]">
+                      <DialogHeader>
+                          <DialogTitle>Tag People</DialogTitle>
+                          <DialogDescription>
+                              Search for people to mention in your pulse. They will be notified.
+                          </DialogDescription>
+                      </DialogHeader>
+                      <div className="py-4 space-y-4">
+                          <div className="relative">
+                              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                              <Input 
+                                  placeholder="Search for users..." 
+                                  className="pl-10"
+                                  value={mentionQuery}
+                                  onChange={(e) => setMentionQuery(e.target.value)}
+                              />
+                          </div>
+                          <ScrollArea className="h-48 border rounded-md">
+                              {isSearching ? (
+                                  <div className="p-4 text-center text-sm text-muted-foreground">Searching...</div>
+                              ) : mentionResults.length > 0 ? (
+                                  <div className="p-1">
+                                      {mentionResults.map(user => (
+                                          <button
+                                              key={user.id}
+                                              type="button"
+                                              onClick={() => addTaggedUser(user)}
+                                              className="w-full flex items-center gap-2 p-2 rounded-md text-left hover:bg-muted"
+                                          >
+                                              <Avatar className="h-8 w-8"><AvatarImage src={user.profilepictureurl || undefined} /><AvatarFallback>{user.name.charAt(0)}</AvatarFallback></Avatar>
+                                              <span className="text-sm font-medium">{user.name}</span>
+                                          </button>
+                                      ))}
+                                  </div>
+                              ) : (
+                                  <div className="p-4 text-center text-sm text-muted-foreground">
+                                      {mentionQuery ? "No users found." : "Type to search."}
+                                  </div>
+                              )}
+                          </ScrollArea>
+                      </div>
+                      <DialogFooter>
+                          <DialogClose asChild>
+                              <Button type="button">Done</Button>
+                          </DialogClose>
+                      </DialogFooter>
+                  </DialogContent>
+              </Dialog>
+          </div>
 
-              <Button type="submit" disabled={isButtonDisabled || !form.formState.isValid} className="w-full text-base py-3 shadow-md hover:shadow-lg transition-shadow bg-accent hover:bg-accent/90 text-accent-foreground rounded-lg">
+          <FormItem>
+            <FormLabel htmlFor="media-upload" className="text-sm font-medium text-muted-foreground mb-1 block">
+              Attach Media (Optional)
+            </FormLabel>
+              <>
+                <Input id="file-upload" type="file" accept="image/*,video/*" ref={fileInputRef} onChange={handleFileChange} className="hidden" disabled={isMediaUploadDisabled} multiple />
+                <Input id="image-capture" type="file" accept="image/*" capture="environment" ref={imageCaptureInputRef} onChange={handleFileChange} className="hidden" disabled={isMediaUploadDisabled} />
+                <Input id="video-capture" type="file" accept="video/*" capture="environment" ref={videoCaptureInputRef} onChange={handleFileChange} className="hidden" disabled={isMediaUploadDisabled} />
+              </>
+            
+            {selectedFiles.length > 0 ? (
+              <div className="w-full p-2 border-2 border-dashed rounded-lg border-primary/50 space-y-2">
+                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                      {selectedFiles.map((f, i) => (
+                          <div key={f.url} className="relative aspect-square group">
+                              {mediaType === 'image' && <Image src={f.url} alt={`Preview ${i+1}`} fill sizes="10vw" className="object-cover rounded-md" data-ai-hint="user uploaded image"/>}
+                              {mediaType === 'video' && <video src={f.url} className="w-full h-full object-cover rounded-md bg-black" />}
+                              <Button type="button" variant="destructive" size="icon" onClick={() => removeSelectedFile(i)} className="absolute -top-1 -right-1 h-5 w-5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <X className="h-3 w-3" />
+                              </Button>
+                          </div>
+                      ))}
+                  </div>
+                   <Button type="button" variant="ghost" size="sm" onClick={(e) => {
+                       e.preventDefault();
+                       setSelectedFiles(prev => {
+                         prev.forEach(f => URL.revokeObjectURL(f.url));
+                         return [];
+                       });
+                       setMediaType(null);
+                       if (fileInputRef.current) fileInputRef.current.value = "";
+                   }} className="w-full text-destructive">
+                      <XCircle className="mr-2 h-4 w-4" /> Clear All
+                  </Button>
+              </div>
+            ) : (
+              <div className="p-4 border-2 border-dashed rounded-lg">
+                <div className={cn("grid gap-2", showCameraOptions ? "grid-cols-1" : "grid-cols-2")}>
+                  {!showCameraOptions && (
+                    <>
+                      <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isMediaUploadDisabled}>
+                        <UploadCloud className="mr-2 h-4 w-4" /> Upload File(s)
+                      </Button>
+                      <Button type="button" variant="outline" onClick={() => setShowCameraOptions(true)} disabled={isMediaUploadDisabled}>
+                        <Camera className="mr-2 h-4 w-4" /> Use Camera
+                      </Button>
+                    </>
+                  )}
+                  {showCameraOptions && (
+                    <div className="space-y-2 text-center">
+                      <p className="text-sm text-muted-foreground">Choose a capture option:</p>
+                      <div className="grid grid-cols-2 gap-2">
+                         <Button type="button" variant="secondary" onClick={() => imageCaptureInputRef.current?.click()} disabled={isMediaUploadDisabled}>
+                            <ImageIcon className="mr-2 h-4 w-4" /> Take Photo
+                        </Button>
+                        <Button type="button" variant="secondary" onClick={() => videoCaptureInputRef.current?.click()} disabled={isMediaUploadDisabled}>
+                            <Film className="mr-2 h-4 w-4" /> Record Video
+                        </Button>
+                      </div>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setShowCameraOptions(false)} disabled={isMediaUploadDisabled}>
+                        Cancel
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            {fileError && (
+              <Alert variant="destructive" className="mt-2 p-2 text-sm">
+                <AlertDescription>{fileError}</AlertDescription>
+              </Alert>
+            )}
+          </FormItem>
+          
+          <div className="space-y-4">
+            {sessionUser && (
+                <FormField
+                  control={form.control}
+                  name="isFamilyPost"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 shadow-sm bg-muted/50">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          disabled={isButtonDisabled}
+                        />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel className="flex items-center">
+                            <Users className="mr-2 h-4 w-4 text-primary" />
+                            Family Post
+                        </FormLabel>
+                        <p className="text-xs text-muted-foreground">
+                          Only approved family members will see this post.
+                        </p>
+                      </div>
+                    </FormItem>
+                  )}
+                />
+            )}
+
+            <FormField
+              control={form.control}
+              name="hideLocation"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 shadow-sm bg-muted/50">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      disabled={isButtonDisabled}
+                    />
+                  </FormControl>
+                  <div className="space-y-1 leading-none">
+                    <FormLabel className="flex items-center">
+                        <MapPinOff className="mr-2 h-4 w-4 text-primary" />
+                        Don't Display Location
+                    </FormLabel>
+                    <p className="text-xs text-muted-foreground">
+                      Your location will still be used for nearby sorting.
+                    </p>
+                  </div>
+                </FormItem>
+              )}
+            />
+          </div>
+        </div>
+
+        <div className="flex-shrink-0 pt-4 border-t border-border/20">
+            {isUploading && <Progress value={(uploadProgress / selectedFiles.length) * 100} className="w-full h-2 mb-4" />}
+            <Button type="submit" disabled={isButtonDisabled || !form.formState.isValid} className="w-full text-base py-3 shadow-md hover:shadow-lg transition-shadow bg-accent hover:bg-accent/90 text-accent-foreground rounded-lg">
                 {(isUploading || submitting) && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
                 {buttonText}
-              </Button>
-            </div>
-          </div>
-        </ScrollArea>
+            </Button>
+        </div>
       </form>
     </Form>
   );
 };
-
-    
