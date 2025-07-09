@@ -5,11 +5,10 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import * as jose from 'jose';
 import bcrypt from 'bcryptjs';
-import { createUserDb, getUserByEmailDb, getUserByIdDb, updateUserProfilePictureDb, updateUserNameDb, updateUserMobileDb, deleteUserDb, updateUserBusinessCategoryDb } from '@/lib/db';
-import type { NewUser, User, UpdateBusinessCategory } from '@/lib/db-types';
+import { createUserDb, getUserByEmailDb, getUserByIdDb, updateUserProfilePictureDb, updateUserNameDb, deleteUserDb } from '@/lib/db';
+import type { NewUser, User } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 import { cache } from 'react';
-import { z } from 'zod';
 
 
 const USER_COOKIE_NAME = 'user-auth-token';
@@ -192,49 +191,6 @@ export async function updateUsername(name: string): Promise<{ success: boolean; 
     return { success: false, error: error.message || 'An unknown error occurred.' };
   }
 }
-
-const mobileSchema = z.string().regex(/^\d{10}$/, 'Must be a valid 10-digit mobile number.');
-
-export async function updateUserMobile(formData: FormData) {
-  const { user } = await getSession();
-  if (!user) {
-    return { success: false, error: 'Authentication required.' };
-  }
-
-  const mobileNumber = formData.get('mobilenumber') as string;
-  const validation = mobileSchema.safeParse(mobileNumber);
-
-  if (!validation.success) {
-    return { success: false, error: validation.error.errors[0].message };
-  }
-  
-  try {
-    await updateUserMobileDb(user.id, validation.data);
-    revalidatePath(`/users/${user.id}`);
-    return { success: true };
-  } catch (error: any) {
-    return { success: false, error: 'Failed to update mobile number.' };
-  }
-}
-
-export async function updateUserBusinessCategory(data: UpdateBusinessCategory): Promise<{ success: boolean; error?: string }> {
-  const { user } = await getSession();
-  if (!user) {
-    return { success: false, error: 'Authentication required.' };
-  }
-  if (user.role !== 'Business') {
-    return { success: false, error: 'Only business users can set a category.' };
-  }
-
-  try {
-    await updateUserBusinessCategoryDb(user.id, data);
-    revalidatePath(`/users/${user.id}`);
-    return { success: true };
-  } catch (error: any) {
-    return { success: false, error: 'Failed to update business category.' };
-  }
-}
-
 
 export async function deleteCurrentUserAccount(): Promise<{ success: boolean; error?: string }> {
   const { user } = await getSession();
