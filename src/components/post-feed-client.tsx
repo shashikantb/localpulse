@@ -34,6 +34,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { BUSINESS_CATEGORIES } from '@/lib/db-types';
 import BusinessCard from './business-card';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface AndroidInterface {
   getFCMToken?: () => string | null;
@@ -182,6 +183,11 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser }) => {
   const fetchBusinesses = useCallback(async (page: number, category?: string) => {
     setBusinessFeed(prev => ({ ...prev, isLoading: true }));
     try {
+      if (!location) {
+        // Don't fetch if location is not available
+        setBusinessFeed(prev => ({ ...prev, isLoading: false, hasMore: false }));
+        return;
+      }
       const newBusinesses = await getNearbyBusinesses({ page, limit: POSTS_PER_PAGE, latitude: location?.latitude, longitude: location?.longitude, category });
       setBusinessFeed(prev => {
         const allBusinesses = page === 1 ? newBusinesses : [...prev.businesses, ...newBusinesses.filter(b => !prev.businesses.some(eb => eb.id === b.id))];
@@ -198,7 +204,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser }) => {
       console.error('Error fetching businesses:', error);
       setBusinessFeed(prev => ({ ...prev, isLoading: false }));
     }
-  }, [location?.latitude, location?.longitude]);
+  }, [location]);
 
 
   // Initial location fetch
@@ -465,19 +471,21 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser }) => {
                       <span>Category</span>
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuRadioGroup value={businessFeed.category || 'all'} onValueChange={handleCategoryChange}>
-                      <DropdownMenuRadioItem value="all">All Categories</DropdownMenuRadioItem>
-                      <DropdownMenuSeparator />
-                        {Object.entries(BUSINESS_CATEGORIES).map(([group, categories]) => (
-                            <React.Fragment key={group}>
-                                <DropdownMenuLabel>{group}</DropdownMenuLabel>
-                                {categories.map(category => (
-                                    <DropdownMenuRadioItem key={category} value={category}>{category}</DropdownMenuRadioItem>
-                                ))}
-                            </React.Fragment>
-                        ))}
-                    </DropdownMenuRadioGroup>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <ScrollArea className="h-72">
+                      <DropdownMenuRadioGroup value={businessFeed.category || 'all'} onValueChange={handleCategoryChange} className="p-1">
+                        <DropdownMenuRadioItem value="all">All Categories</DropdownMenuRadioItem>
+                        <DropdownMenuSeparator />
+                          {Object.entries(BUSINESS_CATEGORIES).map(([group, categories]) => (
+                              <React.Fragment key={group}>
+                                  <DropdownMenuLabel>{group}</DropdownMenuLabel>
+                                  {categories.map(category => (
+                                      <DropdownMenuRadioItem key={category} value={category}>{category}</DropdownMenuRadioItem>
+                                  ))}
+                              </React.Fragment>
+                          ))}
+                      </DropdownMenuRadioGroup>
+                    </ScrollArea>
                   </DropdownMenuContent>
                 </DropdownMenu>
               ) : (
