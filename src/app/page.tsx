@@ -1,4 +1,3 @@
-
 import type { FC } from 'react';
 import { Suspense } from 'react';
 import { getSession } from './auth/actions';
