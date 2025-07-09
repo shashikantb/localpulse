@@ -15,22 +15,34 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { signUp } from '@/app/auth/actions';
-import { Loader2, UserPlus, ShieldAlert, Building, ShieldCheck, User, Phone } from 'lucide-react';
+import { Loader2, UserPlus, ShieldAlert, Building, ShieldCheck, User, Phone, Briefcase } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { BUSINESS_CATEGORIES } from '@/lib/db-types';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const signupSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters.'),
   email: z.string().email('Please enter a valid email address.'),
   password: z.string().min(8, 'Password must be at least 8 characters.'),
   role: z.enum(['Business', 'Gorakshak', 'Public(जनता)'], { required_error: 'You must select a role.' }),
-  mobilenumber: z.string().optional(),
+  mobilenumber: z.string().regex(/^\d{10}$/, "A valid 10-digit mobile number is required."),
+  business_category: z.string().optional(),
+  business_other_category: z.string().optional(),
 }).superRefine((data, ctx) => {
-  if (data.role === 'Gorakshak' && (!data.mobilenumber || !/^\d{10}$/.test(data.mobilenumber))) {
+  if (data.role === 'Business' && !data.business_category) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "A valid 10-digit mobile number is required for the Gorakshak role.",
-      path: ['mobilenumber'],
+      message: "Please select a business category.",
+      path: ['business_category'],
+    });
+  }
+  if (data.role === 'Business' && data.business_category === 'Any Other' && (!data.business_other_category || data.business_other_category.trim().length < 2)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Please specify your business type.",
+      path: ['business_other_category'],
     });
   }
 });
@@ -55,6 +67,7 @@ const SignupPage: FC = () => {
   });
 
   const selectedRole = form.watch('role');
+  const selectedCategory = form.watch('business_category');
 
   const onSubmit: SubmitHandler<SignupFormInputs> = async (data) => {
     setIsSubmitting(true);
@@ -164,6 +177,23 @@ const SignupPage: FC = () => {
               />
 
               <FormField
+                  control={form.control}
+                  name="mobilenumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <Label htmlFor="mobilenumber">Mobile Number</Label>
+                       <div className="relative">
+                        <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <FormControl>
+                          <Input id="mobilenumber" type="tel" placeholder="10-digit mobile number" className="pl-10" {...field} disabled={isSubmitting} />
+                        </FormControl>
+                       </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+              <FormField
                 control={form.control}
                 name="role"
                 render={({ field }) => (
@@ -210,23 +240,53 @@ const SignupPage: FC = () => {
                 )}
               />
               
-              {selectedRole === 'Gorakshak' && (
-                <FormField
-                  control={form.control}
-                  name="mobilenumber"
-                  render={({ field }) => (
-                    <FormItem>
-                      <Label htmlFor="mobilenumber">Mobile Number</Label>
-                       <div className="relative">
-                        <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                        <FormControl>
-                          <Input id="mobilenumber" type="tel" placeholder="10-digit mobile number" className="pl-10" {...field} disabled={isSubmitting} />
-                        </FormControl>
-                       </div>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+              {selectedRole === 'Business' && (
+                <div className='space-y-4 pt-2 border-t'>
+                    <FormField
+                    control={form.control}
+                    name="business_category"
+                    render={({ field }) => (
+                        <FormItem>
+                        <Label>Business Category</Label>
+                        <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}>
+                            <FormControl>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select your business category" />
+                                </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                                <ScrollArea className="h-72">
+                                {Object.entries(BUSINESS_CATEGORIES).map(([group, categories]) => (
+                                    <React.Fragment key={group}>
+                                    <Label className="px-2 py-1.5 text-sm font-semibold">{group}</Label>
+                                    {categories.map(category => (
+                                        <SelectItem key={category} value={category}>{category}</SelectItem>
+                                    ))}
+                                    </React.Fragment>
+                                ))}
+                                </ScrollArea>
+                            </SelectContent>
+                        </Select>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                    />
+                    {selectedCategory === 'Any Other' && (
+                        <FormField
+                            control={form.control}
+                            name="business_other_category"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <Label>Please Specify Your Business</Label>
+                                    <FormControl>
+                                        <Input {...field} placeholder="e.g., Book Binding Service" disabled={isSubmitting} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                    )}
+                </div>
               )}
 
               <Button type="submit" className="w-full" disabled={isSubmitting || !form.formState.isValid}>

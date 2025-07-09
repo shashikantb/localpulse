@@ -5,8 +5,8 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import * as jose from 'jose';
 import bcrypt from 'bcryptjs';
-import { createUserDb, getUserByEmailDb, getUserByIdDb, updateUserProfilePictureDb, updateUserNameDb, updateUserMobileDb, deleteUserDb } from '@/lib/db';
-import type { NewUser, User } from '@/lib/db-types';
+import { createUserDb, getUserByEmailDb, getUserByIdDb, updateUserProfilePictureDb, updateUserNameDb, updateUserMobileDb, deleteUserDb, updateUserBusinessCategoryDb } from '@/lib/db';
+import type { NewUser, User, UpdateBusinessCategory } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 import { cache } from 'react';
 import { z } from 'zod';
@@ -217,6 +217,25 @@ export async function updateUserMobile(formData: FormData) {
   }
 }
 
+export async function updateUserBusinessCategory(data: UpdateBusinessCategory): Promise<{ success: boolean; error?: string }> {
+  const { user } = await getSession();
+  if (!user) {
+    return { success: false, error: 'Authentication required.' };
+  }
+  if (user.role !== 'Business') {
+    return { success: false, error: 'Only business users can set a category.' };
+  }
+
+  try {
+    await updateUserBusinessCategoryDb(user.id, data);
+    revalidatePath(`/users/${user.id}`);
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: 'Failed to update business category.' };
+  }
+}
+
+
 export async function deleteCurrentUserAccount(): Promise<{ success: boolean; error?: string }> {
   const { user } = await getSession();
   if (!user) {
@@ -227,8 +246,9 @@ export async function deleteCurrentUserAccount(): Promise<{ success: boolean; er
     // Note: The database is configured with ON DELETE SET NULL for posts.authorid
     // and ON DELETE CASCADE for related data like likes, follows, etc.
     await deleteUserDb(user.id);
-    // The logout will clear the cookie and revalidate the layout
-    await logout(); 
+    // The logout will handle the redirect, but we can push to be safe
+    await logout();
+    redirect('/');
     return { success: true };
   } catch (error: any) {
     console.error(`Failed to delete account for user ${user.id}:`, error);

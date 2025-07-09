@@ -21,7 +21,11 @@ const formSchema = z.object({
 
 type FormData = z.infer<typeof formSchema>;
 
-export default function UpdateMobileForm() {
+interface UpdateMobileFormProps {
+    onUpdate?: () => void;
+}
+
+export default function UpdateMobileForm({ onUpdate }: UpdateMobileFormProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -47,7 +51,7 @@ export default function UpdateMobileForm() {
         title: 'Mobile Number Updated!',
         description: 'Your ID card is now available.',
       });
-      // The page will be revalidated by the server action.
+      if (onUpdate) onUpdate();
     } else {
       setServerError(result.error || 'An unexpected error occurred.');
     }

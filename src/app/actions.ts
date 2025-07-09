@@ -2,7 +2,7 @@
 'use server';
 
 import * as db from '@/lib/db';
-import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus, FamilyMember, FamilyMemberLocation, PendingFamilyRequest, Conversation, Message, ConversationParticipant, SortOption } from '@/lib/db-types';
+import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus, FamilyMember, FamilyMemberLocation, PendingFamilyRequest, Conversation, Message, ConversationParticipant, SortOption, BusinessUser } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 import { admin as firebaseAdmin } from '@/lib/firebase-admin';
 import { getSession } from '@/app/auth/actions';
@@ -1076,4 +1076,23 @@ export async function markConversationAsRead(conversationId: number): Promise<vo
     } catch (error) {
         console.error(`Server action error marking conversation ${conversationId} as read:`, error);
     }
+}
+
+
+// --- Business Actions ---
+export async function getNearbyBusinesses(options: { page: number; limit: number; latitude: number | null; longitude: number | null; category?: string; }): Promise<BusinessUser[]> {
+  try {
+    if (!options.latitude || !options.longitude) return [];
+    
+    const businesses = await db.getNearbyBusinessesDb({
+      ...options,
+      latitude: options.latitude,
+      longitude: options.longitude,
+      offset: (options.page - 1) * options.limit,
+    });
+    return businesses;
+  } catch (error) {
+    console.error("Server action error fetching nearby businesses:", error);
+    return [];
+  }
 }

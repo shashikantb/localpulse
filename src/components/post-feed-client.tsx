@@ -3,12 +3,12 @@
 
 import type { FC } from 'react';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { Post, User, SortOption } from '@/lib/db-types';
-import { getPosts, getFamilyPosts, registerDeviceToken, updateUserLocation } from '@/app/actions';
+import type { Post, User, SortOption, BusinessUser } from '@/lib/db-types';
+import { getPosts, getFamilyPosts, getNearbyBusinesses, registerDeviceToken, updateUserLocation } from '@/app/actions';
 import { PostCard } from '@/components/post-card';
 import { PostFeedSkeleton } from '@/components/post-feed-skeleton';
 import { Card, CardContent } from '@/components/ui/card';
-import { Zap, Loader2, Bell, BellOff, BellRing, AlertTriangle, Users, Rss, Filter } from 'lucide-react';
+import { Zap, Loader2, Bell, BellOff, BellRing, AlertTriangle, Users, Rss, Filter, Briefcase } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { useSwipeable } from 'react-swipeable';
@@ -32,7 +32,8 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem
 } from '@/components/ui/dropdown-menu';
-
+import { BUSINESS_CATEGORIES } from '@/lib/db-types';
+import BusinessCard from './business-card';
 
 interface AndroidInterface {
   getFCMToken?: () => string | null;
@@ -46,7 +47,7 @@ declare global {
 
 const POSTS_PER_PAGE = 5;
 
-type FeedType = 'nearby' | 'family';
+type FeedType = 'nearby' | 'family' | 'business';
 
 type FeedState = {
     posts: Post[];
@@ -55,11 +56,26 @@ type FeedState = {
     isLoading: boolean;
 };
 
+type BusinessFeedState = {
+    businesses: BusinessUser[];
+    page: number;
+    hasMore: boolean;
+    isLoading: boolean;
+    category?: string;
+};
+
 const initialFeedState: FeedState = {
     posts: [],
     page: 1,
     hasMore: true,
     isLoading: true,
+};
+
+const initialBusinessFeedState: BusinessFeedState = {
+    businesses: [],
+    page: 1,
+    hasMore: true,
+    isLoading: false,
 };
 
 function NotificationButtonContent({
@@ -89,6 +105,10 @@ function NoPostsContent({ feedType }: { feedType: FeedType }) {
     family: {
       title: 'No Family Pulses Yet',
       description: 'Your family members have not posted anything yet. Share a family post to get started!'
+    },
+    business: {
+      title: 'No Businesses Found',
+      description: 'No businesses found in your area for the selected category. Try a different filter!'
     }
   }
   const currentMessage = messages[feedType];
@@ -96,7 +116,7 @@ function NoPostsContent({ feedType }: { feedType: FeedType }) {
   return (
     <Card className="text-center py-16 rounded-xl shadow-xl border border-border/40 bg-card/80 backdrop-blur-sm">
       <CardContent className="flex flex-col items-center">
-        <Zap className="mx-auto h-20 w-20 text-muted-foreground/30 mb-6" />
+        {feedType === 'business' ? <Briefcase className="mx-auto h-20 w-20 text-muted-foreground/30 mb-6" /> : <Zap className="mx-auto h-20 w-20 text-muted-foreground/30 mb-6" />}
         <p className="text-2xl text-muted-foreground font-semibold">{currentMessage.title}</p>
         <p className="text-md text-muted-foreground/80 mt-2">{currentMessage.description}</p>
       </CardContent>
@@ -114,10 +134,12 @@ interface PostFeedClientProps {
 const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser }) => {
   const { toast } = useToast();
   
-  const [feeds, setFeeds] = useState<{ [key in FeedType]: FeedState }>({
+  const [feeds, setFeeds] = useState<{ [key in 'nearby' | 'family']: FeedState }>({
     nearby: { ...initialFeedState },
     family: { ...initialFeedState, isLoading: false }, // Family feed doesn't load initially
   });
+  const [businessFeed, setBusinessFeed] = useState<BusinessFeedState>(initialBusinessFeedState);
+
   const [activeTab, setActiveTab] = useState<FeedType>('nearby');
   const [sortBy, setSortBy] = useState<SortOption>('newest');
   
@@ -126,7 +148,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser }) => {
   const [notificationPermissionStatus, setNotificationPermissionStatus] = useState<'default' | 'loading' | 'granted' | 'denied'>('default');
   const [showTroubleshootingDialog, setShowTroubleshootingDialog] = useState(false);
   
-  const fetchPosts = useCallback(async (feed: FeedType, page: number, sort: SortOption) => {
+  const fetchPosts = useCallback(async (feed: 'nearby' | 'family', page: number, sort: SortOption) => {
     setFeeds(prev => ({ ...prev, [feed]: { ...prev[feed], isLoading: true } }));
 
     try {
@@ -157,6 +179,28 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser }) => {
     }
   }, [location?.latitude, location?.longitude]);
 
+  const fetchBusinesses = useCallback(async (page: number, category?: string) => {
+    setBusinessFeed(prev => ({ ...prev, isLoading: true }));
+    try {
+      const newBusinesses = await getNearbyBusinesses({ page, limit: POSTS_PER_PAGE, latitude: location?.latitude, longitude: location?.longitude, category });
+      setBusinessFeed(prev => {
+        const allBusinesses = page === 1 ? newBusinesses : [...prev.businesses, ...newBusinesses.filter(b => !prev.businesses.some(eb => eb.id === b.id))];
+        return {
+          ...prev,
+          businesses: allBusinesses,
+          page: page,
+          hasMore: newBusinesses.length === POSTS_PER_PAGE,
+          isLoading: false,
+          category,
+        };
+      });
+    } catch (error) {
+      console.error('Error fetching businesses:', error);
+      setBusinessFeed(prev => ({ ...prev, isLoading: false }));
+    }
+  }, [location?.latitude, location?.longitude]);
+
+
   // Initial location fetch
   useEffect(() => {
     const locationPromise = new Promise<{ latitude: number; longitude: number } | null>(resolve => {
@@ -182,7 +226,11 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser }) => {
   // Fetch data for the initial tab once location is known
   useEffect(() => {
     if (location !== null || !navigator.geolocation) {
-        fetchPosts('nearby', 1, sortBy);
+        if(activeTab === 'nearby' || activeTab === 'family') {
+            fetchPosts(activeTab, 1, sortBy);
+        } else if (activeTab === 'business') {
+            fetchBusinesses(1, businessFeed.category);
+        }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location]);
@@ -190,9 +238,15 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser }) => {
   const handleTabChange = (value: string) => {
     const newTab = value as FeedType;
     setActiveTab(newTab);
-    // Fetch data for the new tab only if it hasn't been loaded before
-    if (feeds[newTab].posts.length === 0 && !feeds[newTab].isLoading) {
-        fetchPosts(newTab, 1, sortBy);
+    
+    if (newTab === 'business') {
+        if (businessFeed.businesses.length === 0 && !businessFeed.isLoading) {
+            fetchBusinesses(1, businessFeed.category);
+        }
+    } else {
+        if (feeds[newTab].posts.length === 0 && !feeds[newTab].isLoading) {
+            fetchPosts(newTab, 1, sortBy);
+        }
     }
   };
 
@@ -258,36 +312,48 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser }) => {
     }
   };
 
-  const refreshPosts = useCallback(async () => {
+  const refreshFeed = useCallback(async () => {
     setIsRefreshing(true);
-    await fetchPosts(activeTab, 1, sortBy);
+    if(activeTab === 'business') {
+        await fetchBusinesses(1, businessFeed.category);
+    } else {
+        await fetchPosts(activeTab, 1, sortBy);
+    }
     setIsRefreshing(false);
     if (window) window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [activeTab, fetchPosts, sortBy]);
+  }, [activeTab, fetchPosts, sortBy, fetchBusinesses, businessFeed.category]);
   
   const handleLoadMore = useCallback(async () => {
-    const currentFeed = feeds[activeTab];
-    if (currentFeed.isLoading || !currentFeed.hasMore) return;
-    fetchPosts(activeTab, currentFeed.page + 1, sortBy);
-  }, [feeds, activeTab, fetchPosts, sortBy]);
+    if (activeTab === 'business') {
+        if (businessFeed.isLoading || !businessFeed.hasMore) return;
+        fetchBusinesses(businessFeed.page + 1, businessFeed.category);
+    } else {
+        const currentFeed = feeds[activeTab];
+        if (currentFeed.isLoading || !currentFeed.hasMore) return;
+        fetchPosts(activeTab, currentFeed.page + 1, sortBy);
+    }
+  }, [feeds, activeTab, fetchPosts, sortBy, businessFeed, fetchBusinesses]);
 
   const observer = useRef<IntersectionObserver>();
   const loaderRef = useCallback((node: HTMLDivElement | null) => {
-    if (feeds[activeTab].isLoading) return;
+    const isLoading = activeTab === 'business' ? businessFeed.isLoading : feeds[activeTab].isLoading;
+    const hasMore = activeTab === 'business' ? businessFeed.hasMore : feeds[activeTab].hasMore;
+    
+    if (isLoading) return;
     if (observer.current) observer.current.disconnect();
 
     observer.current = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting && feeds[activeTab].hasMore) {
+      if (entries[0].isIntersecting && hasMore) {
         handleLoadMore();
       }
     });
 
     if (node) observer.current.observe(node);
-  }, [feeds, activeTab, handleLoadMore]);
+  }, [activeTab, businessFeed.isLoading, businessFeed.hasMore, feeds, handleLoadMore]);
 
   const swipeHandlers = useSwipeable({
     onSwipedDown: () => {
-      if (window.scrollY === 0) refreshPosts();
+      if (window.scrollY === 0) refreshFeed();
     },
     trackMouse: true,
   });
@@ -295,10 +361,42 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser }) => {
   const handleSortChange = (newSortBy: SortOption) => {
     if (newSortBy === sortBy) return;
     setSortBy(newSortBy);
-    fetchPosts(activeTab, 1, newSortBy);
+    if(activeTab !== 'business') {
+        fetchPosts(activeTab, 1, newSortBy);
+    }
   };
 
-  const renderFeedContent = (feed: FeedState, type: FeedType) => {
+  const handleCategoryChange = (newCategory: string) => {
+    const category = newCategory === 'all' ? undefined : newCategory;
+    if(category === businessFeed.category) return;
+    fetchBusinesses(1, category);
+  };
+
+  const renderFeedContent = () => {
+    if (activeTab === 'business') {
+        if ((businessFeed.isLoading && businessFeed.businesses.length === 0) || isRefreshing) {
+            return <PostFeedSkeleton />;
+        }
+        return (
+            <div className="space-y-6">
+                {businessFeed.businesses.length > 0 ? (
+                    businessFeed.businesses.map((business, index) => (
+                        <BusinessCard key={business.id} business={business} userLocation={location} />
+                    ))
+                ) : (
+                    <NoPostsContent feedType='business' />
+                )}
+                <div ref={loaderRef} className="h-1 w-full" />
+                {businessFeed.isLoading && businessFeed.businesses.length > 0 && (
+                    <div className="flex justify-center items-center py-6">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    </div>
+                )}
+            </div>
+        );
+    }
+    
+    const feed = feeds[activeTab];
     if ((feed.isLoading && feed.posts.length === 0) || isRefreshing) {
       return <PostFeedSkeleton />;
     }
@@ -310,7 +408,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser }) => {
             <PostCard key={post.id} post={post} userLocation={location} sessionUser={sessionUser} isFirst={index === 0} />
           ))
         ) : (
-          <NoPostsContent feedType={type} />
+          <NoPostsContent feedType={activeTab} />
         )}
         <div ref={loaderRef} className="h-1 w-full" />
         {feed.isLoading && feed.posts.length > 0 && (
@@ -321,7 +419,6 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser }) => {
       </div>
     );
   };
-
 
   return (
     <div {...swipeHandlers}>
@@ -357,25 +454,51 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser }) => {
             <TabsList>
                 <TabsTrigger value="nearby" className="flex items-center gap-2"><Rss className="w-4 h-4"/> Nearby</TabsTrigger>
                 {sessionUser && <TabsTrigger value="family" className="flex items-center gap-2"><Users className="w-4 h-4"/> Family</TabsTrigger>}
+                {sessionUser && <TabsTrigger value="business" className="flex items-center gap-2"><Briefcase className="w-4 h-4"/> Business</TabsTrigger>}
             </TabsList>
             <div className="flex items-center gap-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-9 shadow-sm">
-                    <Filter className="w-4 h-4 mr-2" />
-                    <span>Filter</span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>Sort By</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuRadioGroup value={sortBy} onValueChange={(v) => handleSortChange(v as SortOption)}>
-                    <DropdownMenuRadioItem value="newest">Newest</DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="likes">Most Popular</DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="comments">Most Discussed</DropdownMenuRadioItem>
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              {activeTab === 'business' ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-9 shadow-sm">
+                      <Filter className="w-4 h-4 mr-2" />
+                      <span>Category</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuRadioGroup value={businessFeed.category || 'all'} onValueChange={handleCategoryChange}>
+                      <DropdownMenuRadioItem value="all">All Categories</DropdownMenuRadioItem>
+                      <DropdownMenuSeparator />
+                        {Object.entries(BUSINESS_CATEGORIES).map(([group, categories]) => (
+                            <React.Fragment key={group}>
+                                <DropdownMenuLabel>{group}</DropdownMenuLabel>
+                                {categories.map(category => (
+                                    <DropdownMenuRadioItem key={category} value={category}>{category}</DropdownMenuRadioItem>
+                                ))}
+                            </React.Fragment>
+                        ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-9 shadow-sm">
+                      <Filter className="w-4 h-4 mr-2" />
+                      <span>Sort</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuLabel>Sort By</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuRadioGroup value={sortBy} onValueChange={(v) => handleSortChange(v as SortOption)}>
+                      <DropdownMenuRadioItem value="newest">Newest</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="likes">Most Popular</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="comments">Most Discussed</DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
 
               <Button
                   variant="outline"
@@ -391,13 +514,10 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser }) => {
         </div>
 
         <TabsContent value="nearby">
-           {renderFeedContent(feeds.nearby, 'nearby')}
+           {renderFeedContent()}
         </TabsContent>
-        {sessionUser && 
-            <TabsContent value="family">
-            {renderFeedContent(feeds.family, 'family')}
-            </TabsContent>
-        }
+        {sessionUser && <TabsContent value="family">{renderFeedContent()}</TabsContent>}
+        {sessionUser && <TabsContent value="business">{renderFeedContent()}</TabsContent>}
       </Tabs>
     </div>
   );

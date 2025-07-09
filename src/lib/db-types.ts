@@ -1,8 +1,45 @@
 
-
 export type UserRole = 'Business' | 'Gorakshak' | 'Admin' | 'Public(जनता)';
 
 export type SortOption = 'newest' | 'likes' | 'comments';
+
+export const BUSINESS_CATEGORIES = {
+  "Shops & Retail": [
+    "Grocery / Kirana Store", "Fruits & Vegetable Shop", "Bakery / Cake Shop",
+    "Sweet Shop", "Dairy / Milk Booth", "Meat & Fish Shop", "Stationery & Book Store",
+    "Gift / Toy Shop", "Garment / Clothing Store", "Footwear Store", "Cosmetics & Beauty Products",
+    "Mobile & Electronics Store", "Furniture Store", "Hardware / Paint Store",
+  ],
+  "Food & Beverage": [
+    "Restaurant", "Pizza Shop", "Fast Food Center", "Tea & Snacks Stall",
+    "Juice Center", "Ice Cream / Dessert Shop", "Café / Coffee Shop",
+  ],
+  "Beauty & Personal Care": [
+    "Saloon / Barber Shop", "Beauty Parlour", "Spa / Massage Center", "Mehendi / Tattoo Artist",
+  ],
+  "Home Services": [
+    "Electrician", "Plumber", "Carpenter", "Painter", "Civil Worker / Mason",
+    "AC / Refrigerator Mechanic", "CCTV Installer", "RO / Water Purifier Service", "Gas Stove Repair",
+  ],
+  "Professional & Utility Services": [
+    "Internet / Wifi Provider", "Cable TV Provider", "Property Dealer / Agent",
+    "Tuition Classes / Coaching", "Driving Instructor", "Computer Repair & Service",
+    "Laundry / Dry Cleaning", "Courier Service",
+  ],
+  "Transport & Travel": [
+    "Auto / Taxi Service", "Travels / Tours", "Packers & Movers", "Truck / Tempo Service",
+  ],
+  "Agriculture & Allied": [
+    "Dairy Farmer", "Poultry Farmer", "Vegetable Supplier", "Fertilizer / Seeds Store",
+  ],
+  "Skilled Workers & Labour": [
+    "Tailor", "Welding / Fabrication", "Blacksmith", "Goldsmith / Jeweller",
+  ],
+  "Others": [
+    "Event Planner / Decorator", "Photographer / Videographer", "Any Other",
+  ],
+};
+
 
 // Define the structure of a User for client-side use (omitting password)
 export interface User {
@@ -14,6 +51,12 @@ export interface User {
   createdat: string;
   profilepictureurl?: string | null;
   mobilenumber?: string | null;
+  business_category?: string | null;
+  business_other_category?: string | null;
+}
+
+export interface BusinessUser extends User {
+    distance?: number | null;
 }
 
 // For displaying in the following list
@@ -34,7 +77,9 @@ export type NewUser = {
   email: string;
   role: 'Business' | 'Gorakshak' | 'Public(जनता)';
   passwordplaintext: string;
-  mobilenumber?: string;
+  mobilenumber: string;
+  business_category?: string;
+  business_other_category?: string;
 };
 
 // For updating a user from the admin panel
@@ -44,6 +89,11 @@ export type UpdatableUserFields = {
   role: UserRole;
   status: 'pending' | 'approved' | 'rejected';
 };
+
+export type UpdateBusinessCategory = {
+    business_category: string;
+    business_other_category?: string;
+}
 
 
 // Define the structure of a Post, now with author details

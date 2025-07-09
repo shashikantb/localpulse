@@ -1,6 +1,6 @@
 
 import { Pool, Client, type QueryResult } from 'pg';
-import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Status, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest, FamilyMember, FamilyMemberLocation, SortOption } from '@/lib/db-types';
+import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Status, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest, FamilyMember, FamilyMemberLocation, SortOption, UpdateBusinessCategory, BusinessUser } from '@/lib/db-types';
 import bcrypt from 'bcryptjs';
 
 // Re-export db-types
@@ -74,11 +74,15 @@ async function initializeDbSchema(): Promise<void> {
             status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
             createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
             profilepictureurl TEXT,
-            mobilenumber VARCHAR(20)
+            mobilenumber VARCHAR(20),
+            business_category TEXT,
+            business_other_category TEXT
         );
         `);
         
         await initClient.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS mobilenumber VARCHAR(20);`);
+        await initClient.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS business_category TEXT;`);
+        await initClient.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS business_other_category TEXT;`);
         
         // Posts Table
         await initClient.query(`
@@ -165,6 +169,7 @@ async function initializeDbSchema(): Promise<void> {
         await initClient.query('CREATE INDEX IF NOT EXISTS idx_family_relationships_user2 ON family_relationships(user_id_2)');
         await initClient.query('CREATE INDEX IF NOT EXISTS idx_device_tokens_location ON device_tokens (user_id, last_updated DESC) WHERE latitude IS NOT NULL AND longitude IS NOT NULL');
         await initClient.query('CREATE INDEX IF NOT EXISTS idx_posts_is_family_post ON posts (is_family_post)');
+        await initClient.query('CREATE INDEX IF NOT EXISTS users_geo_idx ON users USING gist (ll_to_earth(latitude, longitude)) WHERE role = \'Business\'');
 
         await initClient.query('COMMIT');
         console.log('Database schema initialized successfully via dedicated client.');
@@ -209,7 +214,7 @@ const POST_COLUMNS_SANITIZED = `
 `;
 
 const USER_COLUMNS_SANITIZED = `
-  id, email, name, role, status, createdat, profilepictureurl, mobilenumber
+  id, email, name, role, status, createdat, profilepictureurl, mobilenumber, business_category, business_other_category
 `;
 
 export async function getPostsDb(
@@ -229,13 +234,18 @@ export async function getPostsDb(
   const client = await dbPool.connect();
   try {
     let orderByClause: string;
-    const queryParams: (string | number)[] = [options.limit, options.offset];
+    const queryParams: (string | number)[] = [];
     const sortBy = options.sortBy || 'newest';
 
-    if (sortBy === 'newest' && options.latitude != null && options.longitude != null) {
-      const distanceCalc = `earth_distance(ll_to_earth(p.latitude, p.longitude), ll_to_earth($3, $4))`;
-      queryParams.push(options.latitude, options.longitude);
-      
+    let paramIndex = 1;
+
+    let distanceCalc = '';
+    if (options.latitude != null && options.longitude != null) {
+        distanceCalc = `earth_distance(ll_to_earth(p.latitude, p.longitude), ll_to_earth($${paramIndex++}, $${paramIndex++}))`;
+        queryParams.push(options.latitude, options.longitude);
+    }
+    
+    if (sortBy === 'newest' && distanceCalc) {
       orderByClause = `
         CASE
           WHEN ${distanceCalc} < 20000 THEN 1
@@ -269,8 +279,10 @@ export async function getPostsDb(
       LEFT JOIN users u ON p.authorid = u.id
       WHERE p.is_family_post = false
       ORDER BY ${orderByClause}
-      LIMIT $1 OFFSET $2
+      LIMIT $${paramIndex++} OFFSET $${paramIndex++}
     `;
+
+    queryParams.push(options.limit, options.offset);
 
     const postsResult = await client.query(postsQuery, queryParams);
     return postsResult.rows;
@@ -541,7 +553,7 @@ export async function addOrUpdateDeviceTokenDb(token: string, latitude?: number,
 
   const client = await dbPool.connect();
   try {
-    const query = `
+      const query = `
       INSERT INTO device_tokens (token, latitude, longitude, user_id, last_updated)
       VALUES ($1, $2, $3, $4, NOW())
       ON CONFLICT (token) DO UPDATE 
@@ -551,6 +563,11 @@ export async function addOrUpdateDeviceTokenDb(token: string, latitude?: number,
             last_updated = NOW();
     `;
     await client.query(query, [token, latitude, longitude, userId]);
+
+    // Also update the user's last known location if they are a business
+    if (userId && latitude && longitude) {
+        await client.query(`UPDATE users SET latitude = $1, longitude = $2 WHERE id = $3 AND role = 'Business'`, [latitude, longitude, userId]);
+    }
   } finally {
     client.release();
   }
@@ -569,6 +586,9 @@ export async function updateUserLocationDb(userId: number, latitude: number, lon
       WHERE user_id = $3;
     `;
     await client.query(query, [latitude, longitude, userId]);
+     if (latitude && longitude) {
+        await client.query(`UPDATE users SET latitude = $1, longitude = $2 WHERE id = $3 AND role = 'Business'`, [latitude, longitude, userId]);
+    }
   } finally {
     client.release();
   }
@@ -761,11 +781,11 @@ export async function createUserDb(newUser: NewUser, status: 'pending' | 'approv
       const passwordhash = await bcrypt.hash(newUser.passwordplaintext, salt);
       
       const query = `
-          INSERT INTO users(name, email, passwordhash, role, status, mobilenumber)
-          VALUES($1, $2, $3, $4, $5, $6)
+          INSERT INTO users(name, email, passwordhash, role, status, mobilenumber, business_category, business_other_category)
+          VALUES($1, $2, $3, $4, $5, $6, $7, $8)
           RETURNING ${USER_COLUMNS_SANITIZED};
       `;
-      const values = [newUser.name, newUser.email.toLowerCase(), passwordhash, newUser.role, status, newUser.mobilenumber];
+      const values = [newUser.name, newUser.email.toLowerCase(), passwordhash, newUser.role, status, newUser.mobilenumber, newUser.business_category, newUser.business_other_category];
       const result: QueryResult<User> = await client.query(query, values);
       return result.rows[0];
     } finally {
@@ -1427,6 +1447,26 @@ export async function updateUserMobileDb(userId: number, mobileNumber: string): 
     }
 }
 
+export async function updateUserBusinessCategoryDb(userId: number, data: UpdateBusinessCategory): Promise<User | null> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) throw new Error("Database not configured.");
+
+    const client = await dbPool.connect();
+    try {
+        const query = `
+            UPDATE users
+            SET business_category = $1, business_other_category = $2
+            WHERE id = $3
+            RETURNING ${USER_COLUMNS_SANITIZED};
+        `;
+        const result = await client.query(query, [data.business_category, data.business_other_category, userId]);
+        return result.rows[0] || null;
+    } finally {
+        client.release();
+    }
+}
+
 // --- Family Relationship Functions ---
 
 export async function getFamilyRelationshipDb(userId1: number, userId2: number): Promise<FamilyRelationship | null> {
@@ -1652,4 +1692,48 @@ export async function getRecipientsForSosDb(senderId: number): Promise<{ id: num
     } finally {
         client.release();
     }
+}
+
+// --- Business Functions ---
+
+export async function getNearbyBusinessesDb(options: {
+  limit: number;
+  offset: number;
+  latitude: number;
+  longitude: number;
+  category?: string;
+}): Promise<BusinessUser[]> {
+  await ensureDbInitialized();
+  const dbPool = getDbPool();
+  if (!dbPool) return [];
+
+  const client = await dbPool.connect();
+  try {
+    const { limit, offset, latitude, longitude, category } = options;
+    const queryParams: any[] = [latitude, longitude, 20000, limit, offset]; // 20km radius
+
+    let categoryFilter = '';
+    if (category) {
+        queryParams.push(category);
+        categoryFilter = `AND business_category = $${queryParams.length}`;
+    }
+
+    const distanceCalc = `earth_distance(ll_to_earth(latitude, longitude), ll_to_earth($1, $2))`;
+
+    const query = `
+        SELECT ${USER_COLUMNS_SANITIZED}, ${distanceCalc} as distance
+        FROM users
+        WHERE role = 'Business'
+          AND status = 'approved'
+          AND ${distanceCalc} <= $3
+          ${categoryFilter}
+        ORDER BY distance ASC
+        LIMIT $4 OFFSET $5;
+    `;
+
+    const result = await client.query(query, queryParams);
+    return result.rows;
+  } finally {
+    client.release();
+  }
 }

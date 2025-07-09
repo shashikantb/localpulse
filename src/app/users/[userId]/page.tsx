@@ -5,7 +5,7 @@ import { getPostsByUserId, getFamilyMembers, getPendingFamilyRequests, getFamily
 import { getSession } from '@/app/auth/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardHeader, CardContent, CardTitle, CardDescription } from '@/components/ui/card';
-import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, MessageSquare, Settings, Users } from 'lucide-react';
+import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, MessageSquare, Settings, Users, Briefcase } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { PostCard } from '@/components/post-card';
@@ -26,7 +26,7 @@ import FamilyRequestsList from '@/components/family-requests-list';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import DeleteAccountButton from '@/components/delete-account-button';
 import { Separator } from '@/components/ui/separator';
-
+import UpdateUserDetailsModal from '@/components/update-user-details-modal';
 
 interface UserProfilePageProps {
   params: {
@@ -74,10 +74,16 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
   };
 
   const isGorakshak = profileUser.role === 'Gorakshak';
+  const isBusiness = profileUser.role === 'Business';
+
+  const needsProfileUpdate = isOwnProfile && (!sessionUser?.mobilenumber || (sessionUser?.role === 'Business' && !sessionUser?.business_category));
+
 
   return (
     <div className="flex flex-col items-center p-4 sm:p-6 md:p-8 lg:p-16 bg-gradient-to-br from-background to-muted/30">
       <div className="container mx-auto max-w-2xl space-y-8 py-8 mb-20">
+
+        {needsProfileUpdate && <UpdateUserDetailsModal user={sessionUser!} />}
 
         <Card className="shadow-xl border border-border/60 rounded-xl bg-card/80 backdrop-blur-sm">
           <CardHeader className="flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-6 p-6">
@@ -167,6 +173,16 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
               <p className="text-sm text-muted-foreground pt-1 flex items-center justify-center md:justify-start gap-2">
                 <Mail className="w-4 h-4" /> {profileUser.email}
               </p>
+              {profileUser.mobilenumber &&
+                <p className="text-sm text-muted-foreground pt-1 flex items-center justify-center md:justify-start gap-2">
+                    <Phone className="w-4 h-4" /> {profileUser.mobilenumber}
+                </p>
+              }
+              {isBusiness && profileUser.business_category &&
+                <p className="text-sm text-muted-foreground pt-1 flex items-center justify-center md:justify-start gap-2">
+                    <Briefcase className="w-4 h-4" /> {profileUser.business_category === 'Any Other' ? profileUser.business_other_category : profileUser.business_category}
+                </p>
+              }
                <p className="text-xs text-muted-foreground flex items-center justify-center md:justify-start gap-1.5">
                 <Calendar className="w-3 h-3"/> Joined: {new Date(profileUser.createdat).toLocaleDateString()}
                </p>
