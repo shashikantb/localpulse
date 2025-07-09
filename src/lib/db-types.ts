@@ -53,6 +53,8 @@ export interface User {
   mobilenumber?: string | null;
   business_category?: string | null;
   business_other_category?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface BusinessUser extends User {

@@ -76,13 +76,18 @@ async function initializeDbSchema(): Promise<void> {
             profilepictureurl TEXT,
             mobilenumber VARCHAR(20),
             business_category TEXT,
-            business_other_category TEXT
+            business_other_category TEXT,
+            latitude REAL,
+            longitude REAL
         );
         `);
         
         await initClient.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS mobilenumber VARCHAR(20);`);
         await initClient.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS business_category TEXT;`);
         await initClient.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS business_other_category TEXT;`);
+        await initClient.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS latitude REAL;`);
+        await initClient.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS longitude REAL;`);
+
         
         // Posts Table
         await initClient.query(`
@@ -214,7 +219,7 @@ const POST_COLUMNS_SANITIZED = `
 `;
 
 const USER_COLUMNS_SANITIZED = `
-  id, email, name, role, status, createdat, profilepictureurl, mobilenumber, business_category, business_other_category
+  id, email, name, role, status, createdat, profilepictureurl, mobilenumber, business_category, business_other_category, latitude, longitude
 `;
 
 export async function getPostsDb(
@@ -566,7 +571,7 @@ export async function addOrUpdateDeviceTokenDb(token: string, latitude?: number,
 
     // Also update the user's last known location if they are a business
     if (userId && latitude && longitude) {
-        await client.query(`UPDATE users SET latitude = $1, longitude = $2 WHERE id = $3 AND role = 'Business'`, [latitude, longitude, userId]);
+        await client.query(`UPDATE users SET latitude = $1, longitude = $2 WHERE id = $3`, [latitude, longitude, userId]);
     }
   } finally {
     client.release();
@@ -587,7 +592,7 @@ export async function updateUserLocationDb(userId: number, latitude: number, lon
     `;
     await client.query(query, [latitude, longitude, userId]);
      if (latitude && longitude) {
-        await client.query(`UPDATE users SET latitude = $1, longitude = $2 WHERE id = $3 AND role = 'Business'`, [latitude, longitude, userId]);
+        await client.query(`UPDATE users SET latitude = $1, longitude = $2 WHERE id = $3`, [latitude, longitude, userId]);
     }
   } finally {
     client.release();
@@ -1564,7 +1569,7 @@ export async function getFamilyMembersForUserDb(userId: number): Promise<FamilyM
     try {
         const query = `
             SELECT
-                u.*,
+                u.id, u.name, u.role, u.status, u.createdat, u.profilepictureurl, u.mobilenumber, u.business_category, u.business_other_category,
                 CASE
                     WHEN fr.user_id_1 = $1 THEN fr.share_location_from_1_to_2
                     ELSE fr.share_location_from_2_to_1
@@ -1725,6 +1730,7 @@ export async function getNearbyBusinessesDb(options: {
         FROM users
         WHERE role = 'Business'
           AND status = 'approved'
+          AND latitude IS NOT NULL AND longitude IS NOT NULL
           AND ${distanceCalc} <= $3
           ${categoryFilter}
         ORDER BY distance ASC
