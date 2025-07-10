@@ -37,7 +37,7 @@ export default async function RootLayout({
           <FirebaseMessagingClient />
           <Header />
           <StickyNav user={user} />
-          <main className="flex-grow">
+          <main className="flex-grow flex flex-col">
             {children}
           </main>
           <Footer />

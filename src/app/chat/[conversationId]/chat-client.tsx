@@ -57,8 +57,7 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
-  const containerRef = useRef<HTMLDivElement>(null);
-
+  
   // Use a ref to track the sending state inside the polling interval
   // to avoid re-creating the interval on every state change.
   const isSendingRef = useRef(isSending);
@@ -102,26 +101,6 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
     };
   }, [conversationId]);
   
-  // This effect handles the keyboard visibility for WebViews
-  useEffect(() => {
-    const visualViewport = window.visualViewport;
-    if (!visualViewport) return;
-
-    const handler = () => {
-      if (containerRef.current) {
-        const keyboardHeight = visualViewport.height < window.innerHeight
-          ? window.innerHeight - visualViewport.height
-          : 0;
-        containerRef.current.style.setProperty('--keyboard-inset', `${keyboardHeight}px`);
-      }
-    };
-
-    visualViewport.addEventListener('resize', handler);
-    handler(); // Run once on mount
-
-    return () => visualViewport.removeEventListener('resize', handler);
-  }, []);
-
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || isSending) return;
@@ -159,11 +138,7 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
   };
 
   return (
-    <div
-      ref={containerRef}
-      className="flex flex-col bg-background"
-      style={{ height: 'calc(100svh - var(--keyboard-inset, 0px))' }}
-    >
+    <div className="flex flex-col h-full bg-background">
       <header className="flex-shrink-0 flex items-center p-3 border-b bg-card">
         <Link href={`/users/${partner.id}`} className="flex items-center gap-3 hover:bg-muted p-2 rounded-md">
             <Avatar>

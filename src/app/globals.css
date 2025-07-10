@@ -43,6 +43,15 @@
     --sidebar-accent-foreground: 0 0% 9%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 180 100% 15%;
+
+    /* Custom variable for header heights */
+    --header-height: 8.5rem; /* 3.5rem for top header + 3.5rem for sticky nav */
+  }
+
+  @media (max-width: 768px) {
+    :root {
+      --header-height: 7rem;
+    }
   }
  
   .dark {
