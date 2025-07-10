@@ -1,25 +1,27 @@
 
+
 'use client';
 
 import type { FC } from 'react';
-import React, { useRef, useCallback, useState } from 'react';
+import React, from 'react';
 import { toPng } from 'html-to-image';
 import type { User } from '@/lib/db-types';
 import { Button } from './ui/button';
 import { Download, Loader2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { useToast } from '@/hooks/use-toast';
+import { uploadAndGetPublicUrl } from '@/app/actions';
 
 interface BajrangDalIdCardProps {
   user: User;
 }
 
 const BajrangDalIdCard: FC<BajrangDalIdCardProps> = ({ user }) => {
-  const cardRef = useRef<HTMLDivElement>(null);
-  const [isDownloading, setIsDownloading] = useState(false);
+  const cardRef = React.useRef<HTMLDivElement>(null);
+  const [isDownloading, setIsDownloading] = React.useState(false);
   const { toast } = useToast();
 
-  const onDownload = useCallback(async () => {
+  const onDownload = React.useCallback(async () => {
     if (cardRef.current === null) {
       return;
     }
@@ -28,31 +30,36 @@ const BajrangDalIdCard: FC<BajrangDalIdCardProps> = ({ user }) => {
       const dataUrl = await toPng(cardRef.current, {
         cacheBust: true,
         quality: 0.98,
-        pixelRatio: 2.5, // Increase pixel ratio for better quality
+        pixelRatio: 2.5,
       });
       
-      // Open the generated image in a new tab
-      const newWindow = window.open(dataUrl, '_blank');
-      if (!newWindow) {
-        // This might happen if pop-ups are blocked
-        toast({
-          variant: 'destructive',
-          title: 'Action Required',
-          description: 'Could not open new tab. Please disable your pop-up blocker and try again.',
-        });
+      const fileName = `bajrang-dal-id-card-${user.id}.png`;
+      const result = await uploadAndGetPublicUrl(dataUrl, fileName);
+
+      if (result.success && result.url) {
+        const newWindow = window.open(result.url, '_blank');
+        if (!newWindow) {
+          toast({
+            variant: 'destructive',
+            title: 'Action Required',
+            description: 'Could not open new tab. Please disable your pop-up blocker and try again.',
+          });
+        }
+      } else {
+        throw new Error(result.error || 'Failed to get public URL for the image.');
       }
 
-    } catch (err) {
-      console.error('Failed to generate ID card image:', err);
+    } catch (err: any) {
+      console.error('Failed to generate or upload ID card image:', err);
       toast({
         variant: 'destructive',
-        title: 'Generation Failed',
-        description: 'Could not create the ID card image. Please try again.',
+        title: 'Download Failed',
+        description: err.message || 'Could not create the ID card image. Please try again.',
       });
     } finally {
       setIsDownloading(false);
     }
-  }, [toast]);
+  }, [cardRef, user.id, toast]);
 
   return (
     <div className="space-y-4">
