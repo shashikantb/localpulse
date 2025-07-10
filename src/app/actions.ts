@@ -120,9 +120,7 @@ export async function getMediaPosts(options?: { page: number; limit: number }): 
 
 async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[] = []) {
   try {
-    // If it's a family post, do not send notifications to nearby users.
     if (post.is_family_post) {
-      // Potentially send notifications to family members in the future.
       return; 
     }
       
@@ -130,10 +128,13 @@ async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[
     const failedTokens: string[] = [];
     const processedTokens = new Set<string>();
     const authorDisplayName = post.authorname || 'an Anonymous Pulsar';
+    const postUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://localpulse.in'}/posts/${post.id}`;
 
-    const notificationPayload = {
+    const nearbyNotificationData = {
         title: `New Pulse Nearby from ${authorDisplayName}!`,
         body: post.content.substring(0, 100) + (post.content.length > 100 ? '...' : ''),
+        postId: String(post.id),
+        click_action: postUrl
     };
 
     // 1. Send notifications to mentioned users
@@ -141,19 +142,17 @@ async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[
         const mentionedTokens = await db.getDeviceTokensForUsersDb(mentionedUserIds);
         if (mentionedTokens.length > 0) {
             mentionedTokens.forEach(t => processedTokens.add(t));
+            
             const message = {
-                notification: {
-                  ...notificationPayload,
+                data: {
+                  ...nearbyNotificationData,
                   title: `${authorDisplayName} mentioned you in a pulse!`,
                 },
-                data: {
-                    postId: String(post.id)
-                },
                 tokens: mentionedTokens,
-                android: {
-                  priority: 'high' as const,
-                },
+                android: { priority: 'high' as const },
+                apns: { payload: { aps: { 'content-available': 1 } } }
             };
+            
             const response = await firebaseAdmin.messaging().sendEachForMulticast(message);
             successCount += response.successCount;
             response.responses.forEach((resp, idx) => {
@@ -167,14 +166,10 @@ async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[
     const nearbyOnlyTokens = nearbyTokens.filter(t => !processedTokens.has(t));
     if (nearbyOnlyTokens.length > 0) {
         const message = {
-            notification: notificationPayload,
-            data: {
-                postId: String(post.id)
-            },
+            data: nearbyNotificationData,
             tokens: nearbyOnlyTokens,
-            android: {
-              priority: 'high' as const,
-            },
+            android: { priority: 'high' as const },
+            apns: { payload: { aps: { 'content-available': 1 } } }
         };
         const response = await firebaseAdmin.messaging().sendEachForMulticast(message);
         successCount += response.successCount;
@@ -207,19 +202,19 @@ async function sendChatNotification(conversationId: number, sender: User, conten
     const deviceTokens = await db.getDeviceTokensForUsersDb([partner.id]);
     if (deviceTokens.length === 0) return;
 
+    const chatUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://localpulse.in'}/chat/${conversationId}`;
+
     const notificationPayload = {
-      notification: {
-        title: title || `New message from ${sender.name}`,
-        body: content.length > 100 ? `${content.substring(0, 97)}...` : content,
-      },
       data: {
-        conversationId: String(conversationId),
-        type: 'chat_message',
+          title: title || `New message from ${sender.name}`,
+          body: content.length > 100 ? `${content.substring(0, 97)}...` : content,
+          conversationId: String(conversationId),
+          type: 'chat_message',
+          click_action: chatUrl
       },
       tokens: deviceTokens,
-      android: {
-        priority: 'high' as const,
-      },
+      android: { priority: 'high' as const },
+      apns: { payload: { aps: { 'content-available': 1 } } }
     };
 
     const response = await firebaseAdmin.messaging().sendEachForMulticast(notificationPayload);
@@ -227,9 +222,7 @@ async function sendChatNotification(conversationId: number, sender: User, conten
     if (response.failureCount > 0) {
       const failedTokens: string[] = [];
       response.responses.forEach((resp, idx) => {
-        if (!resp.success) {
-          failedTokens.push(deviceTokens[idx]);
-        }
+        if (!resp.success) failedTokens.push(deviceTokens[idx]);
       });
       console.error('List of tokens that failed for chat notification:', failedTokens);
       for (const token of failedTokens) {
@@ -244,42 +237,34 @@ async function sendChatNotification(conversationId: number, sender: User, conten
 
 async function sendNotificationForNewComment(comment: Comment, post: Post) {
   try {
-    // Basic checks: ensure there is a post author and the commenter is not the author
     if (!post.authorid) return;
     
     const { user: commenterUser } = await getSession();
-    if (commenterUser && commenterUser.id === post.authorid) {
-      return; // Don't send notifications for own comments
-    }
+    if (commenterUser && commenterUser.id === post.authorid) return;
 
-    // Fetch the post author's device tokens
     const authorDeviceTokens = await db.getDeviceTokensForUsersDb([post.authorid]);
     if (authorDeviceTokens.length === 0) return;
 
-    // Construct and send the notification
+    const postUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://localpulse.in'}/posts/${post.id}`;
+
     const notificationPayload = {
-      notification: {
-        title: `${comment.author} commented on your pulse`,
-        body: comment.content.length > 100 ? `${comment.content.substring(0, 97)}...` : comment.content,
-      },
       data: {
-        postId: String(post.id),
+          title: `${comment.author} commented on your pulse`,
+          body: comment.content.length > 100 ? `${comment.content.substring(0, 97)}...` : comment.content,
+          postId: String(post.id),
+          click_action: postUrl
       },
       tokens: authorDeviceTokens,
-      android: {
-        priority: 'high' as const,
-      },
+      android: { priority: 'high' as const },
+      apns: { payload: { aps: { 'content-available': 1 } } }
     };
 
     const response = await firebaseAdmin.messaging().sendEachForMulticast(notificationPayload);
 
-    // Clean up any failed tokens
     if (response.failureCount > 0) {
       const failedTokens: string[] = [];
       response.responses.forEach((resp, idx) => {
-        if (!resp.success) {
-          failedTokens.push(authorDeviceTokens[idx]);
-        }
+        if (!resp.success) failedTokens.push(authorDeviceTokens[idx]);
       });
       console.error('List of tokens that failed for new comment notification:', failedTokens);
       for (const token of failedTokens) {
