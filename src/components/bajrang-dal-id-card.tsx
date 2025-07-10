@@ -1,15 +1,15 @@
 
-
 'use client';
 
 import type { FC } from 'react';
-import React, from 'react';
-import { toPng } from 'html-to-image';
+import React from 'react';
+import { toBlob } from 'html-to-image';
 import type { User } from '@/lib/db-types';
 import { Button } from './ui/button';
 import { Download, Loader2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { useToast } from '@/hooks/use-toast';
+import { getSignedUploadUrl } from '@/app/actions';
 
 interface BajrangDalIdCardProps {
   user: User;
@@ -22,35 +22,69 @@ const BajrangDalIdCard: FC<BajrangDalIdCardProps> = ({ user }) => {
 
   const onDownload = React.useCallback(async () => {
     if (cardRef.current === null) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Could not find the card element to download.',
+      });
       return;
     }
+    
     setIsDownloading(true);
+    
     try {
-      const dataUrl = await toPng(cardRef.current, {
+      // 1. Generate the image as a Blob directly in the browser.
+      const imageBlob = await toBlob(cardRef.current, {
         cacheBust: true,
         quality: 0.98,
         pixelRatio: 2.5,
       });
 
-      // Create a temporary link element and click it to trigger the download
-      const link = document.createElement('a');
-      link.download = `bajrang-dal-id-card-${user.id}.png`;
-      link.href = dataUrl;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      if (!imageBlob) {
+        throw new Error('Failed to generate ID card image blob.');
+      }
+
+      // 2. Get a pre-signed URL from our server to upload the file to GCS.
+      // This is a small request and won't exceed the 1MB limit.
+      const fileName = `id-card-${user.id}-${Date.now()}.png`;
+      const signedUrlResult = await getSignedUploadUrl(fileName, imageBlob.type);
+
+      if (!signedUrlResult.success || !signedUrlResult.uploadUrl || !signedUrlResult.publicUrl) {
+          throw new Error(signedUrlResult.error || 'Could not get an upload URL from the server.');
+      }
+
+      // 3. Upload the Blob directly to Google Cloud Storage from the browser.
+      // This bypasses our server, avoiding any payload size limits.
+      const uploadResponse = await fetch(signedUrlResult.uploadUrl, {
+          method: 'PUT',
+          body: imageBlob,
+          headers: { 'Content-Type': imageBlob.type },
+      });
+
+      if (!uploadResponse.ok) {
+          throw new Error('Failed to upload the generated image to storage.');
+      }
       
+      // 4. Open the public GCS URL. This is a standard HTTPS link.
+      // The Android WebView's DownloadListener can handle this URL correctly.
+      window.open(signedUrlResult.publicUrl, '_blank');
+      
+      toast({
+        title: 'Download Started',
+        description: 'Your ID card is being downloaded.',
+      });
+
     } catch (err: any) {
       console.error('Failed to generate or download ID card image:', err);
       toast({
         variant: 'destructive',
         title: 'Download Failed',
-        description: err.message || 'Could not create the ID card image. Please try again.',
+        description: err.message || 'An unexpected error occurred. Please try again.',
       });
     } finally {
       setIsDownloading(false);
     }
-  }, [cardRef, user.id, toast]);
+  }, [user.id, toast]);
 
   return (
     <div className="space-y-4">
