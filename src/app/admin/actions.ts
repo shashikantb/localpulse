@@ -24,6 +24,7 @@ export async function adminLogin(username: string, password: string): Promise<{ 
         path: '/',
         sameSite: 'strict',
         expires: expires,
+        maxAge: maxAgeInSeconds,
       });
       return { success: true };
     } else {
