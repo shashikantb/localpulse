@@ -6,7 +6,7 @@ import React, { useRef, useCallback, useState } from 'react';
 import { toPng } from 'html-to-image';
 import type { User } from '@/lib/db-types';
 import { Button } from './ui/button';
-import { Download, Phone, User as UserIcon, Shield, Loader2 } from 'lucide-react';
+import { Download, Loader2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 
@@ -28,44 +28,42 @@ const BajrangDalIdCard: FC<BajrangDalIdCardProps> = ({ user }) => {
       const dataUrl = await toPng(cardRef.current, {
         cacheBust: true,
         quality: 0.98,
-        pixelRatio: 2,
+        pixelRatio: 2.5, // Increase pixel ratio for better quality
       });
       
-      const link = document.createElement('a');
-      link.href = dataUrl;
-      link.download = `BajrangDal-ID-Card-${user.name.replace(/\s/g, '_')}.png`;
-      
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      toast({
-        title: 'Download Started!',
-        description: 'Your ID card is being downloaded.',
-      });
+      // Open the generated image in a new tab
+      const newWindow = window.open(dataUrl, '_blank');
+      if (!newWindow) {
+        // This might happen if pop-ups are blocked
+        toast({
+          variant: 'destructive',
+          title: 'Action Required',
+          description: 'Could not open new tab. Please disable your pop-up blocker and try again.',
+        });
+      }
 
     } catch (err) {
-      console.error('Failed to download ID card:', err);
+      console.error('Failed to generate ID card image:', err);
       toast({
         variant: 'destructive',
-        title: 'Download Failed',
-        description: 'Could not generate the ID card image. Please try again.',
+        title: 'Generation Failed',
+        description: 'Could not create the ID card image. Please try again.',
       });
     } finally {
       setIsDownloading(false);
     }
-  }, [cardRef, user.name, toast]);
+  }, [toast]);
 
   return (
     <div className="space-y-4">
       <div 
         ref={cardRef} 
-        className="relative w-full max-w-sm mx-auto h-[550px] overflow-hidden"
+        className="relative w-full max-w-sm h-[550px] overflow-hidden"
         style={{
           backgroundImage: `url('/images/bajrang-dal-id-card-bg.jpg')`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
-          color: '#5D4037',
+          color: '#5D4037', // Dark rich brown for text
         }}
       >
         {/* User Photo */}
@@ -79,7 +77,7 @@ const BajrangDalIdCard: FC<BajrangDalIdCardProps> = ({ user }) => {
         </div>
 
         {/* User Details */}
-        <div className="absolute bottom-10 left-6 right-6">
+        <div className="absolute bottom-10 left-6 right-6" style={{ textShadow: '0px 1px 3px rgba(255,255,255,0.7)' }}>
             <div className="space-y-1 text-left">
                 <p className="font-bold text-lg">ID: BD-{user.id}</p>
                 <p className="font-bold text-lg">Name: {user.name}</p>
