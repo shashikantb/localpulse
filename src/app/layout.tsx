@@ -1,5 +1,6 @@
 
 import type { Metadata } from 'next';
+import Script from 'next/script';
 import { GeistSans } from 'geist/font/sans';
 import '@/app/globals.css';
 import { Toaster } from '@/components/ui/toaster';
@@ -10,6 +11,8 @@ import StickyNav from '@/components/sticky-nav';
 import { Providers } from '@/app/providers';
 import { getSession } from '@/app/auth/actions';
 import FirebaseMessagingClient from '@/components/firebase-messaging-client';
+import { cookies } from 'next/headers';
+
 
 // The geist font package exports an object with the variable name pre-configured.
 // We just need to use it directly.
@@ -25,12 +28,16 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const { user } = await getSession();
+  const userToken = cookies().get('user-auth-token')?.value;
 
   return (
     <html lang="en" className="h-full" suppressHydrationWarning>
       <head>
         <meta charSet="UTF-8" />
         {/* Next.js will populate this head based on metadata and other conventions */}
+        {userToken && (
+           <meta name="user-token" content={userToken} />
+        )}
       </head>
       <body className={`${GeistSans.variable} antialiased bg-background text-foreground flex flex-col min-h-svh`}>
         <Providers>
@@ -44,6 +51,27 @@ export default async function RootLayout({
           <AppInstallPrompt />
           <Toaster />
         </Providers>
+
+        {userToken && (
+          <Script id="webview-cookie-bridge" strategy="afterInteractive">
+            {`
+              try {
+                const tokenMeta = document.querySelector('meta[name="user-token"]');
+                if (tokenMeta && window.Android && typeof window.Android.setAuthCookie === 'function') {
+                  const token = tokenMeta.getAttribute('content');
+                  const domain = window.location.hostname;
+                  if (token) {
+                    console.log('WebView Bridge: Setting auth cookie for domain ' + domain);
+                    // The domain should be the base domain, e.g., "localpulse.in"
+                    window.Android.setAuthCookie(token, 'user-auth-token', domain);
+                  }
+                }
+              } catch (e) {
+                console.error('WebView Bridge Error:', e);
+              }
+            `}
+          </Script>
+        )}
       </body>
     </html>
   );
