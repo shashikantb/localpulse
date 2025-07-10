@@ -99,7 +99,6 @@ export async function login(email: string, password: string): Promise<{ success:
     const sessionPayload = { userId: user.id };
     const sessionToken = await encrypt(sessionPayload);
     const maxAgeInSeconds = 10 * 365 * 24 * 60 * 60; // 10 years
-    const expires = new Date(Date.now() + maxAgeInSeconds * 1000);
     
     const isProduction = process.env.NODE_ENV === 'production';
     // This allows login on HTTP during development or behind a misconfigured reverse proxy.
@@ -109,8 +108,7 @@ export async function login(email: string, password: string): Promise<{ success:
     cookies().set(USER_COOKIE_NAME, sessionToken, {
       httpOnly: true,
       secure: isProduction && !allowInsecure, // The cookie is secure in production, UNLESS explicitly overridden
-      expires: expires,
-      maxAge: maxAgeInSeconds, // Use maxAge for modern browsers
+      maxAge: maxAgeInSeconds, // Use maxAge for modern browsers. This makes the cookie persistent.
       sameSite: 'lax',
       path: '/',
     });
@@ -211,4 +209,3 @@ export async function deleteCurrentUserAccount(): Promise<{ success: boolean; er
     return { success: false, error: 'An unexpected server error occurred while deleting your account.' };
   }
 }
-
