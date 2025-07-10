@@ -1,5 +1,4 @@
 
-
 import { Pool, Client, type QueryResult } from 'pg';
 import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest, FamilyMember, FamilyMemberLocation, SortOption, UpdateBusinessCategory, BusinessUser, GorakshakReportUser } from '@/lib/db-types';
 import bcrypt from 'bcryptjs';
@@ -254,8 +253,8 @@ export async function getPostsDb(
   const client = await dbPool.connect();
   try {
     let orderByClause: string;
-    const queryParams: (string | number | null)[] = [];
-    let paramIndex = 1;
+    const queryParams: (string | number | null)[] = [options.currentUserId || null];
+    let paramIndex = 2; // Start from 2 because currentUserId is always $1
 
     let distanceCalc = '';
     if (options.latitude != null && options.longitude != null) {
@@ -263,13 +262,8 @@ export async function getPostsDb(
         queryParams.push(options.latitude, options.longitude);
     }
     
-    // Always add currentUserId to params, even if it's null
-    queryParams.push(options.currentUserId || null);
-    const userIdParamIndex = paramIndex++;
-    
-    // These boolean flags will be included in the SELECT statement
-    const likeCheck = `EXISTS(SELECT 1 FROM post_likes pl WHERE pl.post_id = p.id AND pl.user_id = $${userIdParamIndex}::int)`;
-    const followCheck = `p.authorid IS NOT NULL AND EXISTS(SELECT 1 FROM user_followers uf WHERE uf.following_id = p.authorid AND uf.follower_id = $${userIdParamIndex}::int)`;
+    const likeCheck = `EXISTS(SELECT 1 FROM post_likes pl WHERE pl.post_id = p.id AND pl.user_id = $1::int)`;
+    const followCheck = `p.authorid IS NOT NULL AND EXISTS(SELECT 1 FROM user_followers uf WHERE uf.following_id = p.authorid AND uf.follower_id = $1::int)`;
 
     const sortBy = options.sortBy || 'newest';
 
@@ -299,11 +293,6 @@ export async function getPostsDb(
           break;
       }
     }
-
-    const limit = isAdminView ? options.limit : options.limit;
-    queryParams.push(limit, options.offset);
-    const limitParamIndex = paramIndex++;
-    const offsetParamIndex = paramIndex++;
     
     let allPosts: Post[] = [];
 
@@ -316,19 +305,21 @@ export async function getPostsDb(
             ${followCheck} as "isAuthorFollowedByCurrentUser"
           FROM posts p
           LEFT JOIN users u ON p.authorid = u.id
-          WHERE u.email = $${userIdParamIndex + 2} -- Find user by special email
+          WHERE u.email = $2 -- Find user by special email
           ORDER BY p.createdat DESC
           LIMIT 1
         `;
-        queryParams.push(OFFICIAL_USER_EMAIL);
-        const announcementResult = await client.query(announcementQuery, [options.currentUserId || null, options.currentUserId || null, OFFICIAL_USER_EMAIL]);
+        const announcementResult = await client.query(announcementQuery, [options.currentUserId || null, OFFICIAL_USER_EMAIL]);
         if (announcementResult.rows.length > 0) {
             allPosts = announcementResult.rows;
         }
-        queryParams.pop(); // Remove the email param for the next query
     }
 
     const officialUserSubquery = `SELECT id FROM users WHERE email = '${OFFICIAL_USER_EMAIL}'`;
+
+    queryParams.push(options.limit, options.offset);
+    const limitParamIndex = paramIndex++;
+    const offsetParamIndex = paramIndex++;
 
     const postsQuery = `
       SELECT 
@@ -344,13 +335,11 @@ export async function getPostsDb(
 
     const postsResult = await client.query(postsQuery, queryParams);
     
-    // Combine announcement with regular posts, ensuring no duplicates
     const announcementId = allPosts.length > 0 ? allPosts[0].id : null;
     const regularPosts = postsResult.rows.filter(p => p.id !== announcementId);
 
     const combined = [...allPosts, ...regularPosts];
     
-    // In case announcement was also in regular posts, ensure limit is respected
     return combined.slice(0, options.limit);
     
   } finally {
@@ -952,8 +941,8 @@ export async function getPostsByUserIdDb(userId: number): Promise<Post[]> {
 
   const client = await dbPool.connect();
   try {
-    const likeCheck = `EXISTS(SELECT 1 FROM post_likes pl WHERE pl.post_id = p.id AND pl.user_id = $1)`;
-    const followCheck = `EXISTS(SELECT 1 FROM user_followers uf WHERE uf.following_id = p.authorid AND uf.follower_id = $1)`;
+    const likeCheck = `EXISTS(SELECT 1 FROM post_likes pl WHERE pl.post_id = p.id AND pl.user_id = $1::int)`;
+    const followCheck = `EXISTS(SELECT 1 FROM user_followers uf WHERE uf.following_id = p.authorid AND uf.follower_id = $1::int)`;
 
     const query = `
       SELECT 
