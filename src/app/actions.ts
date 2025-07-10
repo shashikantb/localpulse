@@ -129,26 +129,24 @@ async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[
     const failedTokens: string[] = [];
     const processedTokens = new Set<string>();
     const authorDisplayName = post.authorname || 'an Anonymous Pulsar';
-    const postUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://localpulse.in'}/posts/${post.id}`;
+    const postPath = `/posts/${post.id}`;
 
     // 1. Send notifications to mentioned users
     if (mentionedUserIds.length > 0) {
         const mentionedTokens = await db.getDeviceTokensForUsersDb(mentionedUserIds, true);
         if (mentionedTokens.length > 0) {
-            const messages = mentionedTokens.map(({ token, user_auth_token }) => {
-                const url = user_auth_token ? `${postUrl}?_authtoken=${user_auth_token}` : postUrl;
-                return {
-                    token: token,
-                    data: {
-                        title: `${authorDisplayName} mentioned you in a pulse!`,
-                        body: post.content.substring(0, 100) + (post.content.length > 100 ? '...' : ''),
-                        postId: String(post.id),
-                        click_action: url
-                    },
-                    android: { priority: 'high' as const },
-                    apns: { payload: { aps: { 'content-available': 1 } } }
-                };
-            });
+            const messages = mentionedTokens.map(({ token, user_auth_token }) => ({
+                token: token,
+                data: {
+                    title: `${authorDisplayName} mentioned you in a pulse!`,
+                    body: post.content.substring(0, 100) + (post.content.length > 100 ? '...' : ''),
+                    postId: String(post.id),
+                    click_action: `localpulse://${postPath.substring(1)}`,
+                    user_auth_token: user_auth_token || ''
+                },
+                android: { priority: 'high' as const },
+                apns: { payload: { aps: { 'content-available': 1 } } }
+            }));
             
             const response = await firebaseAdmin.messaging().sendEach(messages);
             successCount += response.successCount;
@@ -168,7 +166,8 @@ async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[
                 title: `New Pulse Nearby from ${authorDisplayName}!`,
                 body: post.content.substring(0, 100) + (post.content.length > 100 ? '...' : ''),
                 postId: String(post.id),
-                click_action: postUrl // No auth token for anonymous nearby users
+                click_action: `localpulse://${postPath.substring(1)}`, // Use custom scheme
+                user_auth_token: '' // No auth for nearby anonymous users
             },
             tokens: nearbyOnlyTokens,
             android: { priority: 'high' as const },
@@ -205,23 +204,21 @@ async function sendChatNotification(conversationId: number, sender: User, conten
     const deviceTokens = await db.getDeviceTokensForUsersDb([partner.id], true);
     if (deviceTokens.length === 0) return;
 
-    const chatUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://localpulse.in'}/chat/${conversationId}`;
+    const chatPath = `/chat/${conversationId}`;
 
-    const messages = deviceTokens.map(({ token, user_auth_token }) => {
-        const url = user_auth_token ? `${chatUrl}?_authtoken=${user_auth_token}` : chatUrl;
-        return {
-            token: token,
-            data: {
-                title: title || `New message from ${sender.name}`,
-                body: content.length > 100 ? `${content.substring(0, 97)}...` : content,
-                conversationId: String(conversationId),
-                type: 'chat_message',
-                click_action: url
-            },
-            android: { priority: 'high' as const },
-            apns: { payload: { aps: { 'content-available': 1 } } }
-        };
-    });
+    const messages = deviceTokens.map(({ token, user_auth_token }) => ({
+        token: token,
+        data: {
+            title: title || `New message from ${sender.name}`,
+            body: content.length > 100 ? `${content.substring(0, 97)}...` : content,
+            conversationId: String(conversationId),
+            type: 'chat_message',
+            click_action: `localpulse://${chatPath.substring(1)}`,
+            user_auth_token: user_auth_token || ''
+        },
+        android: { priority: 'high' as const },
+        apns: { payload: { aps: { 'content-available': 1 } } }
+    }));
 
     const response = await firebaseAdmin.messaging().sendEach(messages);
 
@@ -251,22 +248,20 @@ async function sendNotificationForNewComment(comment: Comment, post: Post) {
     const authorDeviceTokens = await db.getDeviceTokensForUsersDb([post.authorid], true);
     if (authorDeviceTokens.length === 0) return;
     
-    const postUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://localpulse.in'}/posts/${post.id}`;
+    const postPath = `/posts/${post.id}`;
 
-    const messages = authorDeviceTokens.map(({ token, user_auth_token }) => {
-        const url = user_auth_token ? `${postUrl}?_authtoken=${user_auth_token}` : postUrl;
-        return {
-            token: token,
-            data: {
-                title: `${comment.author} commented on your pulse`,
-                body: comment.content.length > 100 ? `${comment.content.substring(0, 97)}...` : comment.content,
-                postId: String(post.id),
-                click_action: url
-            },
-            android: { priority: 'high' as const },
-            apns: { payload: { aps: { 'content-available': 1 } } }
-        };
-    });
+    const messages = authorDeviceTokens.map(({ token, user_auth_token }) => ({
+        token: token,
+        data: {
+            title: `${comment.author} commented on your pulse`,
+            body: comment.content.length > 100 ? `${comment.content.substring(0, 97)}...` : comment.content,
+            postId: String(post.id),
+            click_action: `localpulse://${postPath.substring(1)}`,
+            user_auth_token: user_auth_token || ''
+        },
+        android: { priority: 'high' as const },
+        apns: { payload: { aps: { 'content-available': 1 } } }
+    }));
 
     const response = await firebaseAdmin.messaging().sendEach(messages);
 

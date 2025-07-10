@@ -48,29 +48,6 @@ export default async function RootLayout({
           <AppInstallPrompt />
           <Toaster />
         </Providers>
-        <Script id="auth-token-handler" strategy="beforeInteractive">
-          {`
-            (function() {
-              try {
-                const url = new URL(window.location.href);
-                const token = url.searchParams.get('_authtoken');
-                if (token) {
-                  console.log('Auth token found in URL, setting cookie...');
-                  const d = new Date();
-                  d.setTime(d.getTime() + (10 * 365 * 24 * 60 * 60 * 1000)); // 10 years
-                  const expires = "expires=" + d.toUTCString();
-                  document.cookie = "user-auth-token=" + token + ";" + expires + ";path=/;SameSite=Lax;Secure";
-                  
-                  // Clean the URL and reload
-                  url.searchParams.delete('_authtoken');
-                  window.location.replace(url.toString());
-                }
-              } catch (e) {
-                console.error('Error handling auth token:', e);
-              }
-            })();
-          `}
-        </Script>
       </body>
     </html>
   );
