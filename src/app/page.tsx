@@ -7,6 +7,8 @@ import { PostFeedSkeleton } from '@/components/post-feed-skeleton';
 import StatusFeed from '@/components/status-feed';
 import { StatusFeedSkeleton } from '@/components/status-feed-skeleton';
 
+export const revalidate = 20; // Revalidate every 20 seconds
+
 async function PostComposerWithSession() {
   const { user } = await getSession();
   return <PostComposerLoader sessionUser={user} />;

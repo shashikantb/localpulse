@@ -9,6 +9,7 @@ import { getSession, encrypt } from '@/app/auth/actions';
 import { getGcsClient, getGcsBucketName } from '@/lib/gcs';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
+import { admin as firebaseAdmin } from '@/lib/firebase-admin';
 
 
 async function geocodeCoordinates(latitude: number, longitude: number): Promise<string | null> {
@@ -113,7 +114,7 @@ export async function getMediaPosts(options?: { page: number; limit: number }): 
 
 async function sendNotificationForNewPost(post: Post, mentionedUserIds: number[] = []) {
   try {
-    if (post.is_family_post) {
+    if (post.is_family_post || !firebaseAdmin) {
       return; 
     }
       
@@ -192,6 +193,7 @@ async function sendNotificationForNewPost(post: Post, mentionedUserIds: number[]
 
 async function sendChatNotification(conversationId: number, sender: User, content: string, title?: string) {
   try {
+    if (!firebaseAdmin) return;
     const partner = await db.getConversationPartnerDb(conversationId, sender.id);
     if (!partner) return;
 
@@ -235,7 +237,7 @@ async function sendChatNotification(conversationId: number, sender: User, conten
 
 async function sendNotificationForNewComment(comment: Comment, post: Post) {
   try {
-    if (!post.authorid) return;
+    if (!post.authorid || !firebaseAdmin) return;
     
     const { user: commenterUser } = await getSession();
     if (commenterUser && commenterUser.id === post.authorid) return;
