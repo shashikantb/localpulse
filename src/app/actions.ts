@@ -129,20 +129,20 @@ async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[
     const failedTokens: string[] = [];
     const processedTokens = new Set<string>();
     const authorDisplayName = post.authorname || 'an Anonymous Pulsar';
-    const clickActionUrl = 'localpulse:///';
 
     // 1. Send notifications to mentioned users
     if (mentionedUserIds.length > 0) {
         const mentionedUsersTokens = await db.getDeviceTokensForUsersDb(mentionedUserIds);
         if (mentionedUsersTokens.length > 0) {
-
             const messages = await Promise.all(mentionedUsersTokens.map(async ({ token, user_id }) => {
                 const freshToken = await encrypt({ userId: user_id });
                 return {
                     token: token,
-                    data: {
+                    notification: {
                         title: `${authorDisplayName} mentioned you in a pulse!`,
                         body: post.content.substring(0, 100) + (post.content.length > 100 ? '...' : ''),
+                    },
+                    data: {
                         user_auth_token: freshToken
                     },
                     android: { priority: 'high' as const },
@@ -150,7 +150,7 @@ async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[
                 }
             }));
             
-            const response = await firebaseAdmin.messaging().sendEach(messages);
+            const response = await firebaseAdmin.messaging().sendEach(messages as any);
             successCount += response.successCount;
             response.responses.forEach((resp, idx) => {
                 if (!resp.success) failedTokens.push(mentionedUsersTokens[idx].token);
@@ -164,16 +164,18 @@ async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[
     const nearbyOnlyTokens = nearbyTokens.filter(t => !processedTokens.has(t));
     if (nearbyOnlyTokens.length > 0) {
         const message = {
-            data: {
+            notification: {
                 title: `New Pulse Nearby from ${authorDisplayName}!`,
                 body: post.content.substring(0, 100) + (post.content.length > 100 ? '...' : ''),
+            },
+            data: {
                 user_auth_token: '' // No auth for nearby anonymous users
             },
             tokens: nearbyOnlyTokens,
             android: { priority: 'high' as const },
             apns: { payload: { aps: { 'content-available': 1 } } }
         };
-        const response = await firebaseAdmin.messaging().sendEachForMulticast(message);
+        const response = await firebaseAdmin.messaging().sendEachForMulticast(message as any);
         successCount += response.successCount;
         response.responses.forEach((resp, idx) => {
             if (!resp.success) failedTokens.push(nearbyOnlyTokens[idx]);
@@ -205,20 +207,23 @@ async function sendChatNotification(conversationId: number, sender: User, conten
     if (deviceTokens.length === 0) return;
     
     const freshToken = await encrypt({ userId: partner.id });
+    const notificationTitle = title || `New message from ${sender.name}`;
+    const notificationBody = content.length > 100 ? `${content.substring(0, 97)}...` : content;
 
     const messages = deviceTokens.map(({ token }) => ({
         token: token,
+        notification: {
+            title: notificationTitle,
+            body: notificationBody,
+        },
         data: {
-            title: title || `New message from ${sender.name}`,
-            body: content.length > 100 ? `${content.substring(0, 97)}...` : content,
-            type: 'chat_message',
             user_auth_token: freshToken
         },
         android: { priority: 'high' as const },
         apns: { payload: { aps: { 'content-available': 1 } } }
     }));
 
-    const response = await firebaseAdmin.messaging().sendEach(messages);
+    const response = await firebaseAdmin.messaging().sendEach(messages as any);
 
     if (response.failureCount > 0) {
       const failedTokens: string[] = [];
@@ -247,19 +252,23 @@ async function sendNotificationForNewComment(comment: Comment, post: Post) {
     if (authorDeviceTokens.length === 0) return;
     
     const freshToken = await encrypt({ userId: post.authorid });
+    const notificationTitle = `${comment.author} commented on your pulse`;
+    const notificationBody = comment.content.length > 100 ? `${comment.content.substring(0, 97)}...` : comment.content;
 
     const messages = authorDeviceTokens.map(({ token }) => ({
         token: token,
+        notification: {
+            title: notificationTitle,
+            body: notificationBody,
+        },
         data: {
-            title: `${comment.author} commented on your pulse`,
-            body: comment.content.length > 100 ? `${comment.content.substring(0, 97)}...` : comment.content,
             user_auth_token: freshToken
         },
         android: { priority: 'high' as const },
         apns: { payload: { aps: { 'content-available': 1 } } }
     }));
 
-    const response = await firebaseAdmin.messaging().sendEach(messages);
+    const response = await firebaseAdmin.messaging().sendEach(messages as any);
 
     if (response.failureCount > 0) {
       const failedTokens: string[] = [];
@@ -1096,6 +1105,7 @@ export async function getGorakshakReport(adminLat: number, adminLon: number): Pr
     return [];
   }
 }
+
 
 
 
