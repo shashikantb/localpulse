@@ -91,7 +91,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
   
   const authorName = post.authorname || 'Anonymous Pulsar';
   const isOwnPost = sessionUser?.id === post.authorid;
-  const isAnnouncement = post.authorid === 1; // ID 1 is reserved for "LocalPulse Official"
+  const isAnnouncement = post.authorname === 'LocalPulse Official';
 
   const [isLikedByClient, setIsLikedByClient] = useState(false);
   const [displayLikeCount, setDisplayLikeCount] = useState<number>(post.likecount);
@@ -570,7 +570,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
         </CardFooter>
       )}
 
-      {sessionUser && sessionUser.id === post.authorid && (
+      {sessionUser && sessionUser.id === post.authorid && !isAnnouncement && (
         <div className="px-5 py-3 border-t border-border/30 bg-primary/5">
           <p className="text-xs font-semibold text-primary/90 mb-2 uppercase tracking-wider">Your Post Stats</p>
           <div className="flex items-center justify-around text-sm text-primary/80">

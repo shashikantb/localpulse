@@ -11,7 +11,6 @@ let pool: Pool | null = null;
 let dbWarningShown = false;
 let initializationPromise: Promise<void> | null = null;
 
-const OFFICIAL_USER_ID = 1;
 const OFFICIAL_USER_EMAIL = 'official@localpulse.in';
 
 
@@ -156,18 +155,12 @@ async function initializeDbSchema(): Promise<void> {
         await initClient.query(`ALTER TABLE family_relationships ADD COLUMN IF NOT EXISTS share_location_from_2_to_1 BOOLEAN NOT NULL DEFAULT false;`);
 
         // --- Create Official User ---
+        // Safely create the official user only if it doesn't exist by email.
         await initClient.query(`
-            INSERT INTO users (id, name, email, passwordhash, role, status)
-            VALUES ($1, 'LocalPulse Official', $2, 'not_a_real_password', 'Admin', 'approved')
-            ON CONFLICT (id) DO UPDATE SET 
-                name = EXCLUDED.name,
-                email = EXCLUDED.email,
-                role = EXCLUDED.role,
-                status = EXCLUDED.status;
-        `, [OFFICIAL_USER_ID, OFFICIAL_USER_EMAIL]);
-        // Reset sequence to avoid collision if ID 1 was manually inserted
-        await initClient.query(`SELECT setval('users_id_seq', (SELECT MAX(id) FROM users));`);
-
+            INSERT INTO users (name, email, passwordhash, role, status)
+            VALUES ('LocalPulse Official', $1, 'not_a_real_password', 'Admin', 'approved')
+            ON CONFLICT (email) DO NOTHING;
+        `, [OFFICIAL_USER_EMAIL]);
 
         // --- Indexes for performance ---
         await initClient.query('CREATE INDEX IF NOT EXISTS idx_posts_createdat ON posts (createdat DESC)');
@@ -307,7 +300,7 @@ export async function getPostsDb(
       }
     }
 
-    const limit = isAdminView ? options.limit : options.limit - 1; // Adjust limit if we might add an announcement
+    const limit = isAdminView ? options.limit : options.limit;
     queryParams.push(limit, options.offset);
     const limitParamIndex = paramIndex++;
     const offsetParamIndex = paramIndex++;
@@ -323,16 +316,19 @@ export async function getPostsDb(
             ${followCheck} as "isAuthorFollowedByCurrentUser"
           FROM posts p
           LEFT JOIN users u ON p.authorid = u.id
-          WHERE p.authorid = ${OFFICIAL_USER_ID}
+          WHERE u.email = $${userIdParamIndex + 2} -- Find user by special email
           ORDER BY p.createdat DESC
           LIMIT 1
         `;
-        const announcementResult = await client.query(announcementQuery, [options.currentUserId || null]);
+        queryParams.push(OFFICIAL_USER_EMAIL);
+        const announcementResult = await client.query(announcementQuery, [options.currentUserId || null, options.currentUserId || null, OFFICIAL_USER_EMAIL]);
         if (announcementResult.rows.length > 0) {
             allPosts = announcementResult.rows;
         }
+        queryParams.pop(); // Remove the email param for the next query
     }
 
+    const officialUserSubquery = `SELECT id FROM users WHERE email = '${OFFICIAL_USER_EMAIL}'`;
 
     const postsQuery = `
       SELECT 
@@ -341,7 +337,7 @@ export async function getPostsDb(
         ${followCheck} as "isAuthorFollowedByCurrentUser"
       FROM posts p
       LEFT JOIN users u ON p.authorid = u.id
-      WHERE p.is_family_post = false AND p.authorid != ${OFFICIAL_USER_ID}
+      WHERE p.is_family_post = false AND (p.authorid IS NULL OR p.authorid != (${officialUserSubquery}))
       ORDER BY ${orderByClause}
       LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}
     `;
@@ -352,7 +348,10 @@ export async function getPostsDb(
     const announcementId = allPosts.length > 0 ? allPosts[0].id : null;
     const regularPosts = postsResult.rows.filter(p => p.id !== announcementId);
 
-    return [...allPosts, ...regularPosts].slice(0, options.limit);
+    const combined = [...allPosts, ...regularPosts];
+    
+    // In case announcement was also in regular posts, ensure limit is respected
+    return combined.slice(0, options.limit);
     
   } finally {
     client.release();
@@ -1002,8 +1001,7 @@ export async function getAllUsersDb(): Promise<User[]> {
     try {
       const query = `
           SELECT ${USER_COLUMNS_SANITIZED}
-          FROM users 
-          WHERE id != ${OFFICIAL_USER_ID}
+          FROM users
           ORDER BY createdat DESC;
       `;
       const result: QueryResult<User> = await client.query(query);
@@ -1182,12 +1180,13 @@ export async function searchUsersDb(query: string, currentUserId?: number): Prom
   
   const client = await dbPool.connect();
   try {
+    const officialUserSubquery = `SELECT id FROM users WHERE email = '${OFFICIAL_USER_EMAIL}'`;
     const sqlQuery = `
       SELECT ${USER_COLUMNS_SANITIZED}
       FROM users 
       WHERE name ILIKE $1 
         AND status = 'approved'
-        AND id != ${OFFICIAL_USER_ID}
+        AND id != (${officialUserSubquery})
         AND ($2::int IS NULL OR id != $2::int)
       LIMIT 10;
     `;

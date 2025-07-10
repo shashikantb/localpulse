@@ -1,8 +1,10 @@
 
 'use server';
 
-import { deletePostDb, addPostDb } from '@/lib/db';
+import { deletePostDb, addPostDb, getUserByEmailDb } from '@/lib/db';
 import { revalidatePath } from 'next/cache';
+
+const OFFICIAL_USER_EMAIL = 'official@localpulse.in';
 
 export async function deletePost(postId: number): Promise<{ success: boolean; error?: string }> {
   try {
@@ -20,10 +22,15 @@ export async function deletePost(postId: number): Promise<{ success: boolean; er
 
 export async function createAnnouncementPost(content: string): Promise<{ success: boolean; error?: string }> {
     try {
-        // ID 1 is reserved for the "LocalPulse Official" user.
+        const officialUser = await getUserByEmailDb(OFFICIAL_USER_EMAIL);
+        if (!officialUser) {
+            // This should ideally never happen if the DB initialization works correctly.
+            throw new Error('Official user account not found. Cannot create announcement.');
+        }
+
         await addPostDb({
             content,
-            authorid: 1, // Official User ID
+            authorid: officialUser.id,
             latitude: 0, // Not relevant for announcements
             longitude: 0, // Not relevant for announcements
             is_family_post: false,
@@ -35,6 +42,7 @@ export async function createAnnouncementPost(content: string): Promise<{ success
         return { success: true };
 
     } catch(error: any) {
-        return { success: false, error: 'Failed to create announcement.' };
+        console.error("Error creating announcement:", error);
+        return { success: false, error: error.message || 'Failed to create announcement.' };
     }
 }
