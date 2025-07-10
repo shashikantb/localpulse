@@ -56,6 +56,7 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
   const [newMessage, setNewMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { toast } = useToast();
   
   // Use a ref to track the sending state inside the polling interval
@@ -75,16 +76,11 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
   useEffect(() => {
     let isMounted = true;
     const fetchMessages = async () => {
-        // If a message is currently being sent, skip this poll cycle.
-        // This prevents a race condition where the poll fetches data
-        // before our optimistic update's corresponding message has been
-        // saved to the database.
         if (isSendingRef.current) {
             return;
         }
         try {
             const newMessages = await getMessages(conversationId);
-            // Only update state if the component is still mounted and data has changed.
             if (isMounted && JSON.stringify(messagesRef.current) !== JSON.stringify(newMessages)) {
                 setMessages(newMessages);
             }
@@ -122,7 +118,6 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
     
     if (result.error || !result.message) {
       console.error('Failed to send message:', result.error);
-      // Revert optimistic update on failure
       setMessages(prev => prev.filter(m => m.id !== tempId));
       toast({
         variant: 'destructive',
@@ -130,15 +125,34 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
         description: result.error || 'Could not send the message. Please try again.',
       });
     } else {
-      // Replace optimistic message with the real one from the server
       setMessages(prev => prev.map(m => m.id === tempId ? result.message! : m));
     }
     
     setIsSending(false);
   };
+  
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    const handleFocus = () => {
+      setTimeout(() => {
+        textarea?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 300); // Small delay to allow keyboard to start animating
+    };
+
+    if (textarea) {
+      textarea.addEventListener('focus', handleFocus);
+    }
+
+    return () => {
+      if (textarea) {
+        textarea.removeEventListener('focus', handleFocus);
+      }
+    };
+  }, []);
+
 
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div className="flex flex-col bg-background h-full">
       <header className="flex-shrink-0 flex items-center p-3 border-b bg-card">
         <Link href={`/users/${partner.id}`} className="flex items-center gap-3 hover:bg-muted p-2 rounded-md">
             <Avatar>
@@ -185,6 +199,7 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
       <div className="flex-shrink-0 p-4 border-t bg-card">
         <form onSubmit={handleSendMessage} className="flex items-center gap-3">
           <Textarea
+            ref={textareaRef}
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             placeholder="Type a message..."
