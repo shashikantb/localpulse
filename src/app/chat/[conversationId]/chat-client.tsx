@@ -32,7 +32,7 @@ const renderChatMessageContent = (content: string) => {
 
   return parts.map((part, index) => {
     if (part && part.match(urlRegex)) {
-      const href = part.startsWith('www.') ? `https://${part}` : part;
+      const href = part.startsWith('www.') ? `https://www.${part}` : part;
       return (
         <a
           key={`link-${index}`}
@@ -55,23 +55,53 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [newMessage, setNewMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [componentHeight, setComponentHeight] = useState('100%');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { toast } = useToast();
   
-  // Use a ref to track the sending state inside the polling interval
-  // to avoid re-creating the interval on every state change.
   const isSendingRef = useRef(isSending);
   isSendingRef.current = isSending;
   
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.visualViewport) {
+        setComponentHeight(`${window.visualViewport.height}px`);
+      }
+    };
+
+    if (window.visualViewport) {
+        setComponentHeight(`${window.visualViewport.height}px`);
+        window.visualViewport.addEventListener('resize', handleResize);
+    } else {
+        // Fallback for older browsers
+        const setVh = () => {
+            const vh = window.innerHeight * 0.01;
+            document.documentElement.style.setProperty('--vh', `${vh}px`);
+            setComponentHeight('calc(var(--vh, 1vh) * 100)');
+        };
+        setVh();
+        window.addEventListener('resize', setVh);
+        return () => window.removeEventListener('resize', setVh);
+    }
+    
+    return () => {
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleResize);
+      }
+    };
+  }, []);
+
+  const scrollToBottom = (behavior: 'smooth' | 'auto' = 'smooth') => {
+    messagesEndRef.current?.scrollIntoView({ behavior });
   };
 
-  useEffect(scrollToBottom, [messages]);
+  useEffect(() => {
+    scrollToBottom('auto');
+  }, [messages]);
   
   useEffect(() => {
     let isMounted = true;
@@ -135,7 +165,8 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
     const textarea = textareaRef.current;
     const handleFocus = () => {
       setTimeout(() => {
-        textarea?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // When textarea is focused, scroll it into view.
+        textarea?.scrollIntoView({ behavior: 'smooth', block: 'end' });
       }, 300); // Small delay to allow keyboard to start animating
     };
 
@@ -152,7 +183,7 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
 
 
   return (
-    <div className="flex flex-col bg-background h-full">
+    <div className="flex flex-col bg-background" style={{ height: componentHeight }}>
       <header className="flex-shrink-0 flex items-center p-3 border-b bg-card">
         <Link href={`/users/${partner.id}`} className="flex items-center gap-3 hover:bg-muted p-2 rounded-md">
             <Avatar>
