@@ -131,43 +131,31 @@ async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[
     const authorDisplayName = post.authorname || 'an Anonymous Pulsar';
     const postUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://localpulse.in'}/posts/${post.id}`;
 
-    // Get the auth token once to include in all notifications.
-    // This is for the recipient, so we can't get it from the sender's session.
-    // Instead, the native app that receives this payload will be responsible for handling it.
-    // We will leave this responsibility to the mobile app logic.
-    // However, if we were to send a token, it would be for the *recipient*.
-    // Since we are notifying multiple people, we cannot send a single token.
-    // The correct approach is for the mobile app to handle its own auth state upon opening.
-    // The previous change adding the meta tag is the right web-side fix. I'll revert the payload to be simpler.
-    
-    const nearbyNotificationData = {
-        title: `New Pulse Nearby from ${authorDisplayName}!`,
-        body: post.content.substring(0, 100) + (post.content.length > 100 ? '...' : ''),
-        postId: String(post.id),
-        click_action: postUrl
-    };
-
     // 1. Send notifications to mentioned users
     if (mentionedUserIds.length > 0) {
-        const mentionedTokens = await db.getDeviceTokensForUsersDb(mentionedUserIds);
+        const mentionedTokens = await db.getDeviceTokensForUsersDb(mentionedUserIds, true);
         if (mentionedTokens.length > 0) {
-            mentionedTokens.forEach(t => processedTokens.add(t));
+            const messages = mentionedTokens.map(({ token, user_auth_token }) => {
+                const url = user_auth_token ? `${postUrl}?_authtoken=${user_auth_token}` : postUrl;
+                return {
+                    token: token,
+                    data: {
+                        title: `${authorDisplayName} mentioned you in a pulse!`,
+                        body: post.content.substring(0, 100) + (post.content.length > 100 ? '...' : ''),
+                        postId: String(post.id),
+                        click_action: url
+                    },
+                    android: { priority: 'high' as const },
+                    apns: { payload: { aps: { 'content-available': 1 } } }
+                };
+            });
             
-            const message = {
-                data: {
-                  ...nearbyNotificationData,
-                  title: `${authorDisplayName} mentioned you in a pulse!`,
-                },
-                tokens: mentionedTokens,
-                android: { priority: 'high' as const },
-                apns: { payload: { aps: { 'content-available': 1 } } }
-            };
-            
-            const response = await firebaseAdmin.messaging().sendEachForMulticast(message);
+            const response = await firebaseAdmin.messaging().sendEach(messages);
             successCount += response.successCount;
             response.responses.forEach((resp, idx) => {
-                if (!resp.success) failedTokens.push(mentionedTokens[idx]);
+                if (!resp.success) failedTokens.push(mentionedTokens[idx].token);
             });
+            mentionedTokens.forEach(t => processedTokens.add(t.token));
         }
     }
 
@@ -176,7 +164,12 @@ async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[
     const nearbyOnlyTokens = nearbyTokens.filter(t => !processedTokens.has(t));
     if (nearbyOnlyTokens.length > 0) {
         const message = {
-            data: nearbyNotificationData,
+            data: {
+                title: `New Pulse Nearby from ${authorDisplayName}!`,
+                body: post.content.substring(0, 100) + (post.content.length > 100 ? '...' : ''),
+                postId: String(post.id),
+                click_action: postUrl // No auth token for anonymous nearby users
+            },
             tokens: nearbyOnlyTokens,
             android: { priority: 'high' as const },
             apns: { payload: { aps: { 'content-available': 1 } } }
@@ -209,30 +202,33 @@ async function sendChatNotification(conversationId: number, sender: User, conten
     const partner = await db.getConversationPartnerDb(conversationId, sender.id);
     if (!partner) return;
 
-    const deviceTokens = await db.getDeviceTokensForUsersDb([partner.id]);
+    const deviceTokens = await db.getDeviceTokensForUsersDb([partner.id], true);
     if (deviceTokens.length === 0) return;
 
     const chatUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://localpulse.in'}/chat/${conversationId}`;
 
-    const notificationPayload = {
-      data: {
-          title: title || `New message from ${sender.name}`,
-          body: content.length > 100 ? `${content.substring(0, 97)}...` : content,
-          conversationId: String(conversationId),
-          type: 'chat_message',
-          click_action: chatUrl
-      },
-      tokens: deviceTokens,
-      android: { priority: 'high' as const },
-      apns: { payload: { aps: { 'content-available': 1 } } }
-    };
+    const messages = deviceTokens.map(({ token, user_auth_token }) => {
+        const url = user_auth_token ? `${chatUrl}?_authtoken=${user_auth_token}` : chatUrl;
+        return {
+            token: token,
+            data: {
+                title: title || `New message from ${sender.name}`,
+                body: content.length > 100 ? `${content.substring(0, 97)}...` : content,
+                conversationId: String(conversationId),
+                type: 'chat_message',
+                click_action: url
+            },
+            android: { priority: 'high' as const },
+            apns: { payload: { aps: { 'content-available': 1 } } }
+        };
+    });
 
-    const response = await firebaseAdmin.messaging().sendEachForMulticast(notificationPayload);
+    const response = await firebaseAdmin.messaging().sendEach(messages);
 
     if (response.failureCount > 0) {
       const failedTokens: string[] = [];
       response.responses.forEach((resp, idx) => {
-        if (!resp.success) failedTokens.push(deviceTokens[idx]);
+        if (!resp.success) failedTokens.push(deviceTokens[idx].token);
       });
       console.error('List of tokens that failed for chat notification:', failedTokens);
       for (const token of failedTokens) {
@@ -252,29 +248,32 @@ async function sendNotificationForNewComment(comment: Comment, post: Post) {
     const { user: commenterUser } = await getSession();
     if (commenterUser && commenterUser.id === post.authorid) return;
 
-    const authorDeviceTokens = await db.getDeviceTokensForUsersDb([post.authorid]);
+    const authorDeviceTokens = await db.getDeviceTokensForUsersDb([post.authorid], true);
     if (authorDeviceTokens.length === 0) return;
-
+    
     const postUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://localpulse.in'}/posts/${post.id}`;
 
-    const notificationPayload = {
-      data: {
-          title: `${comment.author} commented on your pulse`,
-          body: comment.content.length > 100 ? `${comment.content.substring(0, 97)}...` : comment.content,
-          postId: String(post.id),
-          click_action: postUrl
-      },
-      tokens: authorDeviceTokens,
-      android: { priority: 'high' as const },
-      apns: { payload: { aps: { 'content-available': 1 } } }
-    };
+    const messages = authorDeviceTokens.map(({ token, user_auth_token }) => {
+        const url = user_auth_token ? `${postUrl}?_authtoken=${user_auth_token}` : postUrl;
+        return {
+            token: token,
+            data: {
+                title: `${comment.author} commented on your pulse`,
+                body: comment.content.length > 100 ? `${comment.content.substring(0, 97)}...` : comment.content,
+                postId: String(post.id),
+                click_action: url
+            },
+            android: { priority: 'high' as const },
+            apns: { payload: { aps: { 'content-available': 1 } } }
+        };
+    });
 
-    const response = await firebaseAdmin.messaging().sendEachForMulticast(notificationPayload);
+    const response = await firebaseAdmin.messaging().sendEach(messages);
 
     if (response.failureCount > 0) {
       const failedTokens: string[] = [];
       response.responses.forEach((resp, idx) => {
-        if (!resp.success) failedTokens.push(authorDeviceTokens[idx]);
+        if (!resp.success) failedTokens.push(authorDeviceTokens[idx].token);
       });
       console.error('List of tokens that failed for new comment notification:', failedTokens);
       for (const token of failedTokens) {
@@ -589,7 +588,8 @@ export async function registerDeviceToken(
   }
   try {
     const { user } = await getSession(); // Get user from session to associate token
-    await db.addOrUpdateDeviceTokenDb(token, latitude, longitude, user?.id);
+    const userAuthToken = cookies().get('user-auth-token')?.value;
+    await db.addOrUpdateDeviceTokenDb(token, latitude, longitude, user?.id, userAuthToken);
     return { success: true };
   } catch (error: any) {
     console.error('Server action error registering device token:', error);

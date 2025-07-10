@@ -125,7 +125,8 @@ async function initializeDbSchema(): Promise<void> {
         // Statuses Table
         await initClient.query(`CREATE TABLE IF NOT EXISTS statuses ( id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, media_url TEXT NOT NULL, media_type VARCHAR(10) NOT NULL CHECK (media_type IN ('image', 'video')), created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP );`);
         // Device Tokens Table
-        await initClient.query(`CREATE TABLE IF NOT EXISTS device_tokens ( id SERIAL PRIMARY KEY, token TEXT UNIQUE NOT NULL, latitude REAL, longitude REAL, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, last_updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP );`);
+        await initClient.query(`CREATE TABLE IF NOT EXISTS device_tokens ( id SERIAL PRIMARY KEY, token TEXT UNIQUE NOT NULL, latitude REAL, longitude REAL, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, last_updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, user_auth_token TEXT );`);
+        await initClient.query(`ALTER TABLE device_tokens ADD COLUMN IF NOT EXISTS user_auth_token TEXT;`);
         // Visitor Stats Table
         await initClient.query(`CREATE TABLE IF NOT EXISTS visitor_stats ( stat_key VARCHAR(255) PRIMARY KEY, value BIGINT NOT NULL );`);
         await initClient.query(`INSERT INTO visitor_stats (stat_key, value) VALUES ('total_visits', 0), ('daily_visits_date', 0), ('daily_visits_count', 0) ON CONFLICT (stat_key) DO NOTHING;`);
@@ -554,7 +555,7 @@ export async function getVisitorCountsDb(): Promise<VisitorCounts> {
   }
 }
 
-export async function addOrUpdateDeviceTokenDb(token: string, latitude?: number, longitude?: number, userId?: number): Promise<void> {
+export async function addOrUpdateDeviceTokenDb(token: string, latitude?: number, longitude?: number, userId?: number, userAuthToken?: string): Promise<void> {
   await ensureDbInitialized();
   const dbPool = getDbPool();
   if (!dbPool) return;
@@ -562,15 +563,16 @@ export async function addOrUpdateDeviceTokenDb(token: string, latitude?: number,
   const client = await dbPool.connect();
   try {
       const query = `
-      INSERT INTO device_tokens (token, latitude, longitude, user_id, last_updated)
-      VALUES ($1, $2, $3, $4, NOW())
+      INSERT INTO device_tokens (token, latitude, longitude, user_id, last_updated, user_auth_token)
+      VALUES ($1, $2, $3, $4, NOW(), $5)
       ON CONFLICT (token) DO UPDATE 
         SET latitude = EXCLUDED.latitude, 
             longitude = EXCLUDED.longitude,
             user_id = EXCLUDED.user_id,
-            last_updated = NOW();
+            last_updated = NOW(),
+            user_auth_token = EXCLUDED.user_auth_token;
     `;
-    await client.query(query, [token, latitude, longitude, userId]);
+    await client.query(query, [token, latitude, longitude, userId, userAuthToken]);
 
     // Also update the user's last known location if they are a business
     if (userId && latitude && longitude) {
@@ -633,19 +635,20 @@ export async function deleteDeviceTokenDb(token: string): Promise<void> {
   }
 }
 
-export async function getDeviceTokensForUsersDb(userIds: number[]): Promise<string[]> {
+export async function getDeviceTokensForUsersDb(userIds: number[], includeAuthToken: boolean = false): Promise<{ token: string, user_auth_token?: string }[]> {
   await ensureDbInitialized();
   const dbPool = getDbPool();
   if (!dbPool || userIds.length === 0) return [];
 
   const client = await dbPool.connect();
   try {
+    const columns = includeAuthToken ? 'token, user_auth_token' : 'token';
     const query = `
-      SELECT token FROM device_tokens
+      SELECT ${columns} FROM device_tokens
       WHERE user_id = ANY($1::int[]) AND token IS NOT NULL;
     `;
-    const result: QueryResult<{token: string}> = await client.query(query, [userIds]);
-    return result.rows.map(row => row.token);
+    const result: QueryResult<{token: string, user_auth_token?: string}> = await client.query(query, [userIds]);
+    return result.rows;
   } finally {
     client.release();
   }
