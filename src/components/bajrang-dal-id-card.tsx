@@ -60,7 +60,7 @@ const BajrangDalIdCard: FC<BajrangDalIdCardProps> = ({ user }) => {
     <div className="space-y-4">
       <div 
         ref={cardRef} 
-        className="relative p-4 border rounded-lg w-full max-w-sm mx-auto flex flex-col h-[550px] text-black overflow-hidden"
+        className="relative w-full max-w-sm mx-auto h-[550px] overflow-hidden"
         style={{
           backgroundImage: `url('/images/bajrang-dal-id-card-bg.jpg')`,
           backgroundSize: 'cover',
@@ -68,41 +68,24 @@ const BajrangDalIdCard: FC<BajrangDalIdCardProps> = ({ user }) => {
           color: '#5D4037',
         }}
       >
-        {/* Header Section */}
-        <div className="text-center pt-8 h-[140px] flex-shrink-0">
-            {/* The header is now part of the background image */}
+        {/* User Photo */}
+        <div className="absolute top-16 left-6">
+            <Avatar className="h-28 w-28 border-4 border-orange-400 shadow-lg">
+                <AvatarImage src={user.profilepictureurl || undefined} alt={user.name} />
+                <AvatarFallback className="text-4xl bg-orange-100">
+                    {user.name.charAt(0)}
+                </AvatarFallback>
+            </Avatar>
         </div>
 
-        {/* Main Content Section */}
-        <div className="flex flex-col items-center justify-start flex-grow space-y-3 pt-4">
-          <Avatar className="h-32 w-32 border-4 border-orange-400 shadow-lg -mt-16">
-            <AvatarImage src={user.profilepictureurl || undefined} alt={user.name} />
-            <AvatarFallback className="text-4xl bg-orange-100">
-              {user.name.charAt(0)}
-            </AvatarFallback>
-          </Avatar>
-          
-          <div className="text-center">
-            <p className="text-3xl font-bold" style={{textShadow: '0px 1px 2px rgba(255,255,255,0.7)'}}>{user.name}</p>
-            <p className="text-xl font-semibold opacity-90">{user.role}</p>
-          </div>
-          
-          <div className="w-full text-center space-y-2 pt-4">
-            <div className="flex items-center justify-center space-x-2">
-              <UserIcon className="w-5 h-5" />
-              <p className="font-semibold text-lg">User ID: BD-{user.id}</p>
+        {/* User Details */}
+        <div className="absolute bottom-10 left-6 right-6">
+            <div className="space-y-1 text-left">
+                <p className="font-bold text-lg">ID: BD-{user.id}</p>
+                <p className="font-bold text-lg">Name: {user.name}</p>
+                <p className="font-bold text-lg">Mobile: {user.mobilenumber}</p>
+                <p className="font-bold text-lg">Role: {user.role}</p>
             </div>
-            <div className="flex items-center justify-center space-x-2">
-              <Phone className="w-5 h-5" />
-              <p className="font-semibold text-lg">{user.mobilenumber}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Footer Section */}
-        <div className="flex items-center justify-end space-x-1 opacity-90 pb-2 flex-shrink-0">
-          <Shield className="w-5 h-5 text-orange-600"/>
-          <p className="text-xs font-bold">Gorakshak</p>
         </div>
       </div>
       
