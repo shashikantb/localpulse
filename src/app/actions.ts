@@ -6,7 +6,7 @@ import * as db from '@/lib/db';
 import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus, FamilyMember, FamilyMemberLocation, PendingFamilyRequest, Conversation, Message, ConversationParticipant, SortOption, BusinessUser, GorakshakReportUser } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 import { admin as firebaseAdmin } from '@/lib/firebase-admin';
-import { getSession } from '@/app/auth/actions';
+import { getSession, encrypt } from '@/app/auth/actions';
 import { getGcsClient, getGcsBucketName } from '@/lib/gcs';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
@@ -133,32 +133,36 @@ async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[
 
     // 1. Send notifications to mentioned users
     if (mentionedUserIds.length > 0) {
-        const mentionedTokens = await db.getDeviceTokensForUsersDb(mentionedUserIds, true);
-        if (mentionedTokens.length > 0) {
-            const messages = mentionedTokens.map(({ token, user_auth_token }) => ({
-                token: token,
-                data: {
-                    title: `${authorDisplayName} mentioned you in a pulse!`,
-                    body: post.content.substring(0, 100) + (post.content.length > 100 ? '...' : ''),
-                    postId: String(post.id),
-                    click_action: `localpulse://${postPath.substring(1)}`,
-                    user_auth_token: user_auth_token || ''
-                },
-                android: { priority: 'high' as const },
-                apns: { payload: { aps: { 'content-available': 1 } } }
+        const mentionedUsersTokens = await db.getDeviceTokensForUsersDb(mentionedUserIds);
+        if (mentionedUsersTokens.length > 0) {
+
+            const messages = await Promise.all(mentionedUsersTokens.map(async ({ token, user_id }) => {
+                const freshToken = await encrypt({ userId: user_id });
+                return {
+                    token: token,
+                    data: {
+                        title: `${authorDisplayName} mentioned you in a pulse!`,
+                        body: post.content.substring(0, 100) + (post.content.length > 100 ? '...' : ''),
+                        postId: String(post.id),
+                        click_action: `localpulse://${postPath.substring(1)}`,
+                        user_auth_token: freshToken
+                    },
+                    android: { priority: 'high' as const },
+                    apns: { payload: { aps: { 'content-available': 1 } } }
+                }
             }));
             
             const response = await firebaseAdmin.messaging().sendEach(messages);
             successCount += response.successCount;
             response.responses.forEach((resp, idx) => {
-                if (!resp.success) failedTokens.push(mentionedTokens[idx].token);
+                if (!resp.success) failedTokens.push(mentionedUsersTokens[idx].token);
             });
-            mentionedTokens.forEach(t => processedTokens.add(t.token));
+            mentionedUsersTokens.forEach(t => processedTokens.add(t.token));
         }
     }
 
     // 2. Send notifications to nearby users (who were not already notified via mention)
-    const nearbyTokens = await db.getNearbyDeviceTokensDb(post.latitude, post.longitude, 20); // 20km radius
+    const nearbyTokens = await db.getNearbyDeviceTokensDb(post.latitude, post.longitude, 20);
     const nearbyOnlyTokens = nearbyTokens.filter(t => !processedTokens.has(t));
     if (nearbyOnlyTokens.length > 0) {
         const message = {
@@ -166,7 +170,7 @@ async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[
                 title: `New Pulse Nearby from ${authorDisplayName}!`,
                 body: post.content.substring(0, 100) + (post.content.length > 100 ? '...' : ''),
                 postId: String(post.id),
-                click_action: `localpulse://${postPath.substring(1)}`, // Use custom scheme
+                click_action: `localpulse://${postPath.substring(1)}`,
                 user_auth_token: '' // No auth for nearby anonymous users
             },
             tokens: nearbyOnlyTokens,
@@ -201,12 +205,14 @@ async function sendChatNotification(conversationId: number, sender: User, conten
     const partner = await db.getConversationPartnerDb(conversationId, sender.id);
     if (!partner) return;
 
-    const deviceTokens = await db.getDeviceTokensForUsersDb([partner.id], true);
+    const deviceTokens = await db.getDeviceTokensForUsersDb([partner.id]);
     if (deviceTokens.length === 0) return;
 
     const chatPath = `/chat/${conversationId}`;
+    
+    const freshToken = await encrypt({ userId: partner.id });
 
-    const messages = deviceTokens.map(({ token, user_auth_token }) => ({
+    const messages = deviceTokens.map(({ token }) => ({
         token: token,
         data: {
             title: title || `New message from ${sender.name}`,
@@ -214,7 +220,7 @@ async function sendChatNotification(conversationId: number, sender: User, conten
             conversationId: String(conversationId),
             type: 'chat_message',
             click_action: `localpulse://${chatPath.substring(1)}`,
-            user_auth_token: user_auth_token || ''
+            user_auth_token: freshToken
         },
         android: { priority: 'high' as const },
         apns: { payload: { aps: { 'content-available': 1 } } }
@@ -245,19 +251,20 @@ async function sendNotificationForNewComment(comment: Comment, post: Post) {
     const { user: commenterUser } = await getSession();
     if (commenterUser && commenterUser.id === post.authorid) return;
 
-    const authorDeviceTokens = await db.getDeviceTokensForUsersDb([post.authorid], true);
+    const authorDeviceTokens = await db.getDeviceTokensForUsersDb([post.authorid]);
     if (authorDeviceTokens.length === 0) return;
     
-    const postPath = `/posts/${post.id}`;
+    const postPath = `/posts/${String(post.id)}`;
+    const freshToken = await encrypt({ userId: post.authorid });
 
-    const messages = authorDeviceTokens.map(({ token, user_auth_token }) => ({
+    const messages = authorDeviceTokens.map(({ token }) => ({
         token: token,
         data: {
             title: `${comment.author} commented on your pulse`,
             body: comment.content.length > 100 ? `${comment.content.substring(0, 97)}...` : comment.content,
             postId: String(post.id),
             click_action: `localpulse://${postPath.substring(1)}`,
-            user_auth_token: user_auth_token || ''
+            user_auth_token: freshToken
         },
         android: { priority: 'high' as const },
         apns: { payload: { aps: { 'content-available': 1 } } }
@@ -1100,4 +1107,5 @@ export async function getGorakshakReport(adminLat: number, adminLon: number): Pr
     return [];
   }
 }
+
 

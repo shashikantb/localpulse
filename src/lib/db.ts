@@ -635,19 +635,18 @@ export async function deleteDeviceTokenDb(token: string): Promise<void> {
   }
 }
 
-export async function getDeviceTokensForUsersDb(userIds: number[], includeAuthToken: boolean = false): Promise<{ token: string, user_auth_token?: string }[]> {
+export async function getDeviceTokensForUsersDb(userIds: number[]): Promise<{ token: string; user_id: number }[]> {
   await ensureDbInitialized();
   const dbPool = getDbPool();
   if (!dbPool || userIds.length === 0) return [];
 
   const client = await dbPool.connect();
   try {
-    const columns = includeAuthToken ? 'token, user_auth_token' : 'token';
     const query = `
-      SELECT ${columns} FROM device_tokens
+      SELECT token, user_id FROM device_tokens
       WHERE user_id = ANY($1::int[]) AND token IS NOT NULL;
     `;
-    const result: QueryResult<{token: string, user_auth_token?: string}> = await client.query(query, [userIds]);
+    const result: QueryResult<{token: string, user_id: number}> = await client.query(query, [userIds]);
     return result.rows;
   } finally {
     client.release();
@@ -1783,4 +1782,5 @@ export async function getGorakshaksSortedByDistanceDb(adminLat: number, adminLon
     client.release();
   }
 }
+
 

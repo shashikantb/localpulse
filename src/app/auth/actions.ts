@@ -32,7 +32,7 @@ if (!process.env.JWT_SECRET && process.env.NODE_ENV !== 'production') {
 }
 
 
-async function encrypt(payload: any) {
+export async function encrypt(payload: any) {
   return await new jose.SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
@@ -211,3 +211,4 @@ export async function deleteCurrentUserAccount(): Promise<{ success: boolean; er
     return { success: false, error: 'An unexpected server error occurred while deleting your account.' };
   }
 }
+
