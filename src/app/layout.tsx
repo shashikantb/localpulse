@@ -35,9 +35,6 @@ export default async function RootLayout({
       <head>
         <meta charSet="UTF-8" />
         {/* Next.js will populate this head based on metadata and other conventions */}
-        {userToken && (
-           <meta name="user-token" content={userToken} />
-        )}
       </head>
       <body className={`${GeistSans.variable} antialiased bg-background text-foreground flex flex-col min-h-svh`}>
         <Providers>
@@ -51,27 +48,6 @@ export default async function RootLayout({
           <AppInstallPrompt />
           <Toaster />
         </Providers>
-
-        {userToken && (
-          <Script id="webview-cookie-bridge" strategy="afterInteractive">
-            {`
-              try {
-                const tokenMeta = document.querySelector('meta[name="user-token"]');
-                if (tokenMeta && window.Android && typeof window.Android.setAuthCookie === 'function') {
-                  const token = tokenMeta.getAttribute('content');
-                  const domain = window.location.hostname;
-                  if (token) {
-                    console.log('WebView Bridge: Setting auth cookie for domain ' + domain);
-                    // The domain should be the base domain, e.g., "localpulse.in"
-                    window.Android.setAuthCookie(token, 'user-auth-token', domain);
-                  }
-                }
-              } catch (e) {
-                console.error('WebView Bridge Error:', e);
-              }
-            `}
-          </Script>
-        )}
       </body>
     </html>
   );

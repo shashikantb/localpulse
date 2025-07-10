@@ -9,6 +9,7 @@ import { admin as firebaseAdmin } from '@/lib/firebase-admin';
 import { getSession } from '@/app/auth/actions';
 import { getGcsClient, getGcsBucketName } from '@/lib/gcs';
 import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
 
 
 async function geocodeCoordinates(latitude: number, longitude: number): Promise<string | null> {
@@ -130,6 +131,15 @@ async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[
     const authorDisplayName = post.authorname || 'an Anonymous Pulsar';
     const postUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://localpulse.in'}/posts/${post.id}`;
 
+    // Get the auth token once to include in all notifications.
+    // This is for the recipient, so we can't get it from the sender's session.
+    // Instead, the native app that receives this payload will be responsible for handling it.
+    // We will leave this responsibility to the mobile app logic.
+    // However, if we were to send a token, it would be for the *recipient*.
+    // Since we are notifying multiple people, we cannot send a single token.
+    // The correct approach is for the mobile app to handle its own auth state upon opening.
+    // The previous change adding the meta tag is the right web-side fix. I'll revert the payload to be simpler.
+    
     const nearbyNotificationData = {
         title: `New Pulse Nearby from ${authorDisplayName}!`,
         body: post.content.substring(0, 100) + (post.content.length > 100 ? '...' : ''),
