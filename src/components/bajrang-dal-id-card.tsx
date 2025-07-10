@@ -75,7 +75,7 @@ const BajrangDalIdCard: FC<BajrangDalIdCardProps> = ({ user }) => {
 
         {/* Main Content Section */}
         <div className="flex flex-col items-center justify-start flex-grow space-y-3 pt-4">
-          <Avatar className="h-32 w-32 border-4 border-orange-400 shadow-lg -mt-8">
+          <Avatar className="h-32 w-32 border-4 border-orange-400 shadow-lg -mt-16">
             <AvatarImage src={user.profilepictureurl || undefined} alt={user.name} />
             <AvatarFallback className="text-4xl bg-orange-100">
               {user.name.charAt(0)}
