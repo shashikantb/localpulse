@@ -56,7 +56,6 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [newMessage, setNewMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   
   const isSendingRef = useRef(isSending);
@@ -65,14 +64,6 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
 
-  const scrollToBottom = (behavior: 'smooth' | 'auto' = 'smooth') => {
-    messagesEndRef.current?.scrollIntoView({ behavior });
-  };
-
-  useEffect(() => {
-    scrollToBottom('auto');
-  }, [messages]);
-  
   useEffect(() => {
     let isMounted = true;
     const fetchMessages = async () => {
@@ -102,38 +93,40 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
     if (!newMessage.trim() || isSending) return;
 
     setIsSending(true);
-    const tempId = Date.now(); // For optimistic update
-    const optimisticMessage: Message = {
-        id: tempId,
-        conversation_id: conversationId,
-        sender_id: sessionUser.id,
-        content: newMessage.trim(),
-        created_at: new Date().toISOString(),
-    };
 
-    setMessages(prev => [...prev, optimisticMessage]);
-    setNewMessage('');
-
-    const result = await sendMessage(conversationId, optimisticMessage.content);
+    const result = await sendMessage(conversationId, newMessage.trim());
     
     if (result.error || !result.message) {
       console.error('Failed to send message:', result.error);
-      setMessages(prev => prev.filter(m => m.id !== tempId));
       toast({
         variant: 'destructive',
         title: 'Message Not Sent',
         description: result.error || 'Could not send the message. Please try again.',
       });
     } else {
-      setMessages(prev => prev.map(m => m.id === tempId ? result.message! : m));
+      // Optimistically add the new message to the top of the list
+      setMessages(prev => [result.message!, ...prev]);
+      setNewMessage('');
     }
     
     setIsSending(false);
   };
 
   return (
-    <div className="flex flex-col-reverse bg-background h-full overflow-hidden">
-      <div className="flex-shrink-0 p-4 border-t bg-card">
+    <div className="flex flex-col bg-background h-full overflow-hidden">
+      {/* Header is first in DOM */}
+      <header className="flex-shrink-0 flex items-center p-3 border-b bg-card">
+        <Link href={`/users/${partner.id}`} className="flex items-center gap-3 hover:bg-muted p-2 rounded-md">
+            <Avatar>
+                <AvatarImage src={partner.profilepictureurl || undefined} alt={partner.name} />
+                <AvatarFallback>{partner.name.charAt(0)}</AvatarFallback>
+            </Avatar>
+            <h2 className="text-lg font-semibold">{partner.name}</h2>
+        </Link>
+      </header>
+
+      {/* Message input form is second */}
+      <div className="flex-shrink-0 p-4 border-b bg-card">
         <form onSubmit={handleSendMessage} className="flex items-center gap-3">
           <Textarea
             value={newMessage}
@@ -155,49 +148,42 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
           </Button>
         </form>
       </div>
-      
-      <div className="flex-grow overflow-y-auto p-4 space-y-4">
-        <div ref={messagesEndRef} />
-        {messages.map((message) => {
-          const isSender = message.sender_id === sessionUser.id;
-          return (
-            <div
-              key={message.id}
-              className={cn('flex items-end gap-2', isSender ? 'justify-end' : 'justify-start')}
-            >
-              {!isSender && (
-                <Avatar className="h-8 w-8 self-start">
-                  <AvatarImage src={partner.profilepictureurl || undefined} />
-                  <AvatarFallback>{partner.name.charAt(0)}</AvatarFallback>
-                </Avatar>
-              )}
+
+      {/* Message list is last, and will grow to fill space */}
+      <div className="flex-grow overflow-y-auto p-4 space-y-4 flex flex-col-reverse">
+        <div> {/* This div is a spacer to push messages to the bottom of the scroll area */}
+          {messages.map((message) => {
+            const isSender = message.sender_id === sessionUser.id;
+            return (
               <div
-                className={cn(
-                  'max-w-xs md:max-w-md lg:max-w-lg p-3 rounded-2xl flex flex-col',
-                  isSender
-                    ? 'bg-primary text-primary-foreground rounded-br-none'
-                    : 'bg-muted text-foreground rounded-bl-none'
-                )}
+                key={message.id}
+                className={cn('flex items-end gap-2 my-2', isSender ? 'justify-end' : 'justify-start')}
               >
-                <p className="text-sm whitespace-pre-wrap break-words">{renderChatMessageContent(message.content)}</p>
-                <span className={cn('text-xs mt-1.5 opacity-70', isSender ? 'self-end' : 'self-start')}>
-                  {format(new Date(message.created_at), 'p')}
-                </span>
+                {!isSender && (
+                  <Avatar className="h-8 w-8 self-start">
+                    <AvatarImage src={partner.profilepictureurl || undefined} />
+                    <AvatarFallback>{partner.name.charAt(0)}</AvatarFallback>
+                  </Avatar>
+                )}
+                <div
+                  className={cn(
+                    'max-w-xs md:max-w-md lg:max-w-lg p-3 rounded-2xl flex flex-col',
+                    isSender
+                      ? 'bg-primary text-primary-foreground rounded-br-none'
+                      : 'bg-muted text-foreground rounded-bl-none'
+                  )}
+                >
+                  <p className="text-sm whitespace-pre-wrap break-words">{renderChatMessageContent(message.content)}</p>
+                  <span className={cn('text-xs mt-1.5 opacity-70', isSender ? 'self-end' : 'self-start')}>
+                    {format(new Date(message.created_at), 'p')}
+                  </span>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
-      <header className="flex-shrink-0 flex items-center p-3 border-b bg-card">
-        <Link href={`/users/${partner.id}`} className="flex items-center gap-3 hover:bg-muted p-2 rounded-md">
-            <Avatar>
-                <AvatarImage src={partner.profilepictureurl || undefined} alt={partner.name} />
-                <AvatarFallback>{partner.name.charAt(0)}</AvatarFallback>
-            </Avatar>
-            <h2 className="text-lg font-semibold">{partner.name}</h2>
-        </Link>
-      </header>
     </div>
   );
 }

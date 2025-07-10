@@ -1323,7 +1323,7 @@ export async function getMessagesForConversationDb(conversationId: number, userI
       }
       
       const messagesQuery = `
-          SELECT * FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC;
+          SELECT * FROM messages WHERE conversation_id = $1 ORDER BY created_at DESC;
       `;
       const messagesResult: QueryResult<Message> = await client.query(messagesQuery, [conversationId]);
       return messagesResult.rows;
