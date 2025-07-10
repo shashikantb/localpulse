@@ -10,7 +10,6 @@ import { Button } from './ui/button';
 import { Download, Loader2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { useToast } from '@/hooks/use-toast';
-import { uploadAndGetPublicUrl } from '@/app/actions';
 
 interface BajrangDalIdCardProps {
   user: User;
@@ -32,25 +31,17 @@ const BajrangDalIdCard: FC<BajrangDalIdCardProps> = ({ user }) => {
         quality: 0.98,
         pixelRatio: 2.5,
       });
+
+      // Create a temporary link element and click it to trigger the download
+      const link = document.createElement('a');
+      link.download = `bajrang-dal-id-card-${user.id}.png`;
+      link.href = dataUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
       
-      const fileName = `bajrang-dal-id-card-${user.id}.png`;
-      const result = await uploadAndGetPublicUrl(dataUrl, fileName);
-
-      if (result.success && result.url) {
-        const newWindow = window.open(result.url, '_blank');
-        if (!newWindow) {
-          toast({
-            variant: 'destructive',
-            title: 'Action Required',
-            description: 'Could not open new tab. Please disable your pop-up blocker and try again.',
-          });
-        }
-      } else {
-        throw new Error(result.error || 'Failed to get public URL for the image.');
-      }
-
     } catch (err: any) {
-      console.error('Failed to generate or upload ID card image:', err);
+      console.error('Failed to generate or download ID card image:', err);
       toast({
         variant: 'destructive',
         title: 'Download Failed',
