@@ -139,8 +139,8 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
   };
 
   return (
-    <div className="flex flex-1 flex-col bg-background">
-      <header className="flex items-center p-3 border-b bg-card">
+    <div className="flex flex-col bg-background h-full">
+      <header className="flex-shrink-0 flex items-center p-3 border-b bg-card">
         <Link href={`/users/${partner.id}`} className="flex items-center gap-3 hover:bg-muted p-2 rounded-md">
             <Avatar>
                 <AvatarImage src={partner.profilepictureurl || undefined} alt={partner.name} />
@@ -150,7 +150,7 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
         </Link>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-grow overflow-y-auto p-4 space-y-4">
         {messages.map((message) => {
           const isSender = message.sender_id === sessionUser.id;
           return (
@@ -183,7 +183,7 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="p-4 border-t bg-card">
+      <div className="flex-shrink-0 p-4 border-t bg-card">
         <form onSubmit={handleSendMessage} className="flex items-center gap-3">
           <Textarea
             value={newMessage}
