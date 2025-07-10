@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader } from '@/co
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import type { Post, User } from '@/lib/db-types';
 import { formatDistanceToNowStrict } from 'date-fns';
-import { MapPin, UserCircle, MessageCircle, Map, Share2, ThumbsUp, Tag, Eye, BellRing, AlertTriangle, RefreshCw, ChevronLeft, ChevronRight, Image as ImageIcon, MoreHorizontal, Trash2 } from 'lucide-react';
+import { MapPin, UserCircle, MessageCircle, Map, Share2, ThumbsUp, Tag, Eye, BellRing, AlertTriangle, RefreshCw, ChevronLeft, ChevronRight, Image as ImageIcon, MoreHorizontal, Trash2, Megaphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toggleLikePost, recordPostView, likePostAnonymously, deleteUserPost } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -91,6 +91,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
   
   const authorName = post.authorname || 'Anonymous Pulsar';
   const isOwnPost = sessionUser?.id === post.authorid;
+  const isAnnouncement = post.authorid === 1; // ID 1 is reserved for "LocalPulse Official"
 
   const [isLikedByClient, setIsLikedByClient] = useState(false);
   const [displayLikeCount, setDisplayLikeCount] = useState<number>(post.likecount);
@@ -363,18 +364,24 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
 
 
   return (
-    <Card ref={cardRef} className="overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-300 ease-out border border-border/60 rounded-xl bg-card/80 backdrop-blur-sm hover:border-primary/50 transform hover:scale-[1.005]">
-      <CardHeader className="pb-3 pt-5 px-5 flex flex-row items-start space-x-4 bg-gradient-to-br from-card to-muted/10">
+    <Card ref={cardRef} className={cn(
+        "overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-300 ease-out border border-border/60 rounded-xl bg-card/80 backdrop-blur-sm hover:border-primary/50 transform hover:scale-[1.005]",
+        isAnnouncement && "bg-primary/5 border-primary/20"
+    )}>
+      <CardHeader className={cn(
+          "pb-3 pt-5 px-5 flex flex-row items-start space-x-4",
+          isAnnouncement ? "bg-primary/10" : "bg-gradient-to-br from-card to-muted/10"
+      )}>
         <Avatar className="h-12 w-12 border-2 border-primary/60 shadow-md">
           <AvatarImage src={post.authorprofilepictureurl ?? undefined} alt={authorName} />
           <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20 text-primary font-bold text-xl">
-            {authorName ? authorName.charAt(0).toUpperCase() : <UserCircle className="h-7 w-7 text-primary/80" />}
+            {isAnnouncement ? <Megaphone className="h-7 w-7 text-primary/80" /> : (authorName ? authorName.charAt(0).toUpperCase() : <UserCircle className="h-7 w-7 text-primary/80" />)}
           </AvatarFallback>
         </Avatar>
         <div className="flex-1">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 flex-wrap">
-              {post.authorid ? (
+              {post.authorid && !isAnnouncement ? (
                 <Link href={`/users/${post.authorid}`} className="text-sm text-primary font-semibold flex items-center hover:underline">
                   {authorName}
                 </Link>
@@ -383,7 +390,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
                   {authorName}
                 </p>
               )}
-              {sessionUser && post.authorid && !isOwnPost && (
+              {sessionUser && post.authorid && !isOwnPost && !isAnnouncement && (
                   <FollowButton 
                       targetUserId={post.authorid} 
                       initialIsFollowing={!!post.isAuthorFollowedByCurrentUser} 
@@ -394,8 +401,9 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
               {timeAgo}
             </CardDescription>
           </div>
-
-            {!post.hide_location && post.city && post.city !== "Unknown City" && (
+            {isAnnouncement ? (
+                <Badge variant="default" className="mt-1">Official Announcement</Badge>
+            ) : !post.hide_location && post.city && post.city !== "Unknown City" && (
                  <p className="text-sm text-muted-foreground flex items-center mt-0.5">
                     <MapPin className="w-4 h-4 mr-1.5 text-primary/70 flex-shrink-0" /> {post.city}
                 </p>

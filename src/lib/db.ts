@@ -11,6 +11,10 @@ let pool: Pool | null = null;
 let dbWarningShown = false;
 let initializationPromise: Promise<void> | null = null;
 
+const OFFICIAL_USER_ID = 1;
+const OFFICIAL_USER_EMAIL = 'official@localpulse.in';
+
+
 // --- Database Connection and Initialization ---
 
 function getDbPool(): Pool | null {
@@ -151,6 +155,19 @@ async function initializeDbSchema(): Promise<void> {
         await initClient.query(`ALTER TABLE family_relationships ADD COLUMN IF NOT EXISTS share_location_from_1_to_2 BOOLEAN NOT NULL DEFAULT false;`);
         await initClient.query(`ALTER TABLE family_relationships ADD COLUMN IF NOT EXISTS share_location_from_2_to_1 BOOLEAN NOT NULL DEFAULT false;`);
 
+        // --- Create Official User ---
+        await initClient.query(`
+            INSERT INTO users (id, name, email, passwordhash, role, status)
+            VALUES ($1, 'LocalPulse Official', $2, 'not_a_real_password', 'Admin', 'approved')
+            ON CONFLICT (id) DO UPDATE SET 
+                name = EXCLUDED.name,
+                email = EXCLUDED.email,
+                role = EXCLUDED.role,
+                status = EXCLUDED.status;
+        `, [OFFICIAL_USER_ID, OFFICIAL_USER_EMAIL]);
+        // Reset sequence to avoid collision if ID 1 was manually inserted
+        await initClient.query(`SELECT setval('users_id_seq', (SELECT MAX(id) FROM users));`);
+
 
         // --- Indexes for performance ---
         await initClient.query('CREATE INDEX IF NOT EXISTS idx_posts_createdat ON posts (createdat DESC)');
@@ -290,9 +307,32 @@ export async function getPostsDb(
       }
     }
 
-    queryParams.push(options.limit, options.offset);
+    const limit = isAdminView ? options.limit : options.limit - 1; // Adjust limit if we might add an announcement
+    queryParams.push(limit, options.offset);
     const limitParamIndex = paramIndex++;
     const offsetParamIndex = paramIndex++;
+    
+    let allPosts: Post[] = [];
+
+    // Step 1: Fetch the latest announcement if it's the first page
+    if (options.offset === 0 && !isAdminView) {
+        const announcementQuery = `
+          SELECT 
+            ${POST_COLUMNS_WITH_JOINS},
+            ${likeCheck} as "isLikedByCurrentUser",
+            ${followCheck} as "isAuthorFollowedByCurrentUser"
+          FROM posts p
+          LEFT JOIN users u ON p.authorid = u.id
+          WHERE p.authorid = ${OFFICIAL_USER_ID}
+          ORDER BY p.createdat DESC
+          LIMIT 1
+        `;
+        const announcementResult = await client.query(announcementQuery, [options.currentUserId || null]);
+        if (announcementResult.rows.length > 0) {
+            allPosts = announcementResult.rows;
+        }
+    }
+
 
     const postsQuery = `
       SELECT 
@@ -301,13 +341,19 @@ export async function getPostsDb(
         ${followCheck} as "isAuthorFollowedByCurrentUser"
       FROM posts p
       LEFT JOIN users u ON p.authorid = u.id
-      WHERE p.is_family_post = false
+      WHERE p.is_family_post = false AND p.authorid != ${OFFICIAL_USER_ID}
       ORDER BY ${orderByClause}
       LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}
     `;
 
     const postsResult = await client.query(postsQuery, queryParams);
-    return postsResult.rows;
+    
+    // Combine announcement with regular posts, ensuring no duplicates
+    const announcementId = allPosts.length > 0 ? allPosts[0].id : null;
+    const regularPosts = postsResult.rows.filter(p => p.id !== announcementId);
+
+    return [...allPosts, ...regularPosts].slice(0, options.limit);
+    
   } finally {
     client.release();
   }
@@ -957,6 +1003,7 @@ export async function getAllUsersDb(): Promise<User[]> {
       const query = `
           SELECT ${USER_COLUMNS_SANITIZED}
           FROM users 
+          WHERE id != ${OFFICIAL_USER_ID}
           ORDER BY createdat DESC;
       `;
       const result: QueryResult<User> = await client.query(query);
@@ -1140,6 +1187,7 @@ export async function searchUsersDb(query: string, currentUserId?: number): Prom
       FROM users 
       WHERE name ILIKE $1 
         AND status = 'approved'
+        AND id != ${OFFICIAL_USER_ID}
         AND ($2::int IS NULL OR id != $2::int)
       LIMIT 10;
     `;

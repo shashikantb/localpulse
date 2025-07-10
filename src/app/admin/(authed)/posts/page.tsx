@@ -1,5 +1,4 @@
 
-
 import type { FC } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { FileText, PlusCircle, Search } from 'lucide-react';
 import { getAdminPosts } from '@/app/actions';
 import PostActions from '@/components/admin/post-actions';
+import CreateAnnouncementDialog from './create-announcement-dialog';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,10 +20,12 @@ const AdminManagePostsPage: FC = async () => {
           <h1 className="text-4xl font-bold tracking-tight text-foreground">Manage Posts</h1>
           <p className="text-lg text-muted-foreground">View, edit, or delete user posts.</p>
         </div>
-        <Button disabled>
-          <PlusCircle className="mr-2 h-5 w-5" />
-          Create New Post
-        </Button>
+        <CreateAnnouncementDialog>
+            <Button>
+              <PlusCircle className="mr-2 h-5 w-5" />
+              Create Announcement
+            </Button>
+        </CreateAnnouncementDialog>
       </header>
 
       <Card className="shadow-lg">
