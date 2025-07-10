@@ -99,7 +99,7 @@ const BajrangDalIdCard: FC<BajrangDalIdCardProps> = ({ user }) => {
         }}
       >
         {/* User Photo - Centered */}
-        <div className="absolute inset-x-0 top-20 flex justify-center">
+        <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-center">
             <Avatar className="h-32 w-32 border-4 border-orange-400 shadow-lg">
                 <AvatarImage src={user.profilepictureurl || undefined} alt={user.name} />
                 <AvatarFallback className="text-4xl bg-orange-100">
