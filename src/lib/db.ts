@@ -262,6 +262,7 @@ export async function getPostsDb(
         queryParams.push(options.latitude, options.longitude);
     }
     
+    // Explicitly cast the user ID parameter to an integer to handle nulls gracefully.
     const likeCheck = `EXISTS(SELECT 1 FROM post_likes pl WHERE pl.post_id = p.id AND pl.user_id = $1::int)`;
     const followCheck = `p.authorid IS NOT NULL AND EXISTS(SELECT 1 FROM user_followers uf WHERE uf.following_id = p.authorid AND uf.follower_id = $1::int)`;
 
