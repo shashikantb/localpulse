@@ -98,9 +98,9 @@ const BajrangDalIdCard: FC<BajrangDalIdCardProps> = ({ user }) => {
           color: '#5D4037', // Dark rich brown for text
         }}
       >
-        {/* User Photo */}
-        <div className="absolute top-16 left-6">
-            <Avatar className="h-28 w-28 border-4 border-orange-400 shadow-lg">
+        {/* User Photo - Centered */}
+        <div className="absolute inset-x-0 top-20 flex justify-center">
+            <Avatar className="h-32 w-32 border-4 border-orange-400 shadow-lg">
                 <AvatarImage src={user.profilepictureurl || undefined} alt={user.name} />
                 <AvatarFallback className="text-4xl bg-orange-100">
                     {user.name.charAt(0)}
