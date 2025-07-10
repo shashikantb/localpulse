@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -55,9 +56,7 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [newMessage, setNewMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const [componentHeight, setComponentHeight] = useState('100%');
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { toast } = useToast();
   
   const isSendingRef = useRef(isSending);
@@ -65,35 +64,6 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
   
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
-
-  useEffect(() => {
-    const handleResize = () => {
-      if (window.visualViewport) {
-        setComponentHeight(`${window.visualViewport.height}px`);
-      }
-    };
-
-    if (window.visualViewport) {
-        setComponentHeight(`${window.visualViewport.height}px`);
-        window.visualViewport.addEventListener('resize', handleResize);
-    } else {
-        // Fallback for older browsers
-        const setVh = () => {
-            const vh = window.innerHeight * 0.01;
-            document.documentElement.style.setProperty('--vh', `${vh}px`);
-            setComponentHeight('calc(var(--vh, 1vh) * 100)');
-        };
-        setVh();
-        window.addEventListener('resize', setVh);
-        return () => window.removeEventListener('resize', setVh);
-    }
-    
-    return () => {
-      if (window.visualViewport) {
-        window.visualViewport.removeEventListener('resize', handleResize);
-      }
-    };
-  }, []);
 
   const scrollToBottom = (behavior: 'smooth' | 'auto' = 'smooth') => {
     messagesEndRef.current?.scrollIntoView({ behavior });
@@ -160,41 +130,34 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
     
     setIsSending(false);
   };
-  
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    const handleFocus = () => {
-      setTimeout(() => {
-        // When textarea is focused, scroll it into view.
-        textarea?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-      }, 300); // Small delay to allow keyboard to start animating
-    };
-
-    if (textarea) {
-      textarea.addEventListener('focus', handleFocus);
-    }
-
-    return () => {
-      if (textarea) {
-        textarea.removeEventListener('focus', handleFocus);
-      }
-    };
-  }, []);
-
 
   return (
-    <div className="flex flex-col bg-background" style={{ height: componentHeight }}>
-      <header className="flex-shrink-0 flex items-center p-3 border-b bg-card">
-        <Link href={`/users/${partner.id}`} className="flex items-center gap-3 hover:bg-muted p-2 rounded-md">
-            <Avatar>
-                <AvatarImage src={partner.profilepictureurl || undefined} alt={partner.name} />
-                <AvatarFallback>{partner.name.charAt(0)}</AvatarFallback>
-            </Avatar>
-            <h2 className="text-lg font-semibold">{partner.name}</h2>
-        </Link>
-      </header>
-
+    <div className="flex flex-col-reverse bg-background h-full overflow-hidden">
+      <div className="flex-shrink-0 p-4 border-t bg-card">
+        <form onSubmit={handleSendMessage} className="flex items-center gap-3">
+          <Textarea
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            placeholder="Type a message..."
+            className="flex-1 resize-none"
+            rows={1}
+            disabled={isSending}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage(e);
+              }
+            }}
+          />
+          <Button type="submit" size="icon" disabled={!newMessage.trim() || isSending}>
+            {isSending ? <Loader2 className="animate-spin" /> : <Send />}
+            <span className="sr-only">Send</span>
+          </Button>
+        </form>
+      </div>
+      
       <div className="flex-grow overflow-y-auto p-4 space-y-4">
+        <div ref={messagesEndRef} />
         {messages.map((message) => {
           const isSender = message.sender_id === sessionUser.id;
           return (
@@ -224,32 +187,17 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
             </div>
           );
         })}
-        <div ref={messagesEndRef} />
       </div>
 
-      <div className="flex-shrink-0 p-4 border-t bg-card">
-        <form onSubmit={handleSendMessage} className="flex items-center gap-3">
-          <Textarea
-            ref={textareaRef}
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Type a message..."
-            className="flex-1 resize-none"
-            rows={1}
-            disabled={isSending}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSendMessage(e);
-              }
-            }}
-          />
-          <Button type="submit" size="icon" disabled={!newMessage.trim() || isSending}>
-            {isSending ? <Loader2 className="animate-spin" /> : <Send />}
-            <span className="sr-only">Send</span>
-          </Button>
-        </form>
-      </div>
+      <header className="flex-shrink-0 flex items-center p-3 border-b bg-card">
+        <Link href={`/users/${partner.id}`} className="flex items-center gap-3 hover:bg-muted p-2 rounded-md">
+            <Avatar>
+                <AvatarImage src={partner.profilepictureurl || undefined} alt={partner.name} />
+                <AvatarFallback>{partner.name.charAt(0)}</AvatarFallback>
+            </Avatar>
+            <h2 className="text-lg font-semibold">{partner.name}</h2>
+        </Link>
+      </header>
     </div>
   );
 }
