@@ -129,7 +129,7 @@ async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[
     const failedTokens: string[] = [];
     const processedTokens = new Set<string>();
     const authorDisplayName = post.authorname || 'an Anonymous Pulsar';
-    const postPath = `/posts/${post.id}`;
+    const clickActionUrl = `localpulse:///`;
 
     // 1. Send notifications to mentioned users
     if (mentionedUserIds.length > 0) {
@@ -143,8 +143,7 @@ async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[
                     data: {
                         title: `${authorDisplayName} mentioned you in a pulse!`,
                         body: post.content.substring(0, 100) + (post.content.length > 100 ? '...' : ''),
-                        postId: String(post.id),
-                        click_action: `localpulse://${postPath.substring(1)}`,
+                        click_action: clickActionUrl,
                         user_auth_token: freshToken
                     },
                     android: { priority: 'high' as const },
@@ -169,8 +168,7 @@ async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[
             data: {
                 title: `New Pulse Nearby from ${authorDisplayName}!`,
                 body: post.content.substring(0, 100) + (post.content.length > 100 ? '...' : ''),
-                postId: String(post.id),
-                click_action: `localpulse://${postPath.substring(1)}`,
+                click_action: clickActionUrl,
                 user_auth_token: '' // No auth for nearby anonymous users
             },
             tokens: nearbyOnlyTokens,
@@ -208,7 +206,7 @@ async function sendChatNotification(conversationId: number, sender: User, conten
     const deviceTokens = await db.getDeviceTokensForUsersDb([partner.id]);
     if (deviceTokens.length === 0) return;
 
-    const chatPath = `/chat/${conversationId}`;
+    const clickActionUrl = `localpulse:///`;
     
     const freshToken = await encrypt({ userId: partner.id });
 
@@ -217,9 +215,8 @@ async function sendChatNotification(conversationId: number, sender: User, conten
         data: {
             title: title || `New message from ${sender.name}`,
             body: content.length > 100 ? `${content.substring(0, 97)}...` : content,
-            conversationId: String(conversationId),
             type: 'chat_message',
-            click_action: `localpulse://${chatPath.substring(1)}`,
+            click_action: clickActionUrl,
             user_auth_token: freshToken
         },
         android: { priority: 'high' as const },
@@ -254,7 +251,7 @@ async function sendNotificationForNewComment(comment: Comment, post: Post) {
     const authorDeviceTokens = await db.getDeviceTokensForUsersDb([post.authorid]);
     if (authorDeviceTokens.length === 0) return;
     
-    const postPath = `/posts/${String(post.id)}`;
+    const clickActionUrl = `localpulse:///`;
     const freshToken = await encrypt({ userId: post.authorid });
 
     const messages = authorDeviceTokens.map(({ token }) => ({
@@ -262,8 +259,7 @@ async function sendNotificationForNewComment(comment: Comment, post: Post) {
         data: {
             title: `${comment.author} commented on your pulse`,
             body: comment.content.length > 100 ? `${comment.content.substring(0, 97)}...` : comment.content,
-            postId: String(post.id),
-            click_action: `localpulse://${postPath.substring(1)}`,
+            click_action: clickActionUrl,
             user_auth_token: freshToken
         },
         android: { priority: 'high' as const },
@@ -1107,5 +1103,6 @@ export async function getGorakshakReport(adminLat: number, adminLon: number): Pr
     return [];
   }
 }
+
 
 
