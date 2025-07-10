@@ -214,7 +214,7 @@ function ensureDbInitialized() {
 
 // --- Function Implementations ---
 
-const POST_COLUMNS_SANITIZED = `
+const POST_COLUMNS_WITH_JOINS = `
   p.id, p.content, p.latitude, p.longitude, p.createdat, p.likecount, 
   p.commentcount, p.viewcount, p.notifiedcount, p.city, p.hashtags, 
   p.is_family_post, p.hide_location, p.authorid, p.mediatype, p.mediaurls,
@@ -233,8 +233,9 @@ export async function getPostsDb(
     latitude?: number | null;
     longitude?: number | null;
     sortBy?: SortOption;
+    currentUserId?: number | null;
   } = { limit: 10, offset: 0, sortBy: 'newest' },
-  userRole?: UserRole
+  isAdminView: boolean = false
 ): Promise<Post[]> {
   await ensureDbInitialized();
   const dbPool = getDbPool();
@@ -243,9 +244,7 @@ export async function getPostsDb(
   const client = await dbPool.connect();
   try {
     let orderByClause: string;
-    const queryParams: (string | number)[] = [];
-    const sortBy = options.sortBy || 'newest';
-
+    const queryParams: (string | number | null)[] = [];
     let paramIndex = 1;
 
     let distanceCalc = '';
@@ -254,7 +253,17 @@ export async function getPostsDb(
         queryParams.push(options.latitude, options.longitude);
     }
     
-    if (sortBy === 'newest' && distanceCalc) {
+    // Always add currentUserId to params, even if it's null
+    queryParams.push(options.currentUserId || null);
+    const userIdParamIndex = paramIndex++;
+    
+    // These boolean flags will be included in the SELECT statement
+    const likeCheck = `EXISTS(SELECT 1 FROM post_likes pl WHERE pl.post_id = p.id AND pl.user_id = $${userIdParamIndex})`;
+    const followCheck = `p.authorid IS NOT NULL AND EXISTS(SELECT 1 FROM user_followers uf WHERE uf.following_id = p.authorid AND uf.follower_id = $${userIdParamIndex})`;
+
+    const sortBy = options.sortBy || 'newest';
+
+    if (sortBy === 'newest' && distanceCalc && !isAdminView) {
       orderByClause = `
         CASE
           WHEN ${distanceCalc} < 20000 THEN 1
@@ -267,7 +276,6 @@ export async function getPostsDb(
         p.createdat DESC
       `;
     } else {
-      // Handle other sorts or default to createdat
       switch(sortBy) {
         case 'likes':
           orderByClause = 'p.likecount DESC, p.createdat DESC';
@@ -282,16 +290,21 @@ export async function getPostsDb(
       }
     }
 
+    queryParams.push(options.limit, options.offset);
+    const limitParamIndex = paramIndex++;
+    const offsetParamIndex = paramIndex++;
+
     const postsQuery = `
-      SELECT ${POST_COLUMNS_SANITIZED}
+      SELECT 
+        ${POST_COLUMNS_WITH_JOINS},
+        ${likeCheck} as "isLikedByCurrentUser",
+        ${followCheck} as "isAuthorFollowedByCurrentUser"
       FROM posts p
       LEFT JOIN users u ON p.authorid = u.id
       WHERE p.is_family_post = false
       ORDER BY ${orderByClause}
-      LIMIT $${paramIndex++} OFFSET $${paramIndex++}
+      LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}
     `;
-
-    queryParams.push(options.limit, options.offset);
 
     const postsResult = await client.query(postsQuery, queryParams);
     return postsResult.rows;
@@ -327,7 +340,9 @@ export async function getFamilyPostsDb(
         }
 
         const familyQuery = `
-            SELECT ${POST_COLUMNS_SANITIZED}
+            SELECT ${POST_COLUMNS_WITH_JOINS},
+              EXISTS(SELECT 1 FROM post_likes pl WHERE pl.post_id = p.id AND pl.user_id = $1) as "isLikedByCurrentUser",
+              EXISTS(SELECT 1 FROM user_followers uf WHERE uf.following_id = p.authorid AND uf.follower_id = $1) as "isAuthorFollowedByCurrentUser"
             FROM posts p
             LEFT JOIN users u ON p.authorid = u.id
             WHERE p.is_family_post = TRUE
@@ -350,15 +365,22 @@ export async function getFamilyPostsDb(
 }
 
 
-export async function getMediaPostsDb(options: { limit: number; offset: number; } = { limit: 10, offset: 0 }): Promise<Post[]> {
+export async function getMediaPostsDb(options: { limit: number; offset: number; currentUserId?: number | null; } = { limit: 10, offset: 0 }): Promise<Post[]> {
   await ensureDbInitialized();
   const dbPool = getDbPool();
   if (!dbPool) return [];
 
   const client = await dbPool.connect();
   try {
+    const userIdParam = options.currentUserId || null;
+    const likeCheck = `EXISTS(SELECT 1 FROM post_likes pl WHERE pl.post_id = p.id AND pl.user_id = $1)`;
+    const followCheck = `p.authorid IS NOT NULL AND EXISTS(SELECT 1 FROM user_followers uf WHERE uf.following_id = p.authorid AND uf.follower_id = $1)`;
+
     const postsQuery = `
-      SELECT ${POST_COLUMNS_SANITIZED}
+      SELECT 
+        ${POST_COLUMNS_WITH_JOINS},
+        ${likeCheck} as "isLikedByCurrentUser",
+        ${followCheck} as "isAuthorFollowedByCurrentUser"
       FROM posts p
       LEFT JOIN users u ON p.authorid = u.id
       WHERE 
@@ -367,9 +389,9 @@ export async function getMediaPostsDb(options: { limit: number; offset: number; 
         AND array_length(p.mediaurls, 1) > 0 
         AND p.mediaurls[1] IS NOT NULL
       ORDER BY p.createdat DESC
-      LIMIT $1 OFFSET $2
+      LIMIT $2 OFFSET $3
     `;
-    const postsResult = await client.query(postsQuery, [options.limit, options.offset]);
+    const postsResult = await client.query(postsQuery, [userIdParam, options.limit, options.offset]);
     return postsResult.rows;
   } finally {
     client.release();
@@ -669,20 +691,27 @@ export async function getNewerPostsCountDb(latestIdKnown: number): Promise<numbe
   }
 }
 
-export async function getPostByIdDb(postId: number, userRole?: UserRole): Promise<Post | null> {
+export async function getPostByIdDb(postId: number, currentUserId?: number | null): Promise<Post | null> {
   await ensureDbInitialized();
   const dbPool = getDbPool();
   if (!dbPool) return null;
 
   const client = await dbPool.connect();
   try {
+    const userIdParam = currentUserId || null;
+    const likeCheck = `EXISTS(SELECT 1 FROM post_likes pl WHERE pl.post_id = p.id AND pl.user_id = $2)`;
+    const followCheck = `p.authorid IS NOT NULL AND EXISTS(SELECT 1 FROM user_followers uf WHERE uf.following_id = p.authorid AND uf.follower_id = $2)`;
+
     const query = `
-      SELECT ${POST_COLUMNS_SANITIZED}
+      SELECT 
+        ${POST_COLUMNS_WITH_JOINS},
+        ${likeCheck} as "isLikedByCurrentUser",
+        ${followCheck} as "isAuthorFollowedByCurrentUser"
       FROM posts p
       LEFT JOIN users u ON p.authorid = u.id
       WHERE p.id = $1;
     `;
-    const result: QueryResult<Post> = await client.query(query, [postId]);
+    const result: QueryResult<Post> = await client.query(query, [postId, userIdParam]);
     return result.rows[0] || null;
   } finally {
     client.release();
@@ -878,8 +907,14 @@ export async function getPostsByUserIdDb(userId: number): Promise<Post[]> {
 
   const client = await dbPool.connect();
   try {
+    const likeCheck = `EXISTS(SELECT 1 FROM post_likes pl WHERE pl.post_id = p.id AND pl.user_id = $1)`;
+    const followCheck = `EXISTS(SELECT 1 FROM user_followers uf WHERE uf.following_id = p.authorid AND uf.follower_id = $1)`;
+
     const query = `
-      SELECT ${POST_COLUMNS_SANITIZED}
+      SELECT 
+        ${POST_COLUMNS_WITH_JOINS},
+        ${likeCheck} as "isLikedByCurrentUser",
+        ${followCheck} as "isAuthorFollowedByCurrentUser"
       FROM posts p
       JOIN users u ON p.authorid = u.id
       WHERE p.authorid = $1
@@ -1782,5 +1817,3 @@ export async function getGorakshaksSortedByDistanceDb(adminLat: number, adminLon
     client.release();
   }
 }
-
-

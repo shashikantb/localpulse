@@ -5,7 +5,6 @@
 import * as db from '@/lib/db';
 import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus, FamilyMember, FamilyMemberLocation, PendingFamilyRequest, Conversation, Message, ConversationParticipant, SortOption, BusinessUser, GorakshakReportUser } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
-import { admin as firebaseAdmin } from '@/lib/firebase-admin';
 import { getSession, encrypt } from '@/app/auth/actions';
 import { getGcsClient, getGcsBucketName } from '@/lib/gcs';
 import { redirect } from 'next/navigation';
@@ -26,18 +25,14 @@ async function enrichPosts(posts: Post[], user: User | null): Promise<Post[]> {
         return [];
     }
     const postIds = posts.map(p => p.id);
-    const authorIds = [...new Set(posts.map(p => p.authorid).filter((id): id is number => id !== null))];
-
-    const [likedPostIds, mentionsMap, followedAuthorIds] = await Promise.all([
-        user ? db.getLikedPostIdsForUserDb(user.id, postIds) : Promise.resolve(new Set<number>()),
-        db.getMentionsForPostsDb(postIds),
-        (user && authorIds.length > 0) ? db.getFollowedUserIdsDb(user.id, authorIds) : Promise.resolve(new Set<number>())
-    ]);
+    const mentionsMap = await db.getMentionsForPostsDb(postIds);
 
     posts.forEach((post: any) => {
-        post.isLikedByCurrentUser = likedPostIds.has(post.id);
         post.mentions = mentionsMap.get(post.id) || [];
-        post.isAuthorFollowedByCurrentUser = followedAuthorIds.has(post.authorid);
+        // The isLikedByCurrentUser and isAuthorFollowedByCurrentUser flags are now set directly by the DB query
+        // but we need to ensure they are boolean values for client-side logic.
+        post.isLikedByCurrentUser = !!post.isLikedByCurrentUser;
+        post.isAuthorFollowedByCurrentUser = !!post.isAuthorFollowedByCurrentUser;
     });
 
     return posts;
@@ -51,10 +46,13 @@ export async function getPosts(options?: { page: number; limit: number; latitude
         offset: (options.page - 1) * options.limit,
         latitude: options.latitude,
         longitude: options.longitude,
-        sortBy: options.sortBy
-    } : { limit: 10, offset: 0, sortBy: 'newest' as SortOption };
+        sortBy: options.sortBy,
+        currentUserId: user?.id,
+    } : { limit: 10, offset: 0, sortBy: 'newest' as SortOption, currentUserId: user?.id };
 
-    const posts = await db.getPostsDb(dbOptions, user?.role);
+    const posts = await db.getPostsDb(dbOptions);
+    // Enrich with mentions, which is a separate query.
+    // Like and Follow status are now handled in the main getPostsDb query.
     return enrichPosts(posts, user);
     
   } catch (error: any) {
@@ -83,21 +81,15 @@ export async function getFamilyPosts(options: { page: number, limit: number, sor
 
 export async function getAdminPosts(options?: { page: number; limit: number }): Promise<Post[]> {
   try {
+    const { user } = await getSession();
     const dbOptions = options ? {
         limit: options.limit,
-        offset: (options.page - 1) * options.limit
-    } : undefined;
+        offset: (options.page - 1) * options.limit,
+        currentUserId: user?.id,
+    } : { limit: 10, offset: 0, currentUserId: user?.id };
 
-    let posts = await db.getPostsDb(dbOptions);
-    
-    if (posts.length > 0) {
-      const mentionsMap = await db.getMentionsForPostsDb(posts.map(p => p.id));
-      posts.forEach((post: any) => {
-        post.mentions = mentionsMap.get(post.id) || [];
-      });
-    }
-    
-    return posts;
+    const posts = await db.getPostsDb(dbOptions, true);
+    return enrichPosts(posts, user);
   } catch (error) {
     console.error("Server action error fetching admin posts:", error);
     return [];
@@ -108,7 +100,7 @@ export async function getAdminPosts(options?: { page: number; limit: number }): 
 export async function getMediaPosts(options?: { page: number; limit: number }): Promise<Post[]> {
   try {
     const { user } = await getSession();
-    const dbOptions = options ? { limit: options.limit, offset: (options.page - 1) * options.limit } : undefined;
+    const dbOptions = options ? { limit: options.limit, offset: (options.page - 1) * options.limit, currentUserId: user?.id } : { limit: 10, offset: 0, currentUserId: user?.id };
     
     const posts = await db.getMediaPostsDb(dbOptions);
     return enrichPosts(posts, user);
@@ -119,7 +111,7 @@ export async function getMediaPosts(options?: { page: number; limit: number }): 
   }
 }
 
-async function sendNotificationsForNewPost(post: Post, mentionedUserIds: number[] = []) {
+async function sendNotificationForNewPost(post: Post, mentionedUserIds: number[] = []) {
   try {
     if (post.is_family_post) {
       return; 
@@ -650,9 +642,10 @@ export async function getPostsByUserId(userId: number): Promise<Post[]> {
 export async function getPostById(postId: number): Promise<Post | null> {
   try {
     const { user } = await getSession();
-    let post = await db.getPostByIdDb(postId, user?.role);
+    let post = await db.getPostByIdDb(postId, user?.id);
     if (!post) return null;
 
+    // enrichPosts only adds mentions now, the rest is in the query.
     const enrichedPosts = await enrichPosts([post], user);
     return enrichedPosts[0];
 
@@ -1105,8 +1098,3 @@ export async function getGorakshakReport(adminLat: number, adminLon: number): Pr
     return [];
   }
 }
-
-
-
-
-
