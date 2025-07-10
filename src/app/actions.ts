@@ -338,7 +338,7 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
 
     revalidatePath('/');
     
-    sendNotificationsForNewPost(finalPost, postDataForDb.mentionedUserIds).catch(err => {
+    sendNotificationForNewPost(finalPost, postDataForDb.mentionedUserIds).catch(err => {
       console.error("Background notification sending failed:", err);
     });
 
