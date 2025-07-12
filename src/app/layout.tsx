@@ -10,8 +10,13 @@ import Header from '@/components/layout/header';
 import StickyNav from '@/components/sticky-nav';
 import { Providers } from '@/app/providers';
 import { getSession } from '@/app/auth/actions';
-import FirebaseMessagingClient from '@/components/firebase-messaging-client';
 import { cookies } from 'next/headers';
+import dynamic from 'next/dynamic';
+
+const FirebaseMessagingClient = dynamic(
+  () => import('@/components/firebase-messaging-client'),
+  { ssr: false }
+);
 
 
 // The geist font package exports an object with the variable name pre-configured.
