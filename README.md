@@ -39,6 +39,11 @@ GOOGLE_GENAI_API_KEY=your_google_genai_api_key
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=password123
 
+# Official User Password (Optional)
+# Set this if you want to be able to log in as the official@localpulse.in user.
+# If not set, the account will be locked and cannot be logged into.
+OFFICIAL_USER_PASSWORD=your_official_user_password
+
 # --- Firebase Configuration (for Web Push Notifications) ---
 # This is required for handling notification clicks on the web.
 # To find these values:
@@ -188,3 +193,5 @@ The solution is to force your browser to load the latest version of the applicat
 - On Mac: Press `Cmd+Shift+R`.
 
 This will clear the cache for the page and resolve the mismatch.
+
+    

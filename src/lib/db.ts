@@ -153,13 +153,22 @@ async function initializeDbSchema(): Promise<void> {
         await initClient.query(`ALTER TABLE family_relationships ADD COLUMN IF NOT EXISTS share_location_from_1_to_2 BOOLEAN NOT NULL DEFAULT false;`);
         await initClient.query(`ALTER TABLE family_relationships ADD COLUMN IF NOT EXISTS share_location_from_2_to_1 BOOLEAN NOT NULL DEFAULT false;`);
 
-        // --- Create Official User ---
-        // Safely create the official user only if it doesn't exist by email.
+        // --- Create or Update Official User ---
+        const officialUserPassword = process.env.OFFICIAL_USER_PASSWORD;
+        let passwordHash;
+        if (officialUserPassword) {
+            const salt = await bcrypt.genSalt(10);
+            passwordHash = await bcrypt.hash(officialUserPassword, salt);
+        } else {
+            passwordHash = 'not_a_real_password_so_login_is_impossible';
+        }
+
         await initClient.query(`
             INSERT INTO users (name, email, passwordhash, role, status)
-            VALUES ('LocalPulse Official', $1, 'not_a_real_password', 'Admin', 'approved')
-            ON CONFLICT (email) DO NOTHING;
-        `, [OFFICIAL_USER_EMAIL]);
+            VALUES ('LocalPulse Official', $1, $2, 'Admin', 'approved')
+            ON CONFLICT (email) DO UPDATE
+            SET passwordhash = $2;
+        `, [OFFICIAL_USER_EMAIL, passwordHash]);
 
         // --- Indexes for performance ---
         await initClient.query('CREATE INDEX IF NOT EXISTS idx_posts_createdat ON posts (createdat DESC)');
@@ -662,7 +671,7 @@ export async function updateUserLocationDb(userId: number, latitude: number, lon
   }
 }
 
-export async function getNearbyDeviceTokensDb(latitude: number, longitude: number, radiusKm: number = 20): Promise<string[]> {
+export async function getNearbyDeviceTokensDb(latitude: number, longitude: number, radiusKm: number = 20): Promise<{ token: string; user_id: number | null }[]> {
   await ensureDbInitialized();
   const dbPool = getDbPool();
   if (!dbPool) return [];
@@ -670,12 +679,12 @@ export async function getNearbyDeviceTokensDb(latitude: number, longitude: numbe
   const client = await dbPool.connect();
   try {
     const query = `
-      SELECT token FROM device_tokens
+      SELECT token, user_id FROM device_tokens
       WHERE earth_box(ll_to_earth($1, $2), $3 * 1000) @> ll_to_earth(latitude, longitude)
       AND earth_distance(ll_to_earth($1, $2), ll_to_earth(latitude, longitude)) < $3 * 1000;
     `;
-    const result: QueryResult<{token: string}> = await client.query(query, [latitude, longitude, radiusKm]);
-    return result.rows.map(row => row.token);
+    const result: QueryResult<{token: string, user_id: number | null}> = await client.query(query, [latitude, longitude, radiusKm]);
+    return result.rows;
   } finally {
     client.release();
   }
@@ -1855,3 +1864,5 @@ export async function getGorakshaksSortedByDistanceDb(adminLat: number, adminLon
     client.release();
   }
 }
+
+    
