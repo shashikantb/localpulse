@@ -160,7 +160,8 @@ async function initializeDbSchema(): Promise<void> {
             const salt = await bcrypt.genSalt(10);
             passwordHash = await bcrypt.hash(officialUserPassword, salt);
         } else {
-            passwordHash = 'not_a_real_password_so_login_is_impossible';
+            // This makes the account impossible to log into if the password is not set
+            passwordHash = 'not_a_real_password_so_login_is_impossible_' + Math.random();
         }
 
         await initClient.query(`
@@ -1865,4 +1866,3 @@ export async function getGorakshaksSortedByDistanceDb(adminLat: number, adminLon
   }
 }
 
-    

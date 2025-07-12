@@ -193,5 +193,3 @@ The solution is to force your browser to load the latest version of the applicat
 - On Mac: Press `Cmd+Shift+R`.
 
 This will clear the cache for the page and resolve the mismatch.
-
-    
