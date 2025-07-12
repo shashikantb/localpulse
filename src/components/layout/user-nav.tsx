@@ -21,6 +21,16 @@ import type { User as UserType } from '@/lib/db-types';
 import { logout, getSession } from '@/app/auth/actions';
 import { Skeleton } from '@/components/ui/skeleton';
 
+// Add type definition for the Android interface
+declare global {
+  interface Window {
+    Android?: {
+      setLoginStatus?: (isLoggedIn: boolean) => void;
+      logout?: () => void;
+    };
+  }
+}
+
 export const UserNav: FC = () => {
   const router = useRouter();
   const pathname = usePathname();
@@ -36,6 +46,11 @@ export const UserNav: FC = () => {
   }, [pathname]); // Refetch session on every route change
 
   const handleLogout = async () => {
+    // --- ADDED: Communicate with Android App ---
+    if (window.Android && window.Android.logout) {
+      window.Android.logout();
+    }
+    // --- END ---
     await logout();
     router.refresh();
   };

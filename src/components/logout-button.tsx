@@ -8,6 +8,16 @@ import { logout } from '@/app/auth/actions';
 import { Loader2, LogOut } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
+// Add type definition for the Android interface
+declare global {
+  interface Window {
+    Android?: {
+      setLoginStatus?: (isLoggedIn: boolean) => void;
+      logout?: () => void;
+    };
+  }
+}
+
 export default function LogoutButton() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -15,6 +25,12 @@ export default function LogoutButton() {
 
   const handleLogout = () => {
     startTransition(async () => {
+      // --- ADDED: Communicate with Android App ---
+      if (window.Android && window.Android.logout) {
+        window.Android.logout();
+      }
+      // --- END ---
+      
       await logout();
       toast({
         title: 'Logged Out',

@@ -17,6 +17,16 @@ import { login } from '@/app/auth/actions';
 import { Loader2, LogIn, ShieldAlert } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
+// Add type definition for the Android interface
+declare global {
+  interface Window {
+    Android?: {
+      setLoginStatus?: (isLoggedIn: boolean) => void;
+      logout?: () => void;
+    };
+  }
+}
+
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email address.'),
   password: z.string().min(1, 'Password is required'),
@@ -40,6 +50,12 @@ const LoginPage: FC = () => {
     try {
       const result = await login(data.email, data.password);
       if (result.success) {
+        // --- ADDED: Communicate with Android App ---
+        if (window.Android && window.Android.setLoginStatus) {
+          window.Android.setLoginStatus(true);
+        }
+        // --- END ---
+        
         toast({
           title: 'Login Successful',
           description: 'Welcome back! Redirecting you now...',
