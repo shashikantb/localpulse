@@ -27,6 +27,7 @@ declare global {
     Android?: {
       setLoginStatus?: (isLoggedIn: boolean) => void;
       logout?: () => void;
+      clearCookies?: () => void;
     };
   }
 }
@@ -46,9 +47,15 @@ export const UserNav: FC = () => {
   }, [pathname]); // Refetch session on every route change
 
   const handleLogout = async () => {
-    // --- ADDED: Communicate with Android App ---
-    if (window.Android && window.Android.logout) {
-      window.Android.logout();
+    // --- Communicate with Android App ---
+    if (window.Android) {
+      if (window.Android.logout) {
+        window.Android.logout();
+      }
+      if (window.Android.clearCookies) {
+        // Explicitly clear cookies to handle JWS errors
+        window.Android.clearCookies();
+      }
     }
     // --- END ---
     await logout();
