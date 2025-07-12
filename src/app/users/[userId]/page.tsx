@@ -76,6 +76,9 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
     }
   };
 
+  const isFamily = familyStatusResult.status === 'approved';
+  const showContactInfo = isOwnProfile || isFamily;
+
   const isGorakshak = profileUser.role === 'Gorakshak' || profileUser.role === 'Gorakshak Admin';
   const isBusiness = profileUser.role === 'Business';
 
@@ -173,14 +176,20 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
               <Badge variant={profileUser.role === 'Business' ? 'secondary' : 'default'} className="capitalize">
                 {profileUser.role}
               </Badge>
-              <p className="text-sm text-muted-foreground pt-1 flex items-center justify-center md:justify-start gap-2">
-                <Mail className="w-4 h-4" /> {profileUser.email}
-              </p>
-              {profileUser.mobilenumber &&
-                <p className="text-sm text-muted-foreground pt-1 flex items-center justify-center md:justify-start gap-2">
-                    <Phone className="w-4 h-4" /> {profileUser.mobilenumber}
-                </p>
-              }
+              
+              {showContactInfo && (
+                  <>
+                    <p className="text-sm text-muted-foreground pt-1 flex items-center justify-center md:justify-start gap-2">
+                        <Mail className="w-4 h-4" /> {profileUser.email}
+                    </p>
+                    {profileUser.mobilenumber &&
+                        <p className="text-sm text-muted-foreground pt-1 flex items-center justify-center md:justify-start gap-2">
+                            <Phone className="w-4 h-4" /> {profileUser.mobilenumber}
+                        </p>
+                    }
+                  </>
+              )}
+
               {isBusiness && profileUser.business_category &&
                 <p className="text-sm text-muted-foreground pt-1 flex items-center justify-center md:justify-start gap-2">
                     <Briefcase className="w-4 h-4" /> {profileUser.business_category === 'Any Other' ? profileUser.business_other_category : profileUser.business_category}
