@@ -130,13 +130,14 @@ function NoPostsContent({ feedType }: { feedType: FeedType }) {
 
 interface PostFeedClientProps {
   sessionUser: User | null;
+  initialPosts: Post[];
 }
 
-const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser }) => {
+const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser, initialPosts }) => {
   const { toast } = useToast();
   
   const [feeds, setFeeds] = useState<{ [key in 'nearby' | 'family']: FeedState }>({
-    nearby: { ...initialFeedState },
+    nearby: { ...initialFeedState, posts: initialPosts, isLoading: false, hasMore: initialPosts.length === POSTS_PER_PAGE },
     family: { ...initialFeedState, isLoading: false }, // Family feed doesn't load initially
   });
   const [businessFeed, setBusinessFeed] = useState<BusinessFeedState>(initialBusinessFeedState);
@@ -229,17 +230,18 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser }) => {
     });
   }, [sessionUser]);
   
-  // Fetch data for the initial tab once location is known
-  useEffect(() => {
-    if (location !== null || !navigator.geolocation) {
-        if(activeTab === 'nearby' || activeTab === 'family') {
-            fetchPosts(activeTab, 1, sortBy);
-        } else if (activeTab === 'business') {
-            fetchBusinesses(1, businessFeed.category);
-        }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location]);
+  // No longer needed: Initial data is passed via props.
+  // The feed will auto-update if/when location becomes available.
+  // useEffect(() => {
+  //   if (location !== null || !navigator.geolocation) {
+  //       if(activeTab === 'nearby' || activeTab === 'family') {
+  //           fetchPosts(activeTab, 1, sortBy);
+  //       } else if (activeTab === 'business') {
+  //           fetchBusinesses(1, businessFeed.category);
+  //       }
+  //   }
+  // // eslint-disable-next-line react-hooks/exhaustive-deps
+  // }, [location]);
 
   const handleTabChange = (value: string) => {
     const newTab = value as FeedType;

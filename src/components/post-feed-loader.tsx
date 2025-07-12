@@ -2,7 +2,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import type { User } from '@/lib/db-types';
+import type { User, Post } from '@/lib/db-types';
 import { PostFeedSkeleton } from './post-feed-skeleton';
 
 const PostFeedClient = dynamic(() => import('@/components/post-feed-client'), {
@@ -12,8 +12,9 @@ const PostFeedClient = dynamic(() => import('@/components/post-feed-client'), {
 
 interface PostFeedLoaderProps {
   sessionUser: User | null;
+  initialPosts: Post[];
 }
 
-export default function PostFeedLoader({ sessionUser }: PostFeedLoaderProps) {
-  return <PostFeedClient sessionUser={sessionUser} />;
+export default function PostFeedLoader({ sessionUser, initialPosts }: PostFeedLoaderProps) {
+  return <PostFeedClient sessionUser={sessionUser} initialPosts={initialPosts} />;
 }
