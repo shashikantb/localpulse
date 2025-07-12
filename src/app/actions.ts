@@ -154,7 +154,8 @@ async function sendNotificationForNewPost(post: Post, mentionedUserIds: number[]
 
     // 2. Send notifications to nearby users (who were not already notified via mention)
     const nearbyTokens = await db.getNearbyDeviceTokensDb(post.latitude, post.longitude, 20);
-    const nearbyOnlyTokens = nearbyTokens.filter(t => !processedTokens.has(t));
+    const nearbyOnlyTokens = nearbyTokens.filter(t => !processedTokens.has(t.token));
+
     if (nearbyOnlyTokens.length > 0) {
         const message = {
             notification: {
@@ -164,14 +165,14 @@ async function sendNotificationForNewPost(post: Post, mentionedUserIds: number[]
             data: {
                 user_auth_token: '' // No auth for nearby anonymous users
             },
-            tokens: nearbyOnlyTokens,
+            tokens: nearbyOnlyTokens.map(t => t.token),
             android: { priority: 'high' as const },
             apns: { payload: { aps: { 'content-available': 1 } } }
         };
         const response = await firebaseAdmin.messaging().sendEachForMulticast(message as any);
         successCount += response.successCount;
         response.responses.forEach((resp, idx) => {
-            if (!resp.success) failedTokens.push(nearbyOnlyTokens[idx]);
+            if (!resp.success) failedTokens.push(nearbyOnlyTokens[idx].token);
         });
     }
 

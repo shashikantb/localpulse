@@ -253,18 +253,22 @@ export async function getPostsDb(
   const client = await dbPool.connect();
   try {
     let orderByClause: string;
-    const queryParams: (string | number | null)[] = [options.currentUserId || null];
-    let paramIndex = 2; // Start from 2 because currentUserId is always $1
+    const queryParams: (string | number | null)[] = [];
+    let paramIndex = 1;
+
+    // Explicitly cast the user ID parameter to an integer to handle nulls gracefully.
+    const currentUserIdParam = options.currentUserId || null;
+    queryParams.push(currentUserIdParam);
+    const userIdParamIndex = paramIndex++;
 
     let distanceCalc = '';
     if (options.latitude != null && options.longitude != null) {
-        distanceCalc = `earth_distance(ll_to_earth(p.latitude, p.longitude), ll_to_earth($${paramIndex++}, $${paramIndex++}))`;
         queryParams.push(options.latitude, options.longitude);
+        distanceCalc = `earth_distance(ll_to_earth(p.latitude, p.longitude), ll_to_earth($${paramIndex++}, $${paramIndex++}))`;
     }
     
-    // Explicitly cast the user ID parameter to an integer to handle nulls gracefully.
-    const likeCheck = `EXISTS(SELECT 1 FROM post_likes pl WHERE pl.post_id = p.id AND pl.user_id = $1::int)`;
-    const followCheck = `p.authorid IS NOT NULL AND EXISTS(SELECT 1 FROM user_followers uf WHERE uf.following_id = p.authorid AND uf.follower_id = $1::int)`;
+    const likeCheck = `EXISTS(SELECT 1 FROM post_likes pl WHERE pl.post_id = p.id AND pl.user_id = $${userIdParamIndex}::int)`;
+    const followCheck = `p.authorid IS NOT NULL AND EXISTS(SELECT 1 FROM user_followers uf WHERE uf.following_id = p.authorid AND uf.follower_id = $${userIdParamIndex}::int)`;
 
     const sortBy = options.sortBy || 'newest';
 
@@ -310,7 +314,7 @@ export async function getPostsDb(
           ORDER BY p.createdat DESC
           LIMIT 1
         `;
-        const announcementResult = await client.query(announcementQuery, [options.currentUserId || null, OFFICIAL_USER_EMAIL]);
+        const announcementResult = await client.query(announcementQuery, [currentUserIdParam, OFFICIAL_USER_EMAIL]);
         if (announcementResult.rows.length > 0) {
             allPosts = announcementResult.rows;
         }
