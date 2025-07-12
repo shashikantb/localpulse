@@ -2,7 +2,7 @@
 'use client';
 
 import type { FC } from 'react';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -15,12 +15,13 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { signUp } from '@/app/auth/actions';
-import { Loader2, UserPlus, ShieldAlert, Building, ShieldCheck, User, Phone, Briefcase } from 'lucide-react';
+import { Loader2, UserPlus, ShieldAlert, Building, ShieldCheck, User, Phone, Briefcase, CheckCircle, XCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BUSINESS_CATEGORIES } from '@/lib/db-types';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { cn } from '@/lib/utils';
 
 const signupSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters.'),
@@ -49,6 +50,24 @@ const signupSchema = z.object({
 
 type SignupFormInputs = z.infer<typeof signupSchema>;
 
+const PasswordValidationChecklist: FC<{ password?: string }> = ({ password = '' }) => {
+  const checks = [
+    { label: 'At least 8 characters', valid: password.length >= 8 },
+  ];
+
+  return (
+    <ul className="grid gap-2 text-sm text-muted-foreground mt-2">
+      {checks.map((check, index) => (
+        <li key={index} className={cn('flex items-center', check.valid ? 'text-green-600' : 'text-destructive')}>
+          {check.valid ? <CheckCircle className="h-4 w-4 mr-2" /> : <XCircle className="h-4 w-4 mr-2" />}
+          {check.label}
+        </li>
+      ))}
+    </ul>
+  );
+};
+
+
 const SignupPage: FC = () => {
   const router = useRouter();
   const { toast } = useToast();
@@ -68,6 +87,7 @@ const SignupPage: FC = () => {
 
   const selectedRole = form.watch('role');
   const selectedCategory = form.watch('business_category');
+  const passwordValue = form.watch('password');
 
   const onSubmit: SubmitHandler<SignupFormInputs> = async (data) => {
     setIsSubmitting(true);
@@ -172,6 +192,7 @@ const SignupPage: FC = () => {
                       <Input id="password" type="password" {...field} disabled={isSubmitting} autoComplete="new-password"/>
                     </FormControl>
                     <FormMessage />
+                    <PasswordValidationChecklist password={passwordValue} />
                   </FormItem>
                 )}
               />
