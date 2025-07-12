@@ -261,42 +261,39 @@ export async function getPostsDb(
     queryParams.push(currentUserIdParam);
     const userIdParamIndex = paramIndex++;
 
-    let distanceCalc = '';
-    if (options.latitude != null && options.longitude != null) {
-        queryParams.push(options.latitude, options.longitude);
-        distanceCalc = `earth_distance(ll_to_earth(p.latitude, p.longitude), ll_to_earth($${paramIndex++}, $${paramIndex++}))`;
-    }
-    
     const likeCheck = `EXISTS(SELECT 1 FROM post_likes pl WHERE pl.post_id = p.id AND pl.user_id = $${userIdParamIndex}::int)`;
     const followCheck = `p.authorid IS NOT NULL AND EXISTS(SELECT 1 FROM user_followers uf WHERE uf.following_id = p.authorid AND uf.follower_id = $${userIdParamIndex}::int)`;
 
     const sortBy = options.sortBy || 'newest';
 
-    if (sortBy === 'newest' && distanceCalc && !isAdminView) {
-      orderByClause = `
-        CASE
-          WHEN ${distanceCalc} < 20000 THEN 1
-          WHEN ${distanceCalc} < 40000 THEN 2
-          WHEN ${distanceCalc} < 60000 THEN 3
-          WHEN ${distanceCalc} < 80000 THEN 4
-          WHEN ${distanceCalc} < 100000 THEN 5
-          ELSE 6
-        END,
-        p.createdat DESC
-      `;
-    } else {
-      switch(sortBy) {
-        case 'likes':
-          orderByClause = 'p.likecount DESC, p.createdat DESC';
-          break;
-        case 'comments':
-          orderByClause = 'p.commentcount DESC, p.createdat DESC';
-          break;
-        case 'newest':
-        default:
-          orderByClause = 'p.createdat DESC';
-          break;
-      }
+    switch(sortBy) {
+      case 'likes':
+        orderByClause = 'p.likecount DESC, p.createdat DESC';
+        break;
+      case 'comments':
+        orderByClause = 'p.commentcount DESC, p.createdat DESC';
+        break;
+      case 'newest':
+      default:
+        let distanceCalc = '';
+        if (options.latitude != null && options.longitude != null && !isAdminView) {
+            queryParams.push(options.latitude, options.longitude);
+            distanceCalc = `earth_distance(ll_to_earth(p.latitude, p.longitude), ll_to_earth($${paramIndex++}, $${paramIndex++}))`;
+             orderByClause = `
+                CASE
+                WHEN ${distanceCalc} < 20000 THEN 1
+                WHEN ${distanceCalc} < 40000 THEN 2
+                WHEN ${distanceCalc} < 60000 THEN 3
+                WHEN ${distanceCalc} < 80000 THEN 4
+                WHEN ${distanceCalc} < 100000 THEN 5
+                ELSE 6
+                END,
+                p.createdat DESC
+            `;
+        } else {
+             orderByClause = 'p.createdat DESC';
+        }
+        break;
     }
     
     let allPosts: Post[] = [];
@@ -380,8 +377,8 @@ export async function getFamilyPostsDb(
 
         const familyQuery = `
             SELECT ${POST_COLUMNS_WITH_JOINS},
-              EXISTS(SELECT 1 FROM post_likes pl WHERE pl.post_id = p.id AND pl.user_id = $1) as "isLikedByCurrentUser",
-              EXISTS(SELECT 1 FROM user_followers uf WHERE uf.following_id = p.authorid AND uf.follower_id = $1) as "isAuthorFollowedByCurrentUser"
+              EXISTS(SELECT 1 FROM post_likes pl WHERE pl.post_id = p.id AND pl.user_id = $1::int) as "isLikedByCurrentUser",
+              EXISTS(SELECT 1 FROM user_followers uf WHERE uf.following_id = p.authorid AND uf.follower_id = $1::int) as "isAuthorFollowedByCurrentUser"
             FROM posts p
             LEFT JOIN users u ON p.authorid = u.id
             WHERE p.is_family_post = TRUE
