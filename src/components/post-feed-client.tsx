@@ -150,12 +150,12 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser, initialPosts }) 
   const [notificationPermissionStatus, setNotificationPermissionStatus] = useState<'default' | 'loading' | 'granted' | 'denied'>('default');
   const [showTroubleshootingDialog, setShowTroubleshootingDialog] = useState(false);
   
-  const fetchPosts = useCallback(async (feed: 'nearby' | 'family', page: number, sort: SortOption) => {
+  const fetchPosts = useCallback(async (feed: 'nearby' | 'family', page: number, sort: SortOption, currentLoc: { latitude: number; longitude: number } | null) => {
     setFeeds(prev => ({ ...prev, [feed]: { ...prev[feed], isLoading: true } }));
 
     try {
         const fetcher = feed === 'nearby'
-            ? getPosts({ page, limit: POSTS_PER_PAGE, latitude: location?.latitude, longitude: location?.longitude, sortBy: sort })
+            ? getPosts({ page, limit: POSTS_PER_PAGE, latitude: currentLoc?.latitude, longitude: currentLoc?.longitude, sortBy: sort })
             : getFamilyPosts({ page, limit: POSTS_PER_PAGE, sortBy: sort });
 
         const newPosts = await fetcher;
@@ -179,7 +179,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser, initialPosts }) 
         console.error(`Error fetching ${feed} posts:`, error);
         setFeeds(prev => ({ ...prev, [feed]: { ...prev[feed], isLoading: false } }));
     }
-  }, [location?.latitude, location?.longitude]);
+  }, []);
 
   const fetchBusinesses = useCallback(async (page: number, category?: string) => {
     setBusinessFeed(prev => ({ ...prev, isLoading: true }));
@@ -207,41 +207,36 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser, initialPosts }) 
     }
   }, [location]);
 
-
   // Initial location fetch
   useEffect(() => {
-    const locationPromise = new Promise<{ latitude: number; longitude: number } | null>(resolve => {
-        if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(
-            (position) => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
-            () => resolve(null),
-            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-          );
-        } else {
-          resolve(null);
-        }
-    });
-
-    locationPromise.then(loc => {
-        setLocation(loc);
-        if (sessionUser && loc) {
-            updateUserLocation(loc.latitude, loc.longitude).catch(err => console.warn("Silent location update failed:", err));
-        }
-    });
-  }, [sessionUser]);
+    // This flag ensures we only fetch based on new location once
+    let locationFetched = false;
+    
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const newLocation = { latitude: position.coords.latitude, longitude: position.coords.longitude };
+          setLocation(newLocation);
+          
+          if (sessionUser) {
+            updateUserLocation(newLocation.latitude, newLocation.longitude).catch(err => console.warn("Silent location update failed:", err));
+          }
+          
+          // Re-fetch the nearby feed with the new location to update the view
+          if (!locationFetched) {
+            fetchPosts('nearby', 1, sortBy, newLocation);
+            locationFetched = true;
+          }
+        },
+        () => {
+          console.warn("Could not get user location. Feed will show newest posts globally.");
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionUser]); // Depend on sessionUser to update their location in DB if they log in
   
-  // No longer needed: Initial data is passed via props.
-  // The feed will auto-update if/when location becomes available.
-  // useEffect(() => {
-  //   if (location !== null || !navigator.geolocation) {
-  //       if(activeTab === 'nearby' || activeTab === 'family') {
-  //           fetchPosts(activeTab, 1, sortBy);
-  //       } else if (activeTab === 'business') {
-  //           fetchBusinesses(1, businessFeed.category);
-  //       }
-  //   }
-  // // eslint-disable-next-line react-hooks/exhaustive-deps
-  // }, [location]);
 
   const handleTabChange = (value: string) => {
     const newTab = value as FeedType;
@@ -253,7 +248,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser, initialPosts }) 
         }
     } else {
         if (feeds[newTab].posts.length === 0 && !feeds[newTab].isLoading) {
-            fetchPosts(newTab, 1, sortBy);
+            fetchPosts(newTab, 1, sortBy, location);
         }
     }
   };
@@ -325,11 +320,11 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser, initialPosts }) 
     if(activeTab === 'business') {
         await fetchBusinesses(1, businessFeed.category);
     } else {
-        await fetchPosts(activeTab, 1, sortBy);
+        await fetchPosts(activeTab, 1, sortBy, location);
     }
     setIsRefreshing(false);
     if (window) window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [activeTab, fetchPosts, sortBy, fetchBusinesses, businessFeed.category]);
+  }, [activeTab, fetchPosts, sortBy, fetchBusinesses, businessFeed.category, location]);
   
   const handleLoadMore = useCallback(async () => {
     if (activeTab === 'business') {
@@ -338,9 +333,9 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser, initialPosts }) 
     } else {
         const currentFeed = feeds[activeTab];
         if (currentFeed.isLoading || !currentFeed.hasMore) return;
-        fetchPosts(activeTab, currentFeed.page + 1, sortBy);
+        fetchPosts(activeTab, currentFeed.page + 1, sortBy, location);
     }
-  }, [feeds, activeTab, fetchPosts, sortBy, businessFeed, fetchBusinesses]);
+  }, [feeds, activeTab, fetchPosts, sortBy, businessFeed, fetchBusinesses, location]);
 
   const observer = useRef<IntersectionObserver>();
   const loaderRef = useCallback((node: HTMLDivElement | null) => {
@@ -370,7 +365,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser, initialPosts }) 
     if (newSortBy === sortBy) return;
     setSortBy(newSortBy);
     if(activeTab !== 'business') {
-        fetchPosts(activeTab, 1, newSortBy);
+        fetchPosts(activeTab, 1, newSortBy, location);
     }
   };
 
