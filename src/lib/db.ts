@@ -970,7 +970,10 @@ export async function getUserByIdDb(id: number): Promise<User | null> {
     const client = await dbPool.connect();
     try {
       const query = `
-        SELECT ${USER_COLUMNS_SANITIZED.replace('referral_code', 'COALESCE(referral_code, \'\') as referral_code')}
+        SELECT
+          id, email, name, role, status, createdat, profilepictureurl, mobilenumber, 
+          business_category, business_other_category, latitude, longitude,
+          lp_points, COALESCE(referral_code, '') as referral_code
         FROM users 
         WHERE id = $1
       `;

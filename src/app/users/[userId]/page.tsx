@@ -210,7 +210,7 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
           </CardHeader>
         </Card>
 
-        {isOwnProfile && <ReferralSharer code={profileUser.referral_code} />}
+        {isOwnProfile && profileUser.referral_code && <ReferralSharer code={profileUser.referral_code} />}
 
         {isOwnProfile && pendingRequests.length > 0 && (
           <FamilyRequestsList initialRequests={pendingRequests} />
