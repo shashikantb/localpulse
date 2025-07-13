@@ -55,6 +55,13 @@ const TransactionRow: React.FC<{ transaction: PointTransaction }> = ({ transacti
     );
 };
 
+const earningRules = [
+    { icon: Gift, text: 'Sign up with a referral', points: '20' },
+    { icon: UserPlus, text: 'Refer a new user', points: '50' },
+    { icon: Megaphone, text: 'Create a new Pulse', points: '10' },
+    { icon: ThumbsUp, text: 'Pulse gets 10+ likes', points: '20' },
+];
+
 export default function LpPointsHistoryDialog({ children, userId, isOwnProfile }: LpPointsHistoryDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [history, setHistory] = useState<PointTransaction[]>([]);
@@ -85,7 +92,7 @@ export default function LpPointsHistoryDialog({ children, userId, isOwnProfile }
             A record of all the points you've earned. Keep pulsing!
           </DialogDescription>
         </DialogHeader>
-        <ScrollArea className="h-80 pr-4 -mr-4">
+        <ScrollArea className="h-60 pr-4 -mr-4">
             {isLoading ? (
                 <div className="space-y-3 py-2">
                     <Skeleton className="h-16 w-full" />
@@ -102,6 +109,26 @@ export default function LpPointsHistoryDialog({ children, userId, isOwnProfile }
                 </div>
             )}
         </ScrollArea>
+        <Alert>
+            <Award className="h-4 w-4" />
+            <AlertTitle>How to Earn LP Points</AlertTitle>
+            <AlertDescription>
+                <ul className="mt-2 space-y-2 text-foreground/90">
+                    {earningRules.map((rule, index) => {
+                        const Icon = rule.icon;
+                        return (
+                            <li key={index} className="flex items-center justify-between text-sm">
+                                <div className="flex items-center">
+                                    <Icon className="w-4 h-4 mr-2 text-primary" />
+                                    <span>{rule.text}</span>
+                                </div>
+                                <span className="font-bold text-green-600">+{rule.points}</span>
+                            </li>
+                        );
+                    })}
+                </ul>
+            </AlertDescription>
+        </Alert>
         <Alert>
             <Calendar className="h-4 w-4" />
             <AlertTitle>Coming Soon!</AlertTitle>
