@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { MapPin, ExternalLink } from 'lucide-react';
 import type { FamilyMember } from '@/lib/db-types';
 import LocationSharingToggle from './location-sharing-toggle';
+import { formatDistanceToNowStrict } from 'date-fns';
 
 interface FamilyMembersCardProps {
   familyMembers: FamilyMember[];
@@ -32,17 +33,24 @@ const FamilyMembersCard: FC<FamilyMembersCardProps> = ({ familyMembers }) => {
                 <div className="flex-1 min-w-0">
                     <p className="font-semibold text-foreground truncate">{member.name}</p>
                     {member.they_are_sharing_with_me && member.latitude && member.longitude ? (
-                        <a
-                            href={`https://www.google.com/maps/dir/?api=1&destination=${member.latitude},${member.longitude}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-blue-500 hover:underline flex items-center mt-0.5"
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <MapPin className="w-3 h-3 mr-1"/>
-                            View Location
-                            <ExternalLink className="w-3 h-3 ml-1"/>
-                        </a>
+                        <div className="flex items-center gap-2 mt-0.5">
+                            <a
+                                href={`https://www.google.com/maps/dir/?api=1&destination=${member.latitude},${member.longitude}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-blue-500 hover:underline flex items-center"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <MapPin className="w-3 h-3 mr-1"/>
+                                View Location
+                                <ExternalLink className="w-3 h-3 ml-1"/>
+                            </a>
+                            {member.last_updated && (
+                                <span className="text-xs text-muted-foreground">
+                                    (updated {formatDistanceToNowStrict(new Date(member.last_updated), { addSuffix: true })})
+                                </span>
+                            )}
+                        </div>
                     ) : member.they_are_sharing_with_me ? (
                         <p className="text-xs text-muted-foreground mt-0.5">Location not available</p>
                     ) : null}
