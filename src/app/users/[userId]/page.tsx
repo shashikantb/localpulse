@@ -6,7 +6,7 @@ import { getPostsByUserId, getFamilyMembers, getPendingFamilyRequests, getFamily
 import { getSession } from '@/app/auth/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardHeader, CardContent, CardTitle, CardDescription } from '@/components/ui/card';
-import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, MessageSquare, Settings, Users, Briefcase, Phone, FileBarChart, Copy, Award } from 'lucide-react';
+import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, MessageSquare, Settings, Users, Briefcase, Phone, FileBarChart, Award } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { PostCard } from '@/components/post-card';
@@ -29,7 +29,7 @@ import DeleteAccountButton from '@/components/delete-account-button';
 import { Separator } from '@/components/ui/separator';
 import UpdateUserDetailsModal from '@/components/update-user-details-modal';
 import Link from 'next/link';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import CopyReferralButton from '@/components/copy-referral-button';
 
 interface UserProfilePageProps {
   params: {
@@ -215,25 +215,7 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
                 <p className="text-sm font-medium text-primary">Your Referral Code:</p>
                 <div className="flex items-center gap-2 p-1.5 pl-3 rounded-md bg-background border shadow-sm">
                   <span className="text-base font-bold tracking-wider text-foreground">{profileUser.referral_code}</span>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                         <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => {
-                                navigator.clipboard.writeText(profileUser.referral_code);
-                            }}
-                         >
-                           <Copy className="h-4 w-4" />
-                         </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Copy Code</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                   <CopyReferralButton code={profileUser.referral_code} />
                 </div>
               </div>
             </CardContent>
