@@ -2,7 +2,7 @@
 
 import type { FC } from 'react';
 import { notFound } from 'next/navigation';
-import { getPostsByUserId, getFamilyMembers, getPendingFamilyRequests, getFamilyRelationshipStatus, getUserWithFollowInfo, startChatAndRedirect } from '@/app/actions';
+import { getPostsByUserId, getPendingFamilyRequests, getFamilyRelationshipStatus, getUserWithFollowInfo, startChatAndRedirect } from '@/app/actions';
 import { getSession } from '@/app/auth/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
@@ -52,16 +52,12 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
   const [
     { user: profileUser, stats, isFollowing },
     userPosts,
-    familyMembers,
     pendingRequests,
     familyStatusResult
   ] = await Promise.all([
     getUserWithFollowInfo(userId),
     getPostsByUserId(userId),
-    // Only fetch family members and requests if it's the user's own profile
-    isOwnProfile ? getFamilyMembers(userId) : Promise.resolve([] as FamilyMember[]),
     isOwnProfile ? getPendingFamilyRequests() : Promise.resolve([]),
-    // Pass sessionUser directly to the action to ensure correct authentication context
     getFamilyRelationshipStatus(sessionUser, userId)
   ]);
 
@@ -217,7 +213,7 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
           <FamilyRequestsList initialRequests={pendingRequests} />
         )}
 
-        {isOwnProfile && familyMembers.length > 0 && (
+        {isOwnProfile && (
           <Card className="shadow-xl border border-border/60 rounded-xl bg-card/80 backdrop-blur-sm p-0">
             <Accordion type="single" collapsible className="w-full">
               <AccordionItem value="family-members" className="border-b-0">
@@ -231,7 +227,7 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
                     </div>
                 </AccordionTrigger>
                 <AccordionContent className="px-6 pb-6 pt-0">
-                  <FamilyMembersCard familyMembers={familyMembers} />
+                  <FamilyMembersCard userId={userId} />
                 </AccordionContent>
               </AccordionItem>
             </Accordion>
