@@ -16,18 +16,24 @@ export async function sendLpPointsNotification(): Promise<{ success: boolean; er
       return { success: false, error: 'No users with registered devices found.' };
     }
 
-    const messages: MulticastMessage[] = usersWithTokens.map(user => ({
-      token: user.token,
-      notification: {
-        title: 'Check your LP Points! ✨',
-        body: `You have ${user.lp_points} LP points! Keep pulsing to earn more.`,
-      },
-      data: {
-          user_auth_token: user.user_auth_token || ''
-      },
-      android: { priority: 'high' as const },
-      apns: { payload: { aps: { 'content-available': 1 } } }
-    }));
+    const messages: MulticastMessage[] = usersWithTokens.map(user => {
+      const yesterdayPoints = user.yesterday_points || 0;
+      const title = yesterdayPoints > 0 
+          ? `You earned ${yesterdayPoints} LP points yesterday! 🎉`
+          : 'Check your LP Points! ✨';
+      
+      const body = `Your total is now ${user.total_points}. Keep pulsing to earn more!`;
+
+      return {
+          token: user.token,
+          notification: { title, body },
+          data: {
+              user_auth_token: user.user_auth_token || ''
+          },
+          android: { priority: 'high' as const },
+          apns: { payload: { aps: { 'content-available': 1 } } }
+      }
+    });
 
     // Firebase allows sending up to 500 messages at a time.
     // For larger scale, we would need to batch this. For now, this is sufficient.

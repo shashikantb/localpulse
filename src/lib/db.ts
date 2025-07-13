@@ -1,7 +1,7 @@
 
 
 import { Pool, Client, type QueryResult } from 'pg';
-import type { PointTransaction, PointTransactionReason, User as DbUser, Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest, FamilyMember, FamilyMemberLocation, SortOption, UpdateBusinessCategory, BusinessUser, GorakshakReportUser } from '@/lib/db-types';
+import type { UserForNotification, PointTransaction, PointTransactionReason, User as DbUser, Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest, FamilyMember, FamilyMemberLocation, SortOption, UpdateBusinessCategory, BusinessUser, GorakshakReportUser } from '@/lib/db-types';
 import bcrypt from 'bcryptjs';
 import { customAlphabet } from 'nanoid';
 
@@ -2013,7 +2013,7 @@ export async function getPointHistoryForUserDb(userId: number): Promise<PointTra
 }
 
 // --- Admin Notification Functions ---
-export async function getAllUsersWithDeviceTokensDb(): Promise<(DbUser & { token: string; user_auth_token: string | null })[]> {
+export async function getAllUsersWithDeviceTokensDb(): Promise<UserForNotification[]> {
     await ensureDbInitialized();
     const dbPool = getDbPool();
     if (!dbPool) return [];
@@ -2021,10 +2021,29 @@ export async function getAllUsersWithDeviceTokensDb(): Promise<(DbUser & { token
     const client = await dbPool.connect();
     try {
         const query = `
-            SELECT u.id, u.lp_points, dt.token, dt.user_auth_token
-            FROM users u
-            JOIN device_tokens dt ON u.id = dt.user_id
-            WHERE u.status = 'approved' AND dt.token IS NOT NULL;
+            SELECT
+                u.id,
+                u.lp_points as total_points,
+                COALESCE(yp.points_yesterday, 0) as yesterday_points,
+                dt.token,
+                dt.user_auth_token
+            FROM
+                users u
+            JOIN
+                device_tokens dt ON u.id = dt.user_id
+            LEFT JOIN (
+                SELECT
+                    user_id,
+                    SUM(points) as points_yesterday
+                FROM
+                    lp_point_transactions
+                WHERE
+                    created_at >= NOW() - INTERVAL '1 day'
+                GROUP BY
+                    user_id
+            ) yp ON u.id = yp.user_id
+            WHERE
+                u.status = 'approved' AND dt.token IS NOT NULL;
         `;
         const result = await client.query(query);
         return result.rows;

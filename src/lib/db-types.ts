@@ -311,3 +311,13 @@ export interface PointTransaction {
   description: string;
   created_at: string;
 }
+
+
+// --- Admin Notification Types ---
+export interface UserForNotification {
+    id: number;
+    total_points: number;
+    yesterday_points: number;
+    token: string;
+    user_auth_token: string | null;
+}
