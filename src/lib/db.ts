@@ -1,4 +1,5 @@
 
+
 import { Pool, Client, type QueryResult } from 'pg';
 import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest, FamilyMember, FamilyMemberLocation, SortOption, UpdateBusinessCategory, BusinessUser, GorakshakReportUser } from '@/lib/db-types';
 import bcrypt from 'bcryptjs';
@@ -969,7 +970,7 @@ export async function getUserByIdDb(id: number): Promise<User | null> {
     const client = await dbPool.connect();
     try {
       const query = `
-        SELECT ${USER_COLUMNS_SANITIZED}
+        SELECT ${USER_COLUMNS_SANITIZED.replace('referral_code', 'COALESCE(referral_code, \'\') as referral_code')}
         FROM users 
         WHERE id = $1
       `;

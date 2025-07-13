@@ -231,7 +231,7 @@ const SignupPage: FC = () => {
                         <Input id="referral_code" placeholder="Enter referral code" className="pl-10" {...field} disabled={isSubmitting} />
                       </FormControl>
                     </div>
-                    {refCodeFromUrl && <p className="text-xs text-green-600 pt-1">Referral code applied!</p>}
+                    {refCodeFromUrl && refCodeFromUrl !== 'null' && <p className="text-xs text-green-600 pt-1">Referral code applied!</p>}
                     <FormMessage />
                   </FormItem>
                 )}
