@@ -3,7 +3,7 @@
 'use server';
 
 import * as db from '@/lib/db';
-import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus, FamilyMember, FamilyMemberLocation, PendingFamilyRequest, Conversation, Message, ConversationParticipant, SortOption, BusinessUser, GorakshakReportUser } from '@/lib/db-types';
+import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus, FamilyMember, FamilyMemberLocation, PendingFamilyRequest, Conversation, Message, ConversationParticipant, SortOption, BusinessUser, GorakshakReportUser, PointTransaction } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 import { getSession, encrypt } from '@/app/auth/actions';
 import { getGcsClient, getGcsBucketName } from '@/lib/gcs';
@@ -1098,6 +1098,21 @@ export async function getGorakshakReport(adminLat: number, adminLon: number): Pr
     return gorakshaks;
   } catch (error) {
     console.error("Server action error fetching Gorakshak report:", error);
+    return [];
+  }
+}
+
+// --- LP Points Actions ---
+export async function getPointHistory(userId: number): Promise<PointTransaction[]> {
+  const { user } = await getSession();
+  if (!user || user.id !== userId) {
+    // Users can only view their own point history
+    return [];
+  }
+  try {
+    return await db.getPointHistoryForUserDb(userId);
+  } catch (error) {
+    console.error(`Error fetching point history for user ${userId}:`, error);
     return [];
   }
 }

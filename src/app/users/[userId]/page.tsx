@@ -5,12 +5,12 @@ import { notFound } from 'next/navigation';
 import { getPostsByUserId, getFamilyMembers, getPendingFamilyRequests, getFamilyRelationshipStatus, getUserWithFollowInfo, startChatAndRedirect } from '@/app/actions';
 import { getSession } from '@/app/auth/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Card, CardHeader, CardContent, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, MessageSquare, Settings, Users, Briefcase, Phone, FileBarChart, Award, Share2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { PostCard } from '@/components/post-card';
-import type { User, FamilyMember, UserRole } from '@/lib/db-types';
+import type { User, FamilyMember } from '@/lib/db-types';
 import ProfilePictureUpdater from '@/components/profile-picture-updater';
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,7 @@ import { Separator } from '@/components/ui/separator';
 import UpdateUserDetailsModal from '@/components/update-user-details-modal';
 import Link from 'next/link';
 import ReferralSharer from '@/components/referral-sharer';
+import LpPointsHistoryDialog from '@/components/lp-points-history-dialog';
 
 interface UserProfilePageProps {
   params: {
@@ -82,8 +83,6 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
 
   const isGorakshak = profileUser.role === 'Gorakshak' || profileUser.role === 'Gorakshak Admin';
   const isBusiness = profileUser.role === 'Business';
-
-  const needsProfileUpdate = isOwnProfile && (!sessionUser?.mobilenumber || (sessionUser?.role === 'Business' && !sessionUser?.business_category));
 
 
   return (
@@ -172,13 +171,15 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
                         <p className="text-sm text-muted-foreground">Following</p>
                     </div>
                   </FollowingListDialog>
-                  <div className="text-center">
-                    <p className="text-xl font-bold text-primary flex items-center justify-center gap-1">
-                      <Award className="h-5 w-5"/>
-                      {profileUser.lp_points}
-                    </p>
-                    <p className="text-sm text-muted-foreground">LP Points</p>
-                  </div>
+                  <LpPointsHistoryDialog userId={profileUser.id} isOwnProfile={isOwnProfile}>
+                    <div className="text-center cursor-pointer rounded-md p-1 hover:bg-muted">
+                        <p className="text-xl font-bold text-primary flex items-center justify-center gap-1">
+                          <Award className="h-5 w-5"/>
+                          {profileUser.lp_points}
+                        </p>
+                        <p className="text-sm text-muted-foreground">LP Points</p>
+                    </div>
+                  </LpPointsHistoryDialog>
               </div>
 
               <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-4 gap-y-1">

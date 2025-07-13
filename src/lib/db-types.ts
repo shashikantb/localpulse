@@ -4,6 +4,8 @@ export type UserRole = 'Business' | 'Gorakshak' | 'Gorakshak Admin' | 'Admin' | 
 
 export type SortOption = 'newest' | 'likes' | 'comments';
 
+export type PointTransactionReason = 'initial_signup_bonus' | 'referral_bonus' | 'new_post' | 'post_like_milestone';
+
 export const BUSINESS_CATEGORIES = {
   "Shops & Retail": [
     "Grocery / Kirana Store", "Fruits & Vegetable Shop", "Bakery / Cake Shop",
@@ -299,4 +301,13 @@ export interface FamilyMemberLocation {
     latitude: number;
     longitude: number;
     last_updated: string;
+}
+
+// --- LP Points Types ---
+export interface PointTransaction {
+  id: number;
+  points: number;
+  reason: PointTransactionReason;
+  description: string;
+  created_at: string;
 }
