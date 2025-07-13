@@ -6,7 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -71,10 +71,13 @@ const PasswordValidationChecklist: FC<{ password?: string }> = ({ password = '' 
 
 const SignupPage: FC = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+
+  const refCodeFromUrl = searchParams.get('ref') || '';
 
   const form = useForm<SignupFormInputs>({
     resolver: zodResolver(signupSchema),
@@ -83,7 +86,7 @@ const SignupPage: FC = () => {
       email: '',
       password: '',
       mobilenumber: '',
-      referral_code: '',
+      referral_code: refCodeFromUrl,
     },
   });
 
@@ -228,6 +231,7 @@ const SignupPage: FC = () => {
                         <Input id="referral_code" placeholder="Enter referral code" className="pl-10" {...field} disabled={isSubmitting} />
                       </FormControl>
                     </div>
+                    {refCodeFromUrl && <p className="text-xs text-green-600 pt-1">Referral code applied!</p>}
                     <FormMessage />
                   </FormItem>
                 )}

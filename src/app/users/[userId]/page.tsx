@@ -6,7 +6,7 @@ import { getPostsByUserId, getFamilyMembers, getPendingFamilyRequests, getFamily
 import { getSession } from '@/app/auth/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardHeader, CardContent, CardTitle, CardDescription } from '@/components/ui/card';
-import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, MessageSquare, Settings, Users, Briefcase, Phone, FileBarChart, Award } from 'lucide-react';
+import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, MessageSquare, Settings, Users, Briefcase, Phone, FileBarChart, Award, Share2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { PostCard } from '@/components/post-card';
@@ -29,7 +29,7 @@ import DeleteAccountButton from '@/components/delete-account-button';
 import { Separator } from '@/components/ui/separator';
 import UpdateUserDetailsModal from '@/components/update-user-details-modal';
 import Link from 'next/link';
-import CopyReferralButton from '@/components/copy-referral-button';
+import ReferralSharer from '@/components/referral-sharer';
 
 interface UserProfilePageProps {
   params: {
@@ -208,20 +208,9 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
                </p>
             </div>
           </CardHeader>
-          
-          {isOwnProfile && (
-            <CardContent className="p-4 pt-2 border-t">
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-2 p-2 rounded-lg bg-primary/5 border border-primary/10">
-                <p className="text-sm font-medium text-primary">Your Referral Code:</p>
-                <div className="flex items-center gap-2 p-1.5 pl-3 rounded-md bg-background border shadow-sm">
-                  <span className="text-base font-bold tracking-wider text-foreground">{profileUser.referral_code}</span>
-                   <CopyReferralButton code={profileUser.referral_code} />
-                </div>
-              </div>
-            </CardContent>
-          )}
-
         </Card>
+
+        {isOwnProfile && <ReferralSharer code={profileUser.referral_code} />}
 
         {isOwnProfile && pendingRequests.length > 0 && (
           <FamilyRequestsList initialRequests={pendingRequests} />

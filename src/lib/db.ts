@@ -178,6 +178,12 @@ async function initializeDbSchema(): Promise<void> {
             ON CONFLICT (email) DO UPDATE
             SET passwordhash = $2;
         `, [OFFICIAL_USER_EMAIL, passwordHash]);
+        
+        // --- Retroactively award points to existing users ---
+        await initClient.query(`
+            UPDATE users SET lp_points = 20 WHERE lp_points = 0 AND referred_by_id IS NULL AND email != $1;
+        `, [OFFICIAL_USER_EMAIL]);
+
 
         // --- Indexes for performance ---
         await initClient.query('CREATE INDEX IF NOT EXISTS idx_posts_createdat ON posts (createdat DESC)');
