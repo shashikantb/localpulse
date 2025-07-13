@@ -969,16 +969,33 @@ export async function getUserByIdDb(id: number): Promise<User | null> {
 
     const client = await dbPool.connect();
     try {
-      const query = `
-        SELECT
-          id, email, name, role, status, createdat, profilepictureurl, mobilenumber, 
-          business_category, business_other_category, latitude, longitude,
-          lp_points, COALESCE(referral_code, '') as referral_code
-        FROM users 
-        WHERE id = $1
-      `;
+      const query = `SELECT ${USER_COLUMNS_SANITIZED} FROM users WHERE id = $1`;
       const result: QueryResult<User> = await client.query(query, [id]);
-      return result.rows[0] || null;
+      
+      let user = result.rows[0] || null;
+
+      if (user && !user.referral_code) {
+        const nanoid = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ', 8);
+        let newReferralCode = nanoid();
+        let isCodeUnique = false;
+        
+        while (!isCodeUnique) {
+            const existing = await client.query('SELECT id FROM users WHERE referral_code = $1', [newReferralCode]);
+            if (existing.rowCount === 0) {
+                isCodeUnique = true;
+            } else {
+                newReferralCode = nanoid();
+            }
+        }
+        
+        const updateResult: QueryResult<User> = await client.query(
+            `UPDATE users SET referral_code = $1 WHERE id = $2 RETURNING ${USER_COLUMNS_SANITIZED}`,
+            [newReferralCode, id]
+        );
+        user = updateResult.rows[0] || user;
+      }
+
+      return user;
     } finally {
       client.release();
     }
