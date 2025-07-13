@@ -56,6 +56,8 @@ export interface User {
   business_other_category?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  lp_points: number;
+  referral_code: string;
 }
 
 export interface BusinessUser extends User {
@@ -82,6 +84,7 @@ export interface FollowUser {
 // Full user structure from DB, including password hash
 export interface UserWithPassword extends User {
   passwordhash: string;
+  referred_by_id?: number | null;
 }
 
 // For creating a new user
@@ -93,6 +96,7 @@ export type NewUser = {
   mobilenumber: string;
   business_category?: string;
   business_other_category?: string;
+  referral_code?: string;
 };
 
 // For updating a user from the admin panel

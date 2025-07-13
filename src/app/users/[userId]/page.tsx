@@ -6,7 +6,7 @@ import { getPostsByUserId, getFamilyMembers, getPendingFamilyRequests, getFamily
 import { getSession } from '@/app/auth/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardHeader, CardContent, CardTitle, CardDescription } from '@/components/ui/card';
-import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, MessageSquare, Settings, Users, Briefcase, Phone, FileBarChart } from 'lucide-react';
+import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, MessageSquare, Settings, Users, Briefcase, Phone, FileBarChart, Copy, Award } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { PostCard } from '@/components/post-card';
@@ -29,6 +29,7 @@ import DeleteAccountButton from '@/components/delete-account-button';
 import { Separator } from '@/components/ui/separator';
 import UpdateUserDetailsModal from '@/components/update-user-details-modal';
 import Link from 'next/link';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface UserProfilePageProps {
   params: {
@@ -171,24 +172,31 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
                         <p className="text-sm text-muted-foreground">Following</p>
                     </div>
                   </FollowingListDialog>
+                  <div className="text-center">
+                    <p className="text-xl font-bold text-primary flex items-center justify-center gap-1">
+                      <Award className="h-5 w-5"/>
+                      {profileUser.lp_points}
+                    </p>
+                    <p className="text-sm text-muted-foreground">LP Points</p>
+                  </div>
               </div>
 
-              <Badge variant={profileUser.role === 'Business' ? 'secondary' : 'default'} className="capitalize">
-                {profileUser.role}
-              </Badge>
-              
-              {showContactInfo && (
-                  <>
+              <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-4 gap-y-1">
+                <Badge variant={profileUser.role === 'Business' ? 'secondary' : 'default'} className="capitalize">
+                    {profileUser.role}
+                </Badge>
+                {showContactInfo && (
                     <p className="text-sm text-muted-foreground pt-1 flex items-center justify-center md:justify-start gap-2">
                         <Mail className="w-4 h-4" /> {profileUser.email}
                     </p>
-                    {profileUser.mobilenumber &&
-                        <p className="text-sm text-muted-foreground pt-1 flex items-center justify-center md:justify-start gap-2">
-                            <Phone className="w-4 h-4" /> {profileUser.mobilenumber}
-                        </p>
-                    }
-                  </>
-              )}
+                )}
+              </div>
+              
+              {showContactInfo && profileUser.mobilenumber &&
+                  <p className="text-sm text-muted-foreground pt-1 flex items-center justify-center md:justify-start gap-2">
+                      <Phone className="w-4 h-4" /> {profileUser.mobilenumber}
+                  </p>
+              }
 
               {isBusiness && profileUser.business_category &&
                 <p className="text-sm text-muted-foreground pt-1 flex items-center justify-center md:justify-start gap-2">
@@ -200,6 +208,37 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
                </p>
             </div>
           </CardHeader>
+          
+          {isOwnProfile && (
+            <CardContent className="p-4 pt-2 border-t">
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-2 p-2 rounded-lg bg-primary/5 border border-primary/10">
+                <p className="text-sm font-medium text-primary">Your Referral Code:</p>
+                <div className="flex items-center gap-2 p-1.5 pl-3 rounded-md bg-background border shadow-sm">
+                  <span className="text-base font-bold tracking-wider text-foreground">{profileUser.referral_code}</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                         <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => {
+                                navigator.clipboard.writeText(profileUser.referral_code);
+                            }}
+                         >
+                           <Copy className="h-4 w-4" />
+                         </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Copy Code</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              </div>
+            </CardContent>
+          )}
+
         </Card>
 
         {isOwnProfile && pendingRequests.length > 0 && (

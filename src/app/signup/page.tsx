@@ -15,7 +15,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { signUp } from '@/app/auth/actions';
-import { Loader2, UserPlus, ShieldAlert, Building, ShieldCheck, User, Phone, Briefcase, CheckCircle, XCircle } from 'lucide-react';
+import { Loader2, UserPlus, ShieldAlert, Building, ShieldCheck, User, Phone, Briefcase, CheckCircle, XCircle, Ticket } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -31,6 +31,7 @@ const signupSchema = z.object({
   mobilenumber: z.string().regex(/^\d{10}$/, "A valid 10-digit mobile number is required."),
   business_category: z.string().optional(),
   business_other_category: z.string().optional(),
+  referral_code: z.string().optional(),
 }).superRefine((data, ctx) => {
   if (data.role === 'Business' && !data.business_category) {
     ctx.addIssue({
@@ -82,6 +83,7 @@ const SignupPage: FC = () => {
       email: '',
       password: '',
       mobilenumber: '',
+      referral_code: '',
     },
   });
 
@@ -213,6 +215,23 @@ const SignupPage: FC = () => {
                     </FormItem>
                   )}
                 />
+              
+              <FormField
+                control={form.control}
+                name="referral_code"
+                render={({ field }) => (
+                  <FormItem>
+                    <Label htmlFor="referral_code">Referral Code (Optional)</Label>
+                    <div className="relative">
+                      <Ticket className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <FormControl>
+                        <Input id="referral_code" placeholder="Enter referral code" className="pl-10" {...field} disabled={isSubmitting} />
+                      </FormControl>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               <FormField
                 control={form.control}

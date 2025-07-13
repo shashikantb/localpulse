@@ -2,6 +2,7 @@
 import { Pool, Client, type QueryResult } from 'pg';
 import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest, FamilyMember, FamilyMemberLocation, SortOption, UpdateBusinessCategory, BusinessUser, GorakshakReportUser } from '@/lib/db-types';
 import bcrypt from 'bcryptjs';
+import { customAlphabet } from 'nanoid';
 
 // Re-export db-types
 export * from './db-types';
@@ -81,7 +82,10 @@ async function initializeDbSchema(): Promise<void> {
             business_category TEXT,
             business_other_category TEXT,
             latitude REAL,
-            longitude REAL
+            longitude REAL,
+            lp_points INTEGER DEFAULT 0 NOT NULL,
+            referral_code VARCHAR(10) UNIQUE,
+            referred_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL
         );
         `);
         
@@ -90,7 +94,9 @@ async function initializeDbSchema(): Promise<void> {
         await initClient.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS business_other_category TEXT;`);
         await initClient.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS latitude REAL;`);
         await initClient.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS longitude REAL;`);
-
+        await initClient.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS lp_points INTEGER DEFAULT 0 NOT NULL;`);
+        await initClient.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code VARCHAR(10) UNIQUE;`);
+        await initClient.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL;`);
         
         // Posts Table
         await initClient.query(`
@@ -110,11 +116,13 @@ async function initializeDbSchema(): Promise<void> {
             hashtags TEXT[],
             authorid INTEGER REFERENCES users(id) ON DELETE SET NULL,
             is_family_post BOOLEAN DEFAULT false NOT NULL,
-            hide_location BOOLEAN DEFAULT false NOT NULL
+            hide_location BOOLEAN DEFAULT false NOT NULL,
+            lp_bonus_awarded BOOLEAN DEFAULT false NOT NULL
         );
         `);
          await initClient.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS is_family_post BOOLEAN DEFAULT false NOT NULL;`);
          await initClient.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS hide_location BOOLEAN DEFAULT false NOT NULL;`);
+         await initClient.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS lp_bonus_awarded BOOLEAN DEFAULT false NOT NULL;`);
         
         // Post Likes Table
         await initClient.query(`CREATE TABLE IF NOT EXISTS post_likes ( id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE, createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, post_id));`);
@@ -165,8 +173,8 @@ async function initializeDbSchema(): Promise<void> {
         }
 
         await initClient.query(`
-            INSERT INTO users (name, email, passwordhash, role, status)
-            VALUES ('LocalPulse Official', $1, $2, 'Admin', 'approved')
+            INSERT INTO users (name, email, passwordhash, role, status, lp_points, referral_code)
+            VALUES ('LocalPulse Official', $1, $2, 'Admin', 'approved', 0, 'LOCALPULSE')
             ON CONFLICT (email) DO UPDATE
             SET passwordhash = $2;
         `, [OFFICIAL_USER_EMAIL, passwordHash]);
@@ -197,6 +205,7 @@ async function initializeDbSchema(): Promise<void> {
         await initClient.query('CREATE INDEX IF NOT EXISTS idx_posts_is_family_post ON posts (is_family_post)');
         await initClient.query('CREATE INDEX IF NOT EXISTS users_geo_idx ON users USING gist (ll_to_earth(latitude, longitude)) WHERE role = \'Business\'');
         await initClient.query('CREATE INDEX IF NOT EXISTS users_gorakshak_geo_idx ON users USING gist (ll_to_earth(latitude, longitude)) WHERE role = \'Gorakshak\' OR role = \'Gorakshak Admin\'');
+        await initClient.query('CREATE UNIQUE INDEX IF NOT EXISTS users_referral_code_unique_idx ON users (referral_code) WHERE referral_code IS NOT NULL;');
 
 
         await initClient.query('COMMIT');
@@ -242,7 +251,9 @@ const POST_COLUMNS_WITH_JOINS = `
 `;
 
 const USER_COLUMNS_SANITIZED = `
-  id, email, name, role, status, createdat, profilepictureurl, mobilenumber, business_category, business_other_category, latitude, longitude
+  id, email, name, role, status, createdat, profilepictureurl, mobilenumber, 
+  business_category, business_other_category, latitude, longitude,
+  lp_points, referral_code
 `;
 
 export async function getPostsDb(
@@ -462,6 +473,11 @@ export async function addPostDb(newPost: DbNewPost): Promise<Post> {
     const postResult: QueryResult<Post> = await client.query(postQuery, postValues);
     const addedPost = postResult.rows[0];
 
+    // Award points for posting
+    if (newPost.authorid) {
+      await client.query('UPDATE users SET lp_points = lp_points + 10 WHERE id = $1', [newPost.authorid]);
+    }
+
     if (newPost.mentionedUserIds && newPost.mentionedUserIds.length > 0) {
       const mentionQuery = 'INSERT INTO post_mentions (post_id, mentioned_user_id) SELECT $1, unnest($2::int[])';
       await client.query(mentionQuery, [addedPost.id, newPost.mentionedUserIds]);
@@ -505,8 +521,21 @@ export async function updatePostLikeCountDb(postId: number, direction: 'incremen
       WHERE id = $1 AND likecount >= 0
       RETURNING *;
     `;
-    const result: QueryResult<Post> = await client.query(query, [postId]);
-    return result.rows[0] || null;
+    const result: QueryResult<Post & { lp_bonus_awarded: boolean }> = await client.query(query, [postId]);
+    const updatedPost = result.rows[0];
+
+    // Check for LP points bonus
+    if (updatedPost && updatedPost.likecount === 10 && !updatedPost.lp_bonus_awarded && updatedPost.authorid) {
+      await client.query('BEGIN');
+      await client.query('UPDATE users SET lp_points = lp_points + 20 WHERE id = $1', [updatedPost.authorid]);
+      await client.query('UPDATE posts SET lp_bonus_awarded = TRUE WHERE id = $1', [postId]);
+      await client.query('COMMIT');
+    }
+
+    return updatedPost || null;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
   } finally {
     client.release();
   }
@@ -862,17 +891,50 @@ export async function createUserDb(newUser: NewUser, status: 'pending' | 'approv
     
     const client = await dbPool.connect();
     try {
+      await client.query('BEGIN');
+
       const salt = await bcrypt.genSalt(10);
       const passwordhash = await bcrypt.hash(newUser.passwordplaintext, salt);
       
-      const query = `
-          INSERT INTO users(name, email, passwordhash, role, status, mobilenumber, business_category, business_other_category)
-          VALUES($1, $2, $3, $4, $5, $6, $7, $8)
+      let referredById = null;
+      // Handle referral logic
+      if (newUser.referral_code) {
+        const referrerRes = await client.query('SELECT id FROM users WHERE referral_code = $1', [newUser.referral_code]);
+        if (referrerRes.rows.length > 0) {
+          referredById = referrerRes.rows[0].id;
+          // Award points to the referrer
+          await client.query('UPDATE users SET lp_points = lp_points + 50 WHERE id = $1', [referredById]);
+        }
+      }
+
+      // Generate a unique referral code for the new user
+      const nanoid = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ', 8);
+      let referralCode = nanoid();
+      let isCodeUnique = false;
+      while(!isCodeUnique) {
+        const existing = await client.query('SELECT id FROM users WHERE referral_code = $1', [referralCode]);
+        if(existing.rowCount === 0) {
+          isCodeUnique = true;
+        } else {
+          referralCode = nanoid();
+        }
+      }
+      
+      const insertQuery = `
+          INSERT INTO users(name, email, passwordhash, role, status, mobilenumber, business_category, business_other_category, referred_by_id, lp_points, referral_code)
+          VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
           RETURNING ${USER_COLUMNS_SANITIZED};
       `;
-      const values = [newUser.name, newUser.email.toLowerCase(), passwordhash, newUser.role, status, newUser.mobilenumber, newUser.business_category, newUser.business_other_category];
-      const result: QueryResult<User> = await client.query(query, values);
+      // New user gets 20 points if they were referred
+      const initialPoints = referredById ? 20 : 0;
+      const values = [newUser.name, newUser.email.toLowerCase(), passwordhash, newUser.role, status, newUser.mobilenumber, newUser.business_category, newUser.business_other_category, referredById, initialPoints, referralCode];
+      const result: QueryResult<User> = await client.query(insertQuery, values);
+      
+      await client.query('COMMIT');
       return result.rows[0];
+    } catch(e) {
+      await client.query('ROLLBACK');
+      throw e;
     } finally {
       client.release();
     }
@@ -1657,7 +1719,7 @@ export async function getFamilyMembersForUserDb(userId: number): Promise<FamilyM
     try {
         const query = `
             SELECT
-                u.id, u.name, u.role, u.status, u.createdat, u.profilepictureurl, u.mobilenumber, u.business_category, u.business_other_category,
+                u.id, u.name, u.role, u.status, u.createdat, u.profilepictureurl, u.mobilenumber, u.business_category, u.business_other_category, u.lp_points, u.referral_code,
                 CASE
                     WHEN fr.user_id_1 = $1 THEN fr.share_location_from_1_to_2
                     ELSE fr.share_location_from_2_to_1
@@ -1865,4 +1927,3 @@ export async function getGorakshaksSortedByDistanceDb(adminLat: number, adminLon
     client.release();
   }
 }
-
