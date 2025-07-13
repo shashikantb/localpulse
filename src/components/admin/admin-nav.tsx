@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { adminLogout } from '@/app/admin/actions';
-import { LayoutDashboard, FileText, Users, LogOut, Settings, ShieldCheck, UserCheck } from 'lucide-react';
+import { LayoutDashboard, FileText, Users, LogOut, Settings, ShieldCheck, UserCheck, Bell } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 
@@ -15,6 +15,7 @@ const navItems = [
   { href: '/admin/posts', label: 'Manage Posts', icon: FileText },
   { href: '/admin/users', label: 'Manage Users', icon: Users },
   { href: '/admin/approvals', label: 'Approvals', icon: UserCheck },
+  { href: '/admin/notifications', label: 'Notifications', icon: Bell },
   { href: '/admin/settings', label: 'Settings', icon: Settings },
 ];
 

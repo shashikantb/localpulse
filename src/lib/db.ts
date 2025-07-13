@@ -1,7 +1,7 @@
 
 
 import { Pool, Client, type QueryResult } from 'pg';
-import type { Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest, FamilyMember, FamilyMemberLocation, SortOption, UpdateBusinessCategory, BusinessUser, GorakshakReportUser } from '@/lib/db-types';
+import type { PointTransaction, PointTransactionReason, User as DbUser, Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest, FamilyMember, FamilyMemberLocation, SortOption, UpdateBusinessCategory, BusinessUser, GorakshakReportUser } from '@/lib/db-types';
 import bcrypt from 'bcryptjs';
 import { customAlphabet } from 'nanoid';
 
@@ -161,6 +161,19 @@ async function initializeDbSchema(): Promise<void> {
         // Add location sharing columns to family_relationships table if they don't exist
         await initClient.query(`ALTER TABLE family_relationships ADD COLUMN IF NOT EXISTS share_location_from_1_to_2 BOOLEAN NOT NULL DEFAULT false;`);
         await initClient.query(`ALTER TABLE family_relationships ADD COLUMN IF NOT EXISTS share_location_from_2_to_1 BOOLEAN NOT NULL DEFAULT false;`);
+        // LP Points Transactions Table
+        await initClient.query(`
+            CREATE TABLE IF NOT EXISTS lp_point_transactions (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                points INTEGER NOT NULL,
+                reason VARCHAR(50) NOT NULL,
+                description TEXT,
+                related_entity_id INTEGER,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
 
         // --- Create or Update Official User ---
         const officialUserPassword = process.env.OFFICIAL_USER_PASSWORD;
@@ -213,6 +226,7 @@ async function initializeDbSchema(): Promise<void> {
         await initClient.query('CREATE INDEX IF NOT EXISTS users_geo_idx ON users USING gist (ll_to_earth(latitude, longitude)) WHERE role = \'Business\'');
         await initClient.query('CREATE INDEX IF NOT EXISTS users_gorakshak_geo_idx ON users USING gist (ll_to_earth(latitude, longitude)) WHERE role = \'Gorakshak\' OR role = \'Gorakshak Admin\'');
         await initClient.query('CREATE UNIQUE INDEX IF NOT EXISTS users_referral_code_unique_idx ON users (referral_code) WHERE referral_code IS NOT NULL;');
+        await initClient.query('CREATE INDEX IF NOT EXISTS lp_point_transactions_user_id ON lp_point_transactions(user_id);');
 
 
         await initClient.query('COMMIT');
@@ -482,7 +496,11 @@ export async function addPostDb(newPost: DbNewPost): Promise<Post> {
 
     // Award points for posting
     if (newPost.authorid) {
-      await client.query('UPDATE users SET lp_points = lp_points + 10 WHERE id = $1', [newPost.authorid]);
+        await client.query(
+            `INSERT INTO lp_point_transactions(user_id, points, reason, description, related_entity_id) VALUES ($1, 10, 'new_post', 'Created a new pulse', $2)`,
+            [newPost.authorid, addedPost.id]
+        );
+        await client.query('UPDATE users SET lp_points = lp_points + 10 WHERE id = $1', [newPost.authorid]);
     }
 
     if (newPost.mentionedUserIds && newPost.mentionedUserIds.length > 0) {
@@ -521,6 +539,7 @@ export async function updatePostLikeCountDb(postId: number, direction: 'incremen
   if (!dbPool) throw new Error("Database not configured. Cannot update like count.");
   const client = await dbPool.connect();
   try {
+    await client.query('BEGIN');
     const operator = direction === 'increment' ? '+' : '-';
     const query = `
       UPDATE posts
@@ -533,12 +552,15 @@ export async function updatePostLikeCountDb(postId: number, direction: 'incremen
 
     // Check for LP points bonus
     if (updatedPost && updatedPost.likecount === 10 && !updatedPost.lp_bonus_awarded && updatedPost.authorid) {
-      await client.query('BEGIN');
+      await client.query(
+          `INSERT INTO lp_point_transactions(user_id, points, reason, description, related_entity_id) VALUES ($1, 20, 'post_like_milestone', 'Your pulse reached 10 likes!', $2)`,
+          [updatedPost.authorid, postId]
+      );
       await client.query('UPDATE users SET lp_points = lp_points + 20 WHERE id = $1', [updatedPost.authorid]);
       await client.query('UPDATE posts SET lp_bonus_awarded = TRUE WHERE id = $1', [postId]);
-      await client.query('COMMIT');
     }
-
+    
+    await client.query('COMMIT');
     return updatedPost || null;
   } catch (err) {
     await client.query('ROLLBACK');
@@ -904,12 +926,18 @@ export async function createUserDb(newUser: NewUser, status: 'pending' | 'approv
       const passwordhash = await bcrypt.hash(newUser.passwordplaintext, salt);
       
       let referredById = null;
-      // Handle referral logic
+      let initialPoints = 0;
+
       if (newUser.referral_code) {
-        const referrerRes = await client.query('SELECT id FROM users WHERE referral_code = $1', [newUser.referral_code]);
+        const referrerRes = await client.query('SELECT id, lp_points FROM users WHERE referral_code = $1', [newUser.referral_code.toUpperCase()]);
         if (referrerRes.rows.length > 0) {
           referredById = referrerRes.rows[0].id;
+          initialPoints = 20; // New user gets 20 points for using a valid code
           // Award points to the referrer
+          await client.query(
+              `INSERT INTO lp_point_transactions(user_id, points, reason, description, related_entity_id) VALUES ($1, 50, 'referral_bonus', 'Referred new user: ${newUser.name}', $2)`,
+              [referredById, null] // We don't have the new user's ID yet.
+          );
           await client.query('UPDATE users SET lp_points = lp_points + 50 WHERE id = $1', [referredById]);
         }
       }
@@ -932,13 +960,21 @@ export async function createUserDb(newUser: NewUser, status: 'pending' | 'approv
           VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
           RETURNING ${USER_COLUMNS_SANITIZED};
       `;
-      // New user gets 20 points if they were referred
-      const initialPoints = referredById ? 20 : 0;
+      
       const values = [newUser.name, newUser.email.toLowerCase(), passwordhash, newUser.role, status, newUser.mobilenumber, newUser.business_category, newUser.business_other_category, referredById, initialPoints, referralCode];
       const result: QueryResult<User> = await client.query(insertQuery, values);
+      const createdUser = result.rows[0];
+
+      // If the user got points on signup, log it
+      if (initialPoints > 0) {
+          await client.query(
+              `INSERT INTO lp_point_transactions(user_id, points, reason, description, related_entity_id) VALUES ($1, $2, 'initial_signup_bonus', 'Signed up with a referral code', $3)`,
+              [createdUser.id, initialPoints, referredById]
+          );
+      }
       
       await client.query('COMMIT');
-      return result.rows[0];
+      return createdUser;
     } catch(e) {
       await client.query('ROLLBACK');
       throw e;
@@ -1953,4 +1989,46 @@ export async function getGorakshaksSortedByDistanceDb(adminLat: number, adminLon
   } finally {
     client.release();
   }
+}
+
+// --- LP Points Functions ---
+export async function getPointHistoryForUserDb(userId: number): Promise<PointTransaction[]> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return [];
+
+    const client = await dbPool.connect();
+    try {
+        const query = `
+            SELECT id, points, reason, description, created_at
+            FROM lp_point_transactions
+            WHERE user_id = $1
+            ORDER BY created_at DESC;
+        `;
+        const result: QueryResult<PointTransaction> = await client.query(query, [userId]);
+        return result.rows;
+    } finally {
+        client.release();
+    }
+}
+
+// --- Admin Notification Functions ---
+export async function getAllUsersWithDeviceTokensDb(): Promise<(DbUser & { token: string; user_auth_token: string | null })[]> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return [];
+
+    const client = await dbPool.connect();
+    try {
+        const query = `
+            SELECT u.id, u.lp_points, dt.token, dt.user_auth_token
+            FROM users u
+            JOIN device_tokens dt ON u.id = dt.user_id
+            WHERE u.status = 'approved' AND dt.token IS NOT NULL;
+        `;
+        const result = await client.query(query);
+        return result.rows;
+    } finally {
+        client.release();
+    }
 }
