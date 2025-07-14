@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { localHelper, type LocalHelperInput } from '@/ai/flows/local-helper-flow';
+import { localSearch } from '@/lib/local-search';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -78,27 +78,23 @@ export default function HelperPage() {
     setIsLoading(true);
 
     try {
-      const response = await localHelper({
-        query: input,
-        latitude: location.latitude,
-        longitude: location.longitude,
-      });
+      const response = await localSearch(
+        input,
+        location.latitude,
+        location.longitude,
+      );
 
       const assistantMessage: Message = { role: 'assistant', content: response };
       setMessages((prev) => [...prev, assistantMessage]);
 
     } catch (error: any) {
-        console.error('Error calling local helper flow:', error);
-        let errorMessage = "Sorry, the local helper ran into an unexpected problem. Please try again in a moment.";
-        // Check for the specific 503 error from Gemini
-        if (error.message && error.message.includes('503') && error.message.includes('model is overloaded')) {
-          errorMessage = "The AI helper is currently experiencing high demand. Please try again in a few moments.";
-        }
+        console.error('Error calling local search:', error);
+        let errorMessage = "Sorry, the helper ran into an unexpected problem. Please try again in a moment.";
         setMessages((prev) => [...prev, { role: 'assistant', content: errorMessage }]);
         toast({
             variant: 'destructive',
             title: 'Error',
-            description: error.message || 'The local helper is currently unavailable.',
+            description: error.message || 'The helper is currently unavailable.',
         });
     } finally {
       setIsLoading(false);
