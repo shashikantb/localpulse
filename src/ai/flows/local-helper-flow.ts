@@ -27,7 +27,7 @@ const findNearbyBusinessesTool = ai.defineTool(
   {
     name: 'findNearbyBusinesses',
     description:
-      'Finds nearby businesses based on the user\'s location and an optional category. Use this to answer questions about local services, shops, or restaurants.',
+      "Finds nearby businesses based on the user's location and an optional category. Use this to answer questions about local services, shops, or restaurants. If the user asks for a specific type of shop like 'cake shop' or 'saloon', you should use a relevant category like 'Bakery / Cake Shop' or 'Saloon / Barber Shop'.",
     inputSchema: z.object({
       latitude: z.number().describe("The user's current latitude."),
       longitude: z.number().describe("The user's current longitude."),
@@ -35,7 +35,7 @@ const findNearbyBusinessesTool = ai.defineTool(
         .string()
         .optional()
         .describe(
-          'A specific business category to filter by, e.g., "Restaurant", "Plumber", "Hardware Store".'
+          'A specific business category to filter by, e.g., "Restaurant", "Plumber", "Bakery / Cake Shop", "Saloon / Barber Shop".'
         ),
     }),
     outputSchema: z.array(
@@ -72,14 +72,14 @@ const searchNearbyPostsTool = ai.defineTool(
   {
     name: 'searchNearbyPosts',
     description:
-      "Searches recent public posts (pulses) near the user's location based on a query. Use this to find information about current events, traffic, news, or other user-reported activities.",
+      "Searches recent public posts (pulses) near the user's location based on a query. Use this to find information about current events, traffic, news, or other user-reported activities. If the user asks for 'latest pulse' or 'latest post', use an empty string for the query to get the most recent ones.",
     inputSchema: z.object({
       latitude: z.number().describe("The user's current latitude."),
       longitude: z.number().describe("The user's current longitude."),
       query: z
         .string()
         .describe(
-          'Keywords to search for in the posts, e.g., "traffic", "roadblock", "event", "latest", "news". If the user asks for "latest pulse", use an empty string for the query to get the most recent ones.'
+          'Keywords to search for in the posts, e.g., "traffic", "roadblock", "event", "latest", "news".'
         ),
     }),
     outputSchema: z.array(
@@ -120,8 +120,8 @@ const localHelperFlow = ai.defineFlow(
 Your goal is to answer the user's question based on the data provided by the available tools.
 Be concise and helpful. If you find businesses or posts, present them clearly as a list.
 
-- Use the \`findNearbyBusinesses\` tool for questions about shops, restaurants, or services.
-- Use the \`searchNearbyPosts\` tool for questions about real-time events, news, or user reports like traffic or "latest pulse". If the user asks for the "latest pulse", you should call searchNearbyPosts with an empty string for the query.
+- Use the \`findNearbyBusinesses\` tool for questions about shops, restaurants, or services (e.g., "any cake shops?").
+- Use the \`searchNearbyPosts\` tool for questions about real-time events, news, or user reports like traffic or "latest pulse". If the user asks for the "latest pulse" or "latest news", you should call searchNearbyPosts with an empty string for the query.
 - If you find a business with location data, provide a Google Maps link like this: \`https://www.google.com/maps?q=LATITUDE,LONGITUDE\`.
 
 If you can't find anything relevant with the tools, say so politely.
