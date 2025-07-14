@@ -17,38 +17,44 @@ import { useToast } from '@/hooks/use-toast';
 import { differenceInHours } from 'date-fns';
 import { Button } from './ui/button';
 
-type LeafletHeatType = (latlngs: L.HeatLatLngTuple[], options?: any) => any;
+// Extend the Leaflet 'L' object with the heatLayer method
+declare module 'leaflet' {
+    function heatLayer(latlngs: L.HeatLatLngTuple[], options?: any): any;
+}
 
 const HeatmapComponent = ({ posts }: { posts: Post[] }) => {
     const map = useMap();
     const heatmapLayerRef = useRef<any | null>(null);
-    const [leafletHeat, setLeafletHeat] = useState<LeafletHeatType | null>(null);
+    const [isHeatmapReady, setIsHeatmapReady] = useState(false);
 
     useEffect(() => {
-        // Dynamically import leaflet.heat on the client-side
-        import('leaflet.heat').then(heat => {
-            setLeafletHeat(() => heat.default);
+        // Dynamically import leaflet.heat on the client-side.
+        // This ensures the code only runs in the browser.
+        import('leaflet.heat').then(() => {
+            setIsHeatmapReady(true);
         });
     }, []);
 
     useEffect(() => {
-        if (!leafletHeat || !map) return;
+        if (!isHeatmapReady || !map) return;
 
+        // Clean up the previous heatmap layer if it exists
         if (heatmapLayerRef.current) {
             map.removeLayer(heatmapLayerRef.current);
         }
 
         if (posts.length > 0) {
             const points = posts.map(p => [p.latitude, p.longitude, 1] as L.HeatLatLngTuple);
-            heatmapLayerRef.current = leafletHeat(points, { 
+            // Use L.heatLayer which is now attached to the global L object
+            heatmapLayerRef.current = L.heatLayer(points, { 
                 radius: 20, 
                 blur: 15,
                 max: 1.0
             }).addTo(map);
         }
-    }, [posts, map, leafletHeat]);
+    }, [posts, map, isHeatmapReady]);
 
-    return null;
+    return null; // This component does not render any JSX
 };
 
 
@@ -108,20 +114,6 @@ export default function MapViewer() {
     if (hours < 6) return 'pulse-medium';
     return 'pulse-slow';
   };
-
-  const addPostsIncrementally = useCallback((postsToAdd: Post[]) => {
-      setPosts([]);
-      let i = 0;
-      const interval = setInterval(() => {
-          if (i < postsToAdd.length) {
-              setPosts(current => [...current, postsToAdd[i]]);
-              i++;
-          } else {
-              clearInterval(interval);
-          }
-      }, 50);
-      return () => clearInterval(interval);
-  }, []);
 
   const fetchAndSetPosts = useCallback(async (map: LeafletMap) => {
     setIsLoading(true);
@@ -202,7 +194,7 @@ export default function MapViewer() {
         </Marker>
         
         {posts.map(post => {
-            if (!post) return null; // Add a guard clause to prevent crash
+            if (!post) return null; // Guard clause
             const pulseClassName = getPulseClassName(post.createdat);
             const postIcon = new L.DivIcon({
               html: `<div class="pulsing-dot ${pulseClassName}"></div>`,
