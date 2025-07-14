@@ -1,21 +1,19 @@
+
 'use client';
 
 import type { FC } from 'react';
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Zap } from 'lucide-react';
 import type { User } from '@/lib/db-types';
+import { cn } from '@/lib/utils';
 
 // The skeleton now represents the trigger button, not the full composer.
 export const PostComposerSkeleton = () => (
-  <div className="flex items-center space-x-4 p-4 rounded-xl border bg-card shadow-sm h-[80px]">
-    <Skeleton className="h-12 w-12 rounded-full" />
-    <Skeleton className="h-8 flex-1" />
-  </div>
+    <Skeleton className="h-full w-full rounded-xl" />
 );
 
 const PostComposer = dynamic(() => import('@/components/post-composer'), {
@@ -46,18 +44,14 @@ const PostComposerLoader: FC<PostComposerLoaderProps> = ({ sessionUser }) => {
     return (
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
-                <Button variant="outline" className="w-full h-auto justify-start p-4 rounded-xl shadow-lg hover:shadow-primary/20 bg-card/80 backdrop-blur-sm border-border/60 hover:border-primary/50 transition-all duration-300">
-                    <div className="flex items-center space-x-4 w-full">
-                        <Avatar className="h-12 w-12 border-2 border-primary/40">
-                            {sessionUser?.profilepictureurl && (
-                                <AvatarImage src={sessionUser.profilepictureurl} alt={sessionUser.name} />
-                            )}
-                            <AvatarFallback className="text-xl bg-primary/10 text-primary">
-                                {sessionUser ? sessionUser.name.charAt(0).toUpperCase() : <Zap className="h-6 w-6" />}
-                            </AvatarFallback>
-                        </Avatar>
-                        <span className="text-muted-foreground text-lg">Share your pulse (Post)</span>
+                <Button variant="outline" className={cn(
+                    "w-full h-full justify-center p-2 rounded-xl shadow-lg hover:shadow-primary/20 bg-card/80 backdrop-blur-sm border-border/60 hover:border-primary/50 transition-all duration-300",
+                    "flex flex-col sm:flex-row items-center gap-2 sm:gap-3"
+                )}>
+                    <div className="flex-shrink-0 h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-primary/10 border-2 border-primary/20 flex items-center justify-center">
+                        <Zap className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
                     </div>
+                    <span className="text-muted-foreground text-xs sm:text-sm font-semibold">Share Pulse</span>
                 </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-lg">

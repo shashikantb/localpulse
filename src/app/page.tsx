@@ -10,7 +10,7 @@ import StatusFeed from '@/components/status-feed';
 import { StatusFeedSkeleton } from '@/components/status-feed-skeleton';
 import { getPosts } from './actions';
 import { Button } from '@/components/ui/button';
-import { Map, Sparkles } from 'lucide-react';
+import { Map, Sparkles, Zap } from 'lucide-react';
 
 async function PostComposerWithSession() {
   const { user } = await getSession();
@@ -38,23 +38,26 @@ const HomePage: FC = () => {
           <StatusFeedWithSession />
         </Suspense>
 
-        <Suspense fallback={<PostComposerSkeleton />}>
-          <PostComposerWithSession />
-        </Suspense>
-
-        <div className="grid grid-cols-2 gap-4">
-            <Button variant="outline" asChild className="h-16 text-base shadow-lg hover:shadow-primary/20 bg-card/80 backdrop-blur-sm border-border/60 hover:border-primary/50 transition-all duration-300">
-                <Link href="/map">
-                    <Map className="mr-3 h-6 w-6 text-primary"/>
-                    Live Map
-                </Link>
-            </Button>
-            <Button variant="outline" asChild className="h-16 text-base shadow-lg hover:shadow-primary/20 bg-card/80 backdrop-blur-sm border-border/60 hover:border-primary/50 transition-all duration-300">
-                <Link href="/helper">
-                    <Sparkles className="mr-3 h-6 w-6 text-accent"/>
-                    AI Helper
-                </Link>
-            </Button>
+        <div className="grid grid-cols-3 gap-2 sm:gap-4">
+          <div className="col-span-1">
+            <Suspense fallback={<PostComposerSkeleton />}>
+              <PostComposerWithSession />
+            </Suspense>
+          </div>
+           <div className="col-span-2 grid grid-cols-2 gap-2 sm:gap-4">
+              <Button variant="outline" asChild className="h-full text-base shadow-lg hover:shadow-primary/20 bg-card/80 backdrop-blur-sm border-border/60 hover:border-primary/50 transition-all duration-300 flex-col sm:flex-row gap-2">
+                  <Link href="/map">
+                      <Map className="h-5 w-5 sm:h-6 sm:w-6 text-primary"/>
+                      <span className="text-xs sm:text-sm">Live Map</span>
+                  </Link>
+              </Button>
+              <Button variant="outline" asChild className="h-full text-base shadow-lg hover:shadow-primary/20 bg-card/80 backdrop-blur-sm border-border/60 hover:border-primary/50 transition-all duration-300 flex-col sm:flex-row gap-2">
+                  <Link href="/helper">
+                      <Sparkles className="h-5 w-5 sm:h-6 sm:w-6 text-accent"/>
+                      <span className="text-xs sm:text-sm">AI Helper</span>
+                  </Link>
+              </Button>
+           </div>
         </div>
         
         <Suspense fallback={<PostFeedSkeleton />}>
