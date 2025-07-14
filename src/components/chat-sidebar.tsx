@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
@@ -123,10 +124,11 @@ const ChatSidebar = () => {
 
     return (
         <div className="flex flex-col h-full bg-card">
-            <div className="p-4 border-b flex justify-between items-center">
-                <h1 className="text-2xl font-bold text-primary">Chats</h1>
+            <div className="p-4 border-b flex items-center justify-between gap-4">
+                <h1 className="text-2xl font-bold text-primary flex-shrink-0">Chats</h1>
+                <div className="flex-1" />
                 <CreateGroupDialog>
-                    <Button variant="ghost" size="icon">
+                    <Button variant="ghost" size="icon" className="flex-shrink-0">
                         <Users className="h-5 w-5" />
                         <span className="sr-only">Create Group</span>
                     </Button>
