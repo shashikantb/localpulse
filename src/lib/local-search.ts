@@ -5,8 +5,7 @@ import { getNearbyBusinessesDb, searchNearbyPostsDb, BUSINESS_CATEGORIES } from 
 import type { BusinessUser, Post } from './db-types';
 
 // A mapping from common search terms to official business categories
-const a = Object.values(BUSINESS_CATEGORIES).flat();
-const categorySynonyms: { [key: string]: string } = {
+const categorySynonyms: { [key: string]: string | null } = {
     // Shops & Retail
     'grocery': 'Grocery / Kirana Store', 'kirana': 'Grocery / Kirana Store',
     'fruit': 'Fruits & Vegetable Shop', 'vegetable': 'Fruits & Vegetable Shop',
@@ -45,8 +44,8 @@ const categorySynonyms: { [key: string]: string } = {
     'cctv': 'CCTV Installer',
     'ro service': 'RO / Water Purifier Service', 'water purifier': 'RO / Water Purifier Service',
     'gas repair': 'Gas Stove Repair',
-    // Other common terms
-    'shop': '', 'store': '', 'business': '', 'service': '', 'near me': ''
+    // Other common terms (These will trigger a general business search)
+    'shop': null, 'store': null, 'business': null, 'service': null, 'near me': null
 };
 
 const allBusinessCategories = Object.values(BUSINESS_CATEGORIES).flat();
@@ -65,8 +64,7 @@ function findCategory(query: string): string | null {
     for (const synonym in categorySynonyms) {
         if (lowerQuery.includes(synonym)) {
             const category = categorySynonyms[synonym];
-            // If the synonym is for a general term, it returns null to trigger a general search
-            return category === '' ? null : category;
+            return category; // This will be null for general terms like "shop", triggering a general search
         }
     }
     return null;
@@ -84,10 +82,12 @@ export async function localSearch(query: string, latitude: number, longitude: nu
     // 2. Check for post-related queries
     const postKeywords = ['post', 'pulse', 'news', 'traffic', 'event', 'latest'];
     if (postKeywords.some(keyword => lowerQuery.includes(keyword))) {
+        // Create a search query by removing the keywords. If the result is empty, it's a general search.
+        const searchQuery = postKeywords.reduce((q, kw) => q.replace(kw, ''), lowerQuery).trim();
         const posts = await searchNearbyPostsDb({
             latitude,
             longitude,
-            query: lowerQuery.replace('latest', '').replace('post', '').replace('pulse', '').trim(),
+            query: searchQuery, // This can now be an empty string for a general search
             limit: 5
         });
 
@@ -103,7 +103,7 @@ export async function localSearch(query: string, latitude: number, longitude: nu
     const isBusinessQuery = businessKeywords.some(keyword => lowerQuery.includes(keyword));
     const foundCategory = findCategory(lowerQuery);
 
-    if (isBusinessQuery || foundCategory) {
+    if (isBusinessQuery || foundCategory !== null) {
         const businesses = await getNearbyBusinessesDb({
             latitude,
             longitude,
