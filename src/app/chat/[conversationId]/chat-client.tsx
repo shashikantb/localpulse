@@ -3,16 +3,33 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import type { Message, User, ConversationDetails } from '@/lib/db-types';
-import { getMessages, sendMessage } from '@/app/actions';
+import { getMessages, sendMessage, deleteMessage } from '@/app/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Send, Loader2, Users } from 'lucide-react';
+import { Send, Loader2, Users, MoreHorizontal, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import ChatInfoSidebar from './chat-info-sidebar';
 
 interface ChatClientProps {
@@ -114,6 +131,22 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
     
     setIsSending(false);
   };
+  
+  const handleDeleteMessage = async (messageId: number) => {
+    // Optimistically remove the message from the UI
+    setMessages(prev => prev.filter(m => m.id !== messageId));
+
+    const result = await deleteMessage(messageId);
+    if (!result.success) {
+      toast({
+        variant: 'destructive',
+        title: 'Delete Failed',
+        description: result.error || 'Message could not be deleted. It may have already been removed.',
+      });
+      // Re-fetch messages to get the correct state
+      getMessages(conversationId).then(setMessages);
+    }
+  };
 
   const headerContent = (
       <div className="flex items-center gap-3 hover:bg-muted p-2 rounded-md">
@@ -175,7 +208,7 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
         </div>
 
         {/* Message List (Fills remaining space) */}
-        <div className="flex-grow overflow-y-auto p-4 space-y-4">
+        <div className="flex-grow overflow-y-auto p-4">
             {messages.map((message) => {
                 const isSender = message.sender_id === sessionUser.id;
                 const senderDetails = conversationDetails.participants.find(p => p.id === message.sender_id);
@@ -183,8 +216,43 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
                 return (
                 <div
                     key={message.id}
-                    className={cn('flex items-end gap-2 my-2', isSender ? 'justify-end' : 'justify-start')}
+                    className={cn(
+                        'flex items-end gap-2 my-2 group',
+                        isSender ? 'justify-end' : 'justify-start'
+                    )}
                 >
+                    {isSender && (
+                        <DropdownMenu>
+                            <AlertDialog>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <MoreHorizontal className="h-4 w-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <AlertDialogTrigger asChild>
+                                        <DropdownMenuItem className="text-destructive" onSelect={(e) => e.preventDefault()}>
+                                            <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                        </DropdownMenuItem>
+                                    </AlertDialogTrigger>
+                                </DropdownMenuContent>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            This action cannot be undone. This will permanently delete your message.
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction onClick={() => handleDeleteMessage(message.id)}>
+                                            Delete
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                        </DropdownMenu>
+                    )}
                     {!isSender && (
                     <Avatar className="h-8 w-8 self-start">
                         <AvatarImage src={senderDetails?.profilepictureurl || undefined} />

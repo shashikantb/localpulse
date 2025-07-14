@@ -291,6 +291,7 @@ async function initializeDbSchema(): Promise<void> {
         await initClient.query('CREATE UNIQUE INDEX IF NOT EXISTS users_referral_code_unique_idx ON users (referral_code) WHERE referral_code IS NOT NULL;');
         await initClient.query('CREATE INDEX IF NOT EXISTS lp_point_transactions_user_id ON lp_point_transactions(user_id);');
         await initClient.query('CREATE INDEX IF NOT EXISTS idx_users_last_active ON users (last_active DESC);');
+        await initClient.query('CREATE INDEX IF NOT EXISTS idx_messages_sender_id ON messages(sender_id);');
 
 
         await initClient.query('COMMIT');
@@ -1853,6 +1854,20 @@ export async function addMessageDb(newMessage: NewMessage): Promise<Message> {
     }
 }
 
+export async function deleteMessageDb(messageId: number, userId: number): Promise<boolean> {
+  await ensureDbInitialized();
+  const dbPool = getDbPool();
+  if (!dbPool) throw new Error("Database not configured.");
+  const client = await dbPool.connect();
+  try {
+    const deleteQuery = 'DELETE FROM messages WHERE id = $1 AND sender_id = $2';
+    const result = await client.query(deleteQuery, [messageId, userId]);
+    return result.rowCount > 0;
+  } finally {
+    client.release();
+  }
+}
+
 export async function getMessagesForConversationDb(conversationId: number, userId: number): Promise<Message[]> {
     await ensureDbInitialized();
     const dbPool = getDbPool();
@@ -2547,7 +2562,7 @@ export async function getPotentialGroupMembersDb(userId: number): Promise<Follow
             ),
             followers AS (
                 SELECT follower_id as member_id FROM user_followers WHERE following_id = $1
-            ),
+            )
             all_relations AS (
                 SELECT member_id FROM family_members
                 UNION

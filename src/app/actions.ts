@@ -1106,6 +1106,26 @@ export async function sendMessage(conversationId: number, content: string): Prom
   }
 }
 
+export async function deleteMessage(messageId: number): Promise<{ success: boolean; error?: string }> {
+  const { user } = await getSession();
+  if (!user) {
+    return { success: false, error: 'You must be logged in.' };
+  }
+  
+  try {
+    const wasDeleted = await db.deleteMessageDb(messageId, user.id);
+    if (wasDeleted) {
+      revalidatePath('/chat/[conversationId]', 'page');
+      return { success: true };
+    } else {
+      return { success: false, error: 'Message not found or you do not have permission to delete it.' };
+    }
+  } catch (error: any) {
+    return { success: false, error: 'Failed to delete message due to a server error.' };
+  }
+}
+
+
 export async function sendSosMessage(latitude: number, longitude: number): Promise<{ success: boolean; error?: string; message?: string }> {
   const { user } = await getSession();
   if (!user) {
