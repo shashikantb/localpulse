@@ -60,7 +60,7 @@ export default function HelperPage() {
       toast({
         variant: 'destructive',
         title: 'Location Required',
-        description: locationError || "We're still trying to determine your location. Please wait a moment.",
+        description: locationError || "We're still trying to determine your location. Please wait a moment and try again.",
       });
       return;
     }
@@ -76,16 +76,27 @@ export default function HelperPage() {
         latitude: location.latitude,
         longitude: location.longitude,
       });
-      const assistantMessage: Message = { role: 'assistant', content: response.message };
+
+      let content = response.message;
+      
+      if (response.message.startsWith("I'm sorry, I cannot fulfill this request") || response.message.startsWith("Sorry, I can't help you with that")) {
+        content = "My apologies, I couldn't find anything for that query. You can ask me to find businesses like 'restaurants' or 'plumbers', or ask about recent events with 'latest news' or 'traffic updates'.";
+      } else if (response.message.startsWith("I am sorry, I cannot ping you")) {
+        content = "I can't ping you, but I can use your location to find businesses or posts. What would you like to find?";
+      }
+
+      const assistantMessage: Message = { role: 'assistant', content };
       setMessages((prev) => [...prev, assistantMessage]);
+
     } catch (error: any) {
       console.error('Error calling local search:', error);
-      toast({
+      const errorMessage = "Sorry, the local helper ran into an unexpected problem. Please try again in a moment.";
+      setMessages((prev) => [...prev, { role: 'assistant', content: errorMessage }]);
+       toast({
         variant: 'destructive',
         title: 'Error',
-        description: 'The local helper is currently unavailable. Please try again later.',
+        description: 'The local helper is currently unavailable.',
       });
-       setMessages((prev) => prev.slice(0, -1)); // Remove the user's message on error
     } finally {
       setIsLoading(false);
     }
