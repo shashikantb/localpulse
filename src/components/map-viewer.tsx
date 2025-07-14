@@ -5,18 +5,19 @@
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css';
 import 'leaflet-defaulticon-compatibility';
+import 'react-leaflet-cluster/lib/styles.scss';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import type { LatLngExpression, Map as LeafletMap } from 'leaflet';
 import L from 'leaflet';
 import { Loader2 } from 'lucide-react';
-import { Button } from './ui/button';
 import Link from 'next/link';
 import { getPostsForMap } from '@/app/actions';
 import type { Post } from '@/lib/db-types';
 import { useToast } from '@/hooks/use-toast';
 import { differenceInHours } from 'date-fns';
+import { Button } from './ui/button';
 
 // A simple debounce function to prevent excessive API calls
 function debounce<F extends (...args: any[]) => any>(func: F, wait: number): (...args: Parameters<F>) => void {
@@ -29,14 +30,6 @@ function debounce<F extends (...args: any[]) => any>(func: F, wait: number): (..
             func(...args);
         }, wait);
     };
-}
-
-
-function MapEventsHandler({ onMapReady }: { onMapReady: (map: LeafletMap) => void }) {
-  const map = useMapEvents({
-    load: () => onMapReady(map),
-  });
-  return null;
 }
 
 const getPulseClassName = (postDate: string): string => {
@@ -66,17 +59,14 @@ export default function MapViewer() {
 
   const fetchPosts = useCallback(async (map: LeafletMap) => {
     setIsLoading(true);
-
     try {
       const bounds = map.getBounds();
       const mapBounds = {
         ne: { lat: bounds.getNorthEast().lat, lng: bounds.getNorthEast().lng },
         sw: { lat: bounds.getSouthWest().lat, lng: bounds.getSouthWest().lng },
       };
-      
       const fetchedPosts = await getPostsForMap(mapBounds);
       setPosts(fetchedPosts);
-
     } catch (err) {
       console.error("Failed to fetch map data", err);
       toast({
@@ -89,19 +79,7 @@ export default function MapViewer() {
     }
   }, [toast]);
   
-  // Create a debounced version of the fetch function.
-  const debouncedFetchPosts = useCallback(debounce(fetchPosts, 300), [fetchPosts]);
-
-  const onMapReady = useCallback((map: LeafletMap) => {
-    mapRef.current = map;
-    // Add event listeners for move and zoom
-    map.on('moveend', () => debouncedFetchPosts(map));
-    map.on('zoomend', () => debouncedFetchPosts(map));
-    // Initial fetch
-    fetchPosts(map);
-  }, [fetchPosts, debouncedFetchPosts]);
-
-
+  // Set up initial geolocation
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -115,6 +93,28 @@ export default function MapViewer() {
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   }, []);
+
+  // Set up map event listeners once the map instance is ready
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    // Debounced fetch function
+    const debouncedFetch = debounce(() => fetchPosts(map), 500);
+
+    // Attach event listeners
+    map.on('moveend', debouncedFetch);
+    map.on('zoomend', debouncedFetch);
+    
+    // Initial fetch when map is ready
+    fetchPosts(map);
+
+    // Cleanup function
+    return () => {
+      map.off('moveend', debouncedFetch);
+      map.off('zoomend', debouncedFetch);
+    };
+  }, [fetchPosts]); // Rerun if fetchPosts function reference changes
 
   if (error) {
     return <div className="p-4 text-center text-red-500">{error}</div>;
@@ -142,12 +142,12 @@ export default function MapViewer() {
         zoom={13}
         scrollWheelZoom={true}
         className="h-full w-full z-0"
+        ref={mapRef}
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <MapEventsHandler onMapReady={onMapReady} />
         
         <Marker position={position} icon={userIcon}>
           <Popup>You are here.</Popup>
@@ -180,4 +180,3 @@ export default function MapViewer() {
     </div>
   );
 }
-
