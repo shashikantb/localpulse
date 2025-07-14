@@ -8,7 +8,7 @@ import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility
 import 'leaflet-defaulticon-compatibility';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
 import type { LatLngExpression, Map as LeafletMap } from 'leaflet';
 import L from 'leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
@@ -20,13 +20,12 @@ import type { Post } from '@/lib/db-types';
 import { useToast } from '@/hooks/use-toast';
 import { differenceInHours } from 'date-fns';
 
-function MapEvents({ onBoundsChange }: { onBoundsChange: (map: LeafletMap) => void }) {
+function MapEvents({ onMapReady }: { onMapReady: (map: LeafletMap) => void }) {
   const map = useMapEvents({
-    moveend: () => onBoundsChange(map),
-    zoomend: () => onBoundsChange(map),
-    load: () => onBoundsChange(map), // Fetch data on initial load
+    moveend: () => onMapReady(map),
+    zoomend: () => onMapReady(map),
+    load: () => onMapReady(map), // Use this to trigger initial data fetch
   });
-  useMap(); // Re-renders the component when the map changes
   return null;
 }
 
@@ -45,6 +44,7 @@ export default function MapViewer() {
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
   const mapRef = useRef<LeafletMap | null>(null);
+  const isFetchingRef = useRef(false);
 
 
   const userIcon = new L.Icon({
@@ -55,27 +55,36 @@ export default function MapViewer() {
     popupAnchor: [1, -34],
     shadowSize: [41, 41]
   });
+  
+  const handleMapReady = useCallback((map: LeafletMap) => {
+    mapRef.current = map;
+    if (isFetchingRef.current) return;
 
-  const fetchMapData = useCallback(async (map: LeafletMap) => {
+    isFetchingRef.current = true;
     setIsLoading(true);
-    try {
-      const bounds = map.getBounds();
-      const mapBounds = {
-        ne: { lat: bounds.getNorthEast().lat, lng: bounds.getNorthEast().lng },
-        sw: { lat: bounds.getSouthWest().lat, lng: bounds.getSouthWest().lng },
-      };
-      const fetchedPosts = await getPostsForMap(mapBounds);
-      setPosts(fetchedPosts);
-    } catch (err) {
-      console.error("Failed to fetch map data", err);
-      toast({
-        variant: "destructive",
-        title: "Could not load data",
-        description: "There was an error fetching posts for the map.",
+
+    const bounds = map.getBounds();
+    const mapBounds = {
+      ne: { lat: bounds.getNorthEast().lat, lng: bounds.getNorthEast().lng },
+      sw: { lat: bounds.getSouthWest().lat, lng: bounds.getSouthWest().lng },
+    };
+
+    getPostsForMap(mapBounds)
+      .then(fetchedPosts => {
+        setPosts(fetchedPosts);
+      })
+      .catch(err => {
+        console.error("Failed to fetch map data", err);
+        toast({
+          variant: "destructive",
+          title: "Could not load data",
+          description: "There was an error fetching posts for the map.",
+        });
+      })
+      .finally(() => {
+        setIsLoading(false);
+        isFetchingRef.current = false;
       });
-    } finally {
-      setIsLoading(false);
-    }
   }, [toast]);
   
 
@@ -124,13 +133,12 @@ export default function MapViewer() {
         zoom={13}
         scrollWheelZoom={true}
         className="h-full w-full z-0"
-        ref={mapRef}
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <MapEvents onBoundsChange={fetchMapData} />
+        <MapEvents onMapReady={handleMapReady} />
         
         <Marker position={position} icon={userIcon}>
           <Popup>You are here.</Popup>
