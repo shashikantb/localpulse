@@ -3,15 +3,17 @@
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { getConversations, searchUsers, startChatAndRedirect } from '@/app/actions';
-import type { Conversation, User } from '@/lib/db-types';
+import { getConversations, searchUsers, startChatAndRedirect, getFollowingList } from '@/app/actions';
+import type { Conversation, User, FollowUser } from '@/lib/db-types';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { Skeleton } from './ui/skeleton';
 import { Input } from '@/components/ui/input';
-import { Search, Loader2 } from 'lucide-react';
+import { Search, Loader2, Users } from 'lucide-react';
+import CreateGroupDialog from './create-group-dialog';
+import { Button } from './ui/button';
 
 const POLLING_INTERVAL = 5000; // 5 seconds
 
@@ -121,8 +123,14 @@ const ChatSidebar = () => {
 
     return (
         <div className="flex flex-col h-full bg-card">
-            <div className="p-4 border-b">
+            <div className="p-4 border-b flex justify-between items-center">
                 <h1 className="text-2xl font-bold text-primary">Chats</h1>
+                <CreateGroupDialog>
+                    <Button variant="ghost" size="icon">
+                        <Users className="h-5 w-5" />
+                        <span className="sr-only">Create Group</span>
+                    </Button>
+                </CreateGroupDialog>
             </div>
             <div className="p-4 border-b">
                 <div className="relative">

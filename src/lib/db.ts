@@ -1486,7 +1486,7 @@ export async function getFollowingListDb(userId: number): Promise<FollowUser[]> 
       SELECT u.id, u.name, u.profilepictureurl
       FROM user_followers f
       JOIN users u ON f.following_id = u.id
-      WHERE f.follower_id = $1 AND u.status = 'approved'
+      WHERE f.follower_id = $1 AND u.status IN ('approved', 'verified')
       ORDER BY u.name ASC;
     `;
     const result = await client.query(query, [userId]);
@@ -1756,7 +1756,8 @@ export async function findOrCreateConversationDb(user1Id: number, user2Id: numbe
             SELECT cp1.conversation_id
             FROM conversation_participants AS cp1
             JOIN conversation_participants AS cp2 ON cp1.conversation_id = cp2.conversation_id
-            WHERE cp1.user_id = $1 AND cp2.user_id = $2 AND cp1.is_group = false
+            JOIN conversations c ON cp1.conversation_id = c.id
+            WHERE cp1.user_id = $1 AND cp2.user_id = $2 AND c.is_group = false
             LIMIT 1;
         `;
         const findResult = await client.query(findQuery, [user1Id, user2Id]);
@@ -1780,6 +1781,34 @@ export async function findOrCreateConversationDb(user1Id: number, user2Id: numbe
     } catch (error) {
         await client.query('ROLLBACK');
         console.error("Error in findOrCreateConversationDb transaction:", error);
+        throw error;
+    } finally {
+       client.release();
+    }
+}
+
+export async function createGroupConversationDb(creatorId: number, groupName: string, memberIds: number[]): Promise<Conversation> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) throw new Error("Database not configured.");
+
+    const client = await dbPool.connect();
+    try {
+        await client.query('BEGIN');
+
+        const createConvQuery = 'INSERT INTO conversations (is_group, group_name, created_by) VALUES (true, $1, $2) RETURNING *;';
+        const convResult: QueryResult<Conversation> = await client.query(createConvQuery, [groupName, creatorId]);
+        const newConversation = convResult.rows[0];
+
+        const participantValues = memberIds.map(id => `(${newConversation.id}, ${id}, ${id === creatorId})`).join(',');
+        const addParticipantsQuery = `INSERT INTO conversation_participants (conversation_id, user_id, is_admin) VALUES ${participantValues};`;
+        await client.query(addParticipantsQuery);
+
+        await client.query('COMMIT');
+        return newConversation;
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error("Error in createGroupConversationDb:", error);
         throw error;
     } finally {
        client.release();
@@ -1877,12 +1906,12 @@ export async function getConversationsForUserDb(userId: number): Promise<Convers
         (SELECT COUNT(*) FROM conversation_participants WHERE conversation_id = c.id) as member_count
       FROM
           conversation_participants AS p_me
-      LEFT JOIN
-          conversation_participants AS p_other ON p_me.conversation_id = p_other.conversation_id AND p_me.user_id != p_other.user_id
-      LEFT JOIN
-          users AS u_other ON p_other.user_id = u_other.id
       JOIN
           conversations AS c ON p_me.conversation_id = c.id
+      LEFT JOIN
+          conversation_participants AS p_other ON p_me.conversation_id = p_other.conversation_id AND p_me.user_id != p_other.user_id AND c.is_group = false
+      LEFT JOIN
+          users AS u_other ON p_other.user_id = u_other.id
       LEFT JOIN LATERAL (
           SELECT content, sender_id FROM messages
           WHERE conversation_id = c.id
@@ -1891,7 +1920,6 @@ export async function getConversationsForUserDb(userId: number): Promise<Convers
       ) lm ON true
       WHERE
           p_me.user_id = $1
-          AND (c.is_group = true OR p_other.user_id IS NOT NULL)
       GROUP BY c.id, u_other.name, u_other.profilepictureurl, p_other.user_id, lm.content, lm.sender_id, p_me.unread_count
       ORDER BY c.last_message_at DESC;
     `;
