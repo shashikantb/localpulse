@@ -116,6 +116,43 @@ export async function getMediaPosts(options?: { page: number; limit: number }): 
   }
 }
 
+async function sendFamilyPostNotification(post: Post, author: User) {
+    if (!firebaseAdmin) return;
+    try {
+        const familyMemberIds = await db.getFamilyMemberIdsDb(author.id);
+        if (familyMemberIds.length === 0) return;
+
+        const tokens = await db.getDeviceTokensForUsersDb(familyMemberIds);
+        if (tokens.length === 0) return;
+        
+        const messages = await Promise.all(tokens.map(async ({ token, user_id }) => {
+            const freshToken = await encrypt({ userId: user_id });
+            return {
+                token: token,
+                notification: {
+                    title: `${author.name} added a new Family Pulse`,
+                    body: post.content.substring(0, 100) + (post.content.length > 100 ? '...' : ''),
+                },
+                data: {
+                    user_auth_token: freshToken,
+                    type: 'FAMILY_POST' // Custom data to identify the notification type
+                },
+                android: { priority: 'high' as const },
+                apns: { payload: { aps: { 'content-available': 1 } } }
+            }
+        }));
+
+        const response = await firebaseAdmin.messaging().sendEach(messages as any);
+        if (response.failureCount > 0) {
+            console.error(`Failed to send family post notification to ${response.failureCount} tokens.`);
+        }
+
+    } catch (error) {
+        console.error('Error sending family post notification:', error);
+    }
+}
+
+
 async function sendNotificationForNewPost(post: Post, mentionedUserIds: number[] = []) {
   try {
     if (post.is_family_post || !firebaseAdmin) {
@@ -346,9 +383,16 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
 
     revalidatePath('/');
     
-    sendNotificationForNewPost(finalPost, postDataForDb.mentionedUserIds).catch(err => {
-      console.error("Background notification sending failed:", err);
-    });
+    // Run notifications in the background
+    if (finalPost.is_family_post && user) {
+        sendFamilyPostNotification(finalPost, user).catch(err => {
+            console.error("Background family post notification failed:", err);
+        });
+    } else {
+        sendNotificationForNewPost(finalPost, postDataForDb.mentionedUserIds).catch(err => {
+            console.error("Background notification sending failed:", err);
+        });
+    }
 
     return { post: finalPost };
   } catch (error: any) {

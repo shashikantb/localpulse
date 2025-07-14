@@ -1869,6 +1869,29 @@ export async function getFamilyRelationshipDb(userId1: number, userId2: number):
     }
 }
 
+export async function getFamilyMemberIdsDb(userId: number): Promise<number[]> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return [];
+
+    const client = await dbPool.connect();
+    try {
+        const query = `
+            SELECT 
+                CASE
+                    WHEN user_id_1 = $1 THEN user_id_2
+                    ELSE user_id_1
+                END AS family_member_id
+            FROM family_relationships
+            WHERE (user_id_1 = $1 OR user_id_2 = $1) AND status = 'approved';
+        `;
+        const result = await client.query(query, [userId]);
+        return result.rows.map(row => row.family_member_id);
+    } finally {
+        client.release();
+    }
+}
+
 export async function sendFamilyRequestDb(requesterId: number, receiverId: number): Promise<void> {
     await ensureDbInitialized();
     const dbPool = getDbPool();
