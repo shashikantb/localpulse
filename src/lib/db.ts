@@ -176,10 +176,38 @@ async function initializeDbSchema(): Promise<void> {
         // Visitor Stats Table
         await initClient.query(`CREATE TABLE IF NOT EXISTS visitor_stats ( stat_key VARCHAR(255) PRIMARY KEY, value BIGINT NOT NULL );`);
         await initClient.query(`INSERT INTO visitor_stats (stat_key, value) VALUES ('total_visits', 0), ('daily_visits_date', 0), ('daily_visits_count', 0) ON CONFLICT (stat_key) DO NOTHING;`);
+        
         // Chat Tables
-        await initClient.query(`CREATE TABLE IF NOT EXISTS conversations ( id SERIAL PRIMARY KEY, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, last_message_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP );`);
-        await initClient.query(`CREATE TABLE IF NOT EXISTS conversation_participants ( conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, unread_count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (conversation_id, user_id) );`);
+        await initClient.query(`
+            CREATE TABLE IF NOT EXISTS conversations ( 
+                id SERIAL PRIMARY KEY, 
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, 
+                last_message_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                is_group BOOLEAN DEFAULT false NOT NULL,
+                group_name VARCHAR(255),
+                group_avatar_url TEXT,
+                created_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+            );
+        `);
+        // Add group columns if they don't exist
+        await initClient.query(`ALTER TABLE conversations ADD COLUMN IF NOT EXISTS is_group BOOLEAN DEFAULT false NOT NULL;`);
+        await initClient.query(`ALTER TABLE conversations ADD COLUMN IF NOT EXISTS group_name VARCHAR(255);`);
+        await initClient.query(`ALTER TABLE conversations ADD COLUMN IF NOT EXISTS group_avatar_url TEXT;`);
+        await initClient.query(`ALTER TABLE conversations ADD COLUMN IF NOT EXISTS created_by INTEGER REFERENCES users(id) ON DELETE SET NULL;`);
+
+        await initClient.query(`
+            CREATE TABLE IF NOT EXISTS conversation_participants ( 
+                conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, 
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, 
+                unread_count INTEGER NOT NULL DEFAULT 0,
+                is_admin BOOLEAN DEFAULT false NOT NULL,
+                PRIMARY KEY (conversation_id, user_id) 
+            );
+        `);
+        await initClient.query(`ALTER TABLE conversation_participants ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false NOT NULL;`);
+
         await initClient.query(`CREATE TABLE IF NOT EXISTS messages ( id SERIAL PRIMARY KEY, conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, content TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP );`);
+        
         // Family Relationships Table
         await initClient.query(`
           CREATE TABLE IF NOT EXISTS family_relationships (
@@ -1728,7 +1756,7 @@ export async function findOrCreateConversationDb(user1Id: number, user2Id: numbe
             SELECT cp1.conversation_id
             FROM conversation_participants AS cp1
             JOIN conversation_participants AS cp2 ON cp1.conversation_id = cp2.conversation_id
-            WHERE cp1.user_id = $1 AND cp2.user_id = $2
+            WHERE cp1.user_id = $1 AND cp2.user_id = $2 AND cp1.is_group = false
             LIMIT 1;
         `;
         const findResult = await client.query(findQuery, [user1Id, user2Id]);
@@ -1738,12 +1766,12 @@ export async function findOrCreateConversationDb(user1Id: number, user2Id: numbe
             return findResult.rows[0].conversation_id;
         }
 
-        const createConvQuery = 'INSERT INTO conversations DEFAULT VALUES RETURNING id;';
-        const convResult = await client.query(createConvQuery);
+        const createConvQuery = 'INSERT INTO conversations (is_group, created_by) VALUES (false, $1) RETURNING id;';
+        const convResult = await client.query(createConvQuery, [user1Id]);
         const conversationId = convResult.rows[0].id;
 
         const addParticipantsQuery = `
-            INSERT INTO conversation_participants (conversation_id, user_id) VALUES ($1, $2), ($1, $3);
+            INSERT INTO conversation_participants (conversation_id, user_id, is_admin) VALUES ($1, $2, false), ($1, $3, false);
         `;
         await client.query(addParticipantsQuery, [conversationId, user1Id, user2Id]);
 
@@ -1828,23 +1856,33 @@ export async function getConversationsForUserDb(userId: number): Promise<Convers
   try {
     const query = `
       SELECT
-          c.id,
-          c.created_at,
-          c.last_message_at,
-          p_other.user_id AS participant_id,
-          u_other.name AS participant_name,
-          u_other.profilepictureurl AS participant_profile_picture_url,
-          lm.content AS last_message_content,
-          lm.sender_id AS last_message_sender_id,
-          p_me.unread_count
+        c.id,
+        c.created_at,
+        c.last_message_at,
+        c.is_group,
+        c.group_name,
+        c.group_avatar_url,
+        CASE
+            WHEN c.is_group = true THEN c.group_name
+            ELSE u_other.name
+        END AS display_name,
+        CASE
+            WHEN c.is_group = true THEN c.group_avatar_url
+            ELSE u_other.profilepictureurl
+        END AS display_avatar_url,
+        p_other.user_id as participant_id,
+        lm.content as last_message_content,
+        lm.sender_id as last_message_sender_id,
+        p_me.unread_count,
+        (SELECT COUNT(*) FROM conversation_participants WHERE conversation_id = c.id) as member_count
       FROM
           conversation_participants AS p_me
-      JOIN
+      LEFT JOIN
           conversation_participants AS p_other ON p_me.conversation_id = p_other.conversation_id AND p_me.user_id != p_other.user_id
+      LEFT JOIN
+          users AS u_other ON p_other.user_id = u_other.id
       JOIN
           conversations AS c ON p_me.conversation_id = c.id
-      JOIN
-          users AS u_other ON p_other.user_id = u_other.id
       LEFT JOIN LATERAL (
           SELECT content, sender_id FROM messages
           WHERE conversation_id = c.id
@@ -1853,11 +1891,12 @@ export async function getConversationsForUserDb(userId: number): Promise<Convers
       ) lm ON true
       WHERE
           p_me.user_id = $1
-      ORDER BY
-          c.last_message_at DESC;
+          AND (c.is_group = true OR p_other.user_id IS NOT NULL)
+      GROUP BY c.id, u_other.name, u_other.profilepictureurl, p_other.user_id, lm.content, lm.sender_id, p_me.unread_count
+      ORDER BY c.last_message_at DESC;
     `;
     
-    const result: QueryResult<Conversation> = await client.query(query, [userId]);
+    const result = await client.query(query, [userId]);
     return result.rows;
   } finally {
     client.release();

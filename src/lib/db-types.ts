@@ -272,13 +272,17 @@ export interface Conversation {
   id: number;
   created_at: string;
   last_message_at: string;
-  // Details of the other participant
-  participant_id: number;
-  participant_name: string;
-  participant_profile_picture_url?: string | null;
+  is_group: boolean;
+  group_name?: string | null;
+  group_avatar_url?: string | null;
+  // Details of the other participant or group name
+  participant_id?: number | null; // Null for group chats
+  display_name: string; // Will be participant_name for 1-on-1 or group_name for groups
+  display_avatar_url?: string | null; // Will be participant avatar or group avatar
   last_message_content?: string | null;
   last_message_sender_id?: number | null;
   unread_count: number;
+  member_count: number;
 }
 
 export interface Message {
@@ -299,6 +303,7 @@ export interface ConversationParticipant {
     id: number;
     name: string;
     profilepictureurl?: string | null;
+    is_admin?: boolean;
 }
 
 // --- Family Relationship Types ---
