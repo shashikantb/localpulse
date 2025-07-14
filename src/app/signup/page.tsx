@@ -321,7 +321,7 @@ const SignupPage: FC = () => {
                             name="business_other_category"
                             render={({ field }) => (
                                 <FormItem>
-                                    <Label>Please Specify Your Business</FormLabel>
+                                    <FormLabel>Please Specify Your Business</FormLabel>
                                     <FormControl>
                                         <Input {...field} placeholder="e.g., Book Binding Service" disabled={isSubmitting} />
                                     </FormControl>
