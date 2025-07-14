@@ -1,8 +1,17 @@
 
 'use server';
 
-import { deleteUserDb } from '@/lib/db';
+import { deleteUserDb, getPaginatedUsersDb } from '@/lib/db';
 import { revalidatePath } from 'next/cache';
+
+export async function getPaginatedUsers(page: number, limit: number, query?: string) {
+    try {
+        return await getPaginatedUsersDb({ page, limit, query });
+    } catch (error) {
+        console.error('Failed to get paginated users:', error);
+        return { users: [], totalCount: 0 };
+    }
+}
 
 export async function deleteUser(userId: number): Promise<{ success: boolean; error?: string }> {
   try {

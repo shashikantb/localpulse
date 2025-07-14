@@ -3,17 +3,30 @@
 import type { FC } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Users, PlusCircle, Search, CheckCircle, XCircle, Clock, BadgeCheck } from 'lucide-react';
-import { getAllUsersDb } from '@/lib/db';
+import { Users, PlusCircle, CheckCircle, XCircle, Clock, BadgeCheck } from 'lucide-react';
+import { getPaginatedUsers } from './actions';
 import { Badge } from '@/components/ui/badge';
 import UserActions from '@/components/admin/user-actions';
 import type { UserStatus } from '@/lib/db-types';
+import AdminTableControls from '@/components/admin/admin-table-controls';
 
 export const dynamic = 'force-dynamic';
 
-const AdminManageUsersPage: FC = async () => {
-  const users = await getAllUsersDb();
+interface PageProps {
+  searchParams?: {
+    query?: string;
+    page?: string;
+  };
+}
+
+const AdminManageUsersPage: FC<PageProps> = async ({ searchParams }) => {
+  const query = searchParams?.query || '';
+  const currentPage = Number(searchParams?.page) || 1;
+  const limit = 10;
+
+  const { users, totalCount } = await getPaginatedUsers(currentPage, limit, query);
+  
+  const totalPages = Math.ceil(totalCount / limit);
 
   const getStatusVariant = (status: UserStatus): "default" | "secondary" | "destructive" | "success" => {
     switch (status) {
@@ -43,7 +56,7 @@ const AdminManageUsersPage: FC = async () => {
       <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-4xl font-bold tracking-tight text-foreground">Manage Users</h1>
-          <p className="text-lg text-muted-foreground">View, edit roles, or manage user accounts.</p>
+          <p className="text-lg text-muted-foreground">View, search, or manage user accounts.</p>
         </div>
         <Button disabled>
           <PlusCircle className="mr-2 h-5 w-5" />
@@ -53,14 +66,14 @@ const AdminManageUsersPage: FC = async () => {
 
       <Card className="shadow-lg">
         <CardHeader>
-          <CardTitle>All Users</CardTitle>
+          <CardTitle>All Users ({totalCount})</CardTitle>
           <CardDescription>A list of all registered users on the platform.</CardDescription>
            <div className="pt-2">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-              <Input placeholder="Search users by name, email, role..." className="pl-10 w-full md:w-1/2 lg:w-1/3" disabled/>
-            </div>
-          </div>
+            <AdminTableControls
+              searchPlaceholder="Search users by name or email..."
+              createAction={null}
+            />
+           </div>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -108,11 +121,15 @@ const AdminManageUsersPage: FC = async () => {
               </tbody>
             </table>
           </div>
-           {/* Placeholder for Pagination */}
-           <div className="flex justify-end mt-6">
-            <Button variant="outline" size="sm" className="mr-2" disabled>Previous</Button>
-            <Button variant="outline" size="sm" disabled>Next</Button>
-          </div>
+          {totalPages > 1 && (
+            <div className="flex justify-end mt-6">
+                <AdminTableControls
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    showSearch={false}
+                />
+            </div>
+           )}
         </CardContent>
       </Card>
     </div>

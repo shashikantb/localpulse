@@ -1252,6 +1252,81 @@ export async function getAllUsersDb(): Promise<User[]> {
     }
 }
 
+export async function getPaginatedUsersDb(options: { page: number; limit: number; query?: string; }): Promise<{ users: User[], totalCount: number }> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return { users: [], totalCount: 0 };
+    
+    const client = await dbPool.connect();
+    try {
+        const { page, limit, query } = options;
+        const offset = (page - 1) * limit;
+        const searchPattern = query ? `%${query}%` : '%';
+
+        const whereClause = query ? `WHERE name ILIKE $1 OR email ILIKE $1` : '';
+        const countParams = query ? [searchPattern] : [];
+        const queryParams = query ? [searchPattern, limit, offset] : [limit, offset];
+
+        const countQuery = `SELECT COUNT(*) FROM users ${whereClause}`;
+        const totalResult = await client.query(countQuery, countParams);
+        const totalCount = parseInt(totalResult.rows[0].count, 10);
+
+        const dataQuery = `
+            SELECT ${USER_COLUMNS_SANITIZED}
+            FROM users
+            ${whereClause}
+            ORDER BY createdat DESC
+            LIMIT $${query ? 2 : 1} OFFSET $${query ? 3 : 2};
+        `;
+        const dataResult = await client.query(dataQuery, queryParams);
+
+        return { users: dataResult.rows, totalCount };
+    } finally {
+        client.release();
+    }
+}
+
+export async function getPaginatedPostsDb(options: { page: number; limit: number; query?: string; }): Promise<{ posts: Post[], totalCount: number }> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return { posts: [], totalCount: 0 };
+
+    const client = await dbPool.connect();
+    try {
+        const { page, limit, query } = options;
+        const offset = (page - 1) * limit;
+        const searchPattern = query ? `%${query}%` : '%';
+
+        const whereClause = query ? `WHERE p.content ILIKE $1 OR u.name ILIKE $1 OR p.city ILIKE $1` : '';
+        const countParams = query ? [searchPattern] : [];
+        const queryParams = query ? [searchPattern, limit, offset] : [limit, offset];
+
+        const countQuery = `
+            SELECT COUNT(*) 
+            FROM posts p
+            LEFT JOIN users u ON p.authorid = u.id
+            ${whereClause};
+        `;
+        const totalResult = await client.query(countQuery, countParams);
+        const totalCount = parseInt(totalResult.rows[0].count, 10);
+
+        const dataQuery = `
+            SELECT ${POST_COLUMNS_WITH_JOINS}
+            FROM posts p
+            LEFT JOIN users u ON p.authorid = u.id
+            ${whereClause}
+            ORDER BY p.createdat DESC
+            LIMIT $${query ? 2 : 1} OFFSET $${query ? 3 : 2};
+        `;
+        const dataResult = await client.query(dataQuery, queryParams);
+
+        return { posts: dataResult.rows, totalCount };
+    } finally {
+        client.release();
+    }
+}
+
+
 export async function updateUserStatusDb(userId: number, status: UserStatus): Promise<User | null> {
     await ensureDbInitialized();
     const dbPool = getDbPool();

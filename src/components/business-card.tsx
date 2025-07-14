@@ -5,7 +5,7 @@ import type { BusinessUser } from '@/lib/db-types';
 import { Card, CardHeader } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Phone, MapPin, Briefcase } from 'lucide-react';
+import { Phone, MapPin, Briefcase, BadgeCheck } from 'lucide-react';
 
 interface BusinessCardProps {
   business: BusinessUser;
@@ -18,6 +18,7 @@ const BusinessCard: FC<BusinessCardProps> = ({ business, userLocation }) => {
   };
 
   const distanceInKm = business.distance ? (business.distance / 1000).toFixed(1) : null;
+  const isVerified = business.status === 'verified';
 
   return (
     <Link href={`/users/${business.id}`} className="block transition-transform hover:-translate-y-1">
@@ -29,7 +30,12 @@ const BusinessCard: FC<BusinessCardProps> = ({ business, userLocation }) => {
                 <AvatarFallback className="text-2xl bg-muted">{getInitials(business.name)}</AvatarFallback>
             </Avatar>
             <div className="flex-1 text-center sm:text-left">
-                <h3 className="text-xl font-bold text-primary">{business.name}</h3>
+                <div className="flex items-center justify-center sm:justify-start gap-2">
+                    <h3 className="text-xl font-bold text-primary">{business.name}</h3>
+                    {isVerified && (
+                        <BadgeCheck className="h-6 w-6 text-green-600" title="Verified Business" />
+                    )}
+                </div>
                 <p className="text-sm text-muted-foreground flex items-center justify-center sm:justify-start gap-2 mt-1">
                 <Briefcase className="w-4 h-4" />
                 {business.business_category === 'Any Other' ? business.business_other_category : business.business_category}

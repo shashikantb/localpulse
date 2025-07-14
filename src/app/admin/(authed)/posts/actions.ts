@@ -1,10 +1,19 @@
 
 'use server';
 
-import { deletePostDb, addPostDb, getUserByEmailDb } from '@/lib/db';
+import { deletePostDb, addPostDb, getUserByEmailDb, getPaginatedPostsDb } from '@/lib/db';
 import { revalidatePath } from 'next/cache';
 
 const OFFICIAL_USER_EMAIL = 'official@localpulse.in';
+
+export async function getPaginatedPosts(page: number, limit: number, query?: string) {
+    try {
+        return await getPaginatedPostsDb({ page, limit, query });
+    } catch (error) {
+        console.error('Failed to get paginated posts:', error);
+        return { posts: [], totalCount: 0 };
+    }
+}
 
 export async function deletePost(postId: number): Promise<{ success: boolean; error?: string }> {
   try {

@@ -1,24 +1,37 @@
 
 import type { FC } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { FileText, PlusCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { FileText, PlusCircle, Search } from 'lucide-react';
-import { getAdminPosts } from '@/app/actions';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import PostActions from '@/components/admin/post-actions';
 import CreateAnnouncementDialog from './create-announcement-dialog';
+import AdminTableControls from '@/components/admin/admin-table-controls';
+import { getPaginatedPosts } from './actions';
 
 export const dynamic = 'force-dynamic';
 
-const AdminManagePostsPage: FC = async () => {
-  const posts = await getAdminPosts({ page: 1, limit: 100 }); // Fetch posts for admin view
+interface PageProps {
+  searchParams?: {
+    query?: string;
+    page?: string;
+  };
+}
+
+const AdminManagePostsPage: FC<PageProps> = async ({ searchParams }) => {
+  const query = searchParams?.query || '';
+  const currentPage = Number(searchParams?.page) || 1;
+  const limit = 10;
+
+  const { posts, totalCount } = await getPaginatedPosts(currentPage, limit, query);
+  
+  const totalPages = Math.ceil(totalCount / limit);
 
   return (
     <div className="space-y-8">
       <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-4xl font-bold tracking-tight text-foreground">Manage Posts</h1>
-          <p className="text-lg text-muted-foreground">View, edit, or delete user posts.</p>
+          <p className="text-lg text-muted-foreground">View, search, or delete user posts.</p>
         </div>
         <CreateAnnouncementDialog>
             <Button>
@@ -30,13 +43,13 @@ const AdminManagePostsPage: FC = async () => {
 
       <Card className="shadow-lg">
         <CardHeader>
-          <CardTitle>All Posts</CardTitle>
+          <CardTitle>All Posts ({totalCount})</CardTitle>
           <CardDescription>A list of all posts on the platform.</CardDescription>
           <div className="pt-2">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-              <Input placeholder="Search posts by content, author, city..." className="pl-10 w-full md:w-1/2 lg:w-1/3" disabled/>
-            </div>
+            <AdminTableControls
+              searchPlaceholder="Search posts by content, author, city..."
+              createAction={null}
+            />
           </div>
         </CardHeader>
         <CardContent>
@@ -78,11 +91,15 @@ const AdminManagePostsPage: FC = async () => {
               </tbody>
             </table>
           </div>
-          {/* Placeholder for Pagination */}
-          <div className="flex justify-end mt-6">
-            <Button variant="outline" size="sm" className="mr-2" disabled>Previous</Button>
-            <Button variant="outline" size="sm" disabled>Next</Button>
-          </div>
+          {totalPages > 1 && (
+            <div className="flex justify-end mt-6">
+                <AdminTableControls
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    showSearch={false}
+                />
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
