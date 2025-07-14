@@ -30,6 +30,10 @@ export default function HelperPage() {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
+          if(position.coords.latitude === 0 && position.coords.longitude === 0) {
+              setLocationError("Could not get a valid location. Please ensure location services are enabled and accurate.");
+              return;
+          }
           setLocation({
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
@@ -56,7 +60,7 @@ export default function HelperPage() {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
-    if (!location) {
+    if (!location || locationError) {
       toast({
         variant: 'destructive',
         title: 'Location Required',
@@ -77,15 +81,7 @@ export default function HelperPage() {
         longitude: location.longitude,
       });
 
-      let content = response.message;
-      
-      if (response.message.startsWith("I'm sorry, I cannot fulfill this request") || response.message.startsWith("Sorry, I can't help you with that")) {
-        content = "My apologies, I couldn't find anything for that query. You can ask me to find businesses like 'restaurants' or 'plumbers', or ask about recent events with 'latest news' or 'traffic updates'.";
-      } else if (response.message.startsWith("I am sorry, I cannot ping you")) {
-        content = "I can't ping you, but I can use your location to find businesses or posts. What would you like to find?";
-      }
-
-      const assistantMessage: Message = { role: 'assistant', content };
+      const assistantMessage: Message = { role: 'assistant', content: response.message };
       setMessages((prev) => [...prev, assistantMessage]);
 
     } catch (error: any) {

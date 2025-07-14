@@ -13,10 +13,25 @@ export interface LocalSearchOutput {
   message: string;
 }
 
-const BUSINESS_KEYWORDS = ['business', 'shop', 'store', 'restaurant', 'bakery', 'saloon', 'parlour', 'service', 'mechanic', 'plumber', 'electrician', 'cafe', 'find'];
+const BUSINESS_KEYWORDS = ['business', 'shop', 'store', 'restaurant', 'bakery', 'saloon', 'parlour', 'service', 'mechanic', 'plumber', 'electrician', 'cafe', 'find', 'any'];
 const POST_KEYWORDS = ['latest', 'post', 'pulse', 'news', 'traffic', 'event', 'roadblock', 'update'];
 const HELP_KEYWORDS = ['help', 'what can you do', 'info', 'assistance', 'support', 'how do you work'];
 
+function extractCategory(query: string): string | null {
+  const queryLower = query.toLowerCase();
+  
+  // Remove business keywords to isolate the category
+  let category = queryLower;
+  for (const keyword of BUSINESS_KEYWORDS) {
+    category = category.replace(new RegExp(`\\b${keyword}\\b`, 'g'), '');
+  }
+  
+  // Clean up common filler words
+  category = category.replace(/\b(near me|nearby|available|name)\b/g, '').trim();
+
+  // If after cleaning up, we still have something left, it's likely the category.
+  return category.length > 2 ? category : null;
+}
 
 function formatBusinesses(businesses: any[]): string {
   if (businesses.length === 0) {
@@ -28,8 +43,9 @@ function formatBusinesses(businesses: any[]): string {
         const distanceKm = b.distance ? (b.distance / 1000).toFixed(1) : null;
         const mapsLink = b.latitude && b.longitude ? `[View on Map](https://www.google.com/maps?q=${b.latitude},${b.longitude})` : '';
         const distanceInfo = distanceKm ? `(approx. ${distanceKm} km away)` : '';
+        const categoryInfo = b.business_category ? `(${b.business_category})` : '';
         
-        return `- **${b.name}** (${b.business_category}) ${distanceInfo}\n  ${mapsLink}`;
+        return `- **${b.name}** ${categoryInfo} ${distanceInfo}\n  ${mapsLink}`;
     })
     .join('\n');
   
@@ -63,13 +79,14 @@ export async function localSearch(input: LocalSearchInput): Promise<LocalSearchO
   const isBusinessQuery = BUSINESS_KEYWORDS.some(keyword => queryLower.includes(keyword));
   const isPostQuery = POST_KEYWORDS.some(keyword => queryLower.includes(keyword));
 
-  if (isBusinessQuery) {
+  if (isBusinessQuery || (!isPostQuery && queryLower.includes('shop'))) {
+    const category = extractCategory(input.query);
     const businesses = await getNearbyBusinessesDb({
       latitude: input.latitude,
       longitude: input.longitude,
       limit: 5,
       offset: 0,
-      category: input.query, 
+      category: category, 
     });
     return { message: formatBusinesses(businesses) };
   }
@@ -78,13 +95,13 @@ export async function localSearch(input: LocalSearchInput): Promise<LocalSearchO
     const posts = await searchNearbyPostsDb({
       latitude: input.latitude,
       longitude: input.longitude,
-      query: input.query,
+      query: queryLower.replace('latest', '').replace('post','').trim(),
       limit: 5,
     });
     return { message: formatPosts(posts) };
   }
   
-  // Fallback if no keywords match
+  // Fallback if no specific keywords match - try to use the whole query as a business category
   const businesses = await getNearbyBusinessesDb({
       latitude: input.latitude,
       longitude: input.longitude,
@@ -97,5 +114,5 @@ export async function localSearch(input: LocalSearchInput): Promise<LocalSearchO
     return { message: formatBusinesses(businesses) };
   }
 
-  return { message: "My apologies, I couldn't find anything for that query. You can ask me to find businesses like 'restaurants' or 'plumbers', or ask about recent events with 'latest news' or 'traffic updates'." };
+  return { message: "Sorry, I can only search for local businesses or recent posts. Please try a query like 'find a restaurant' or 'latest news'." };
 }
