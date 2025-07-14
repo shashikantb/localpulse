@@ -2078,3 +2078,4 @@ export async function getAllUsersWithDeviceTokensDb(): Promise<UserForNotificati
         client.release();
     }
 }
+

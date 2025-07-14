@@ -1,9 +1,8 @@
 
+
 'use client';
 
 import 'leaflet/dist/leaflet.css';
-import 'leaflet.markercluster/dist/MarkerCluster.css';
-import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css';
 import 'leaflet-defaulticon-compatibility';
 
@@ -11,7 +10,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
 import type { LatLngExpression, Map as LeafletMap } from 'leaflet';
 import L from 'leaflet';
-import MarkerClusterGroup from 'react-leaflet-cluster';
 import { Loader2 } from 'lucide-react';
 import { Button } from './ui/button';
 import Link from 'next/link';
@@ -34,11 +32,9 @@ function debounce<F extends (...args: any[]) => any>(func: F, wait: number): (..
 }
 
 
-function MapEventsHandler({ onBoundsChange }: { onBoundsChange: (map: LeafletMap) => void }) {
+function MapEventsHandler({ onMapReady }: { onMapReady: (map: LeafletMap) => void }) {
   const map = useMapEvents({
-    moveend: () => onBoundsChange(map),
-    zoomend: () => onBoundsChange(map),
-    load: () => onBoundsChange(map),
+    load: () => onMapReady(map),
   });
   return null;
 }
@@ -57,7 +53,7 @@ export default function MapViewer() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
-  const isFetchingRef = useRef(false);
+  const mapRef = useRef<LeafletMap | null>(null);
 
   const userIcon = new L.Icon({
     iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
@@ -69,9 +65,6 @@ export default function MapViewer() {
   });
 
   const fetchPosts = useCallback(async (map: LeafletMap) => {
-    if (isFetchingRef.current) return;
-
-    isFetchingRef.current = true;
     setIsLoading(true);
 
     try {
@@ -93,12 +86,21 @@ export default function MapViewer() {
       });
     } finally {
       setIsLoading(false);
-      isFetchingRef.current = false;
     }
   }, [toast]);
   
   // Create a debounced version of the fetch function.
   const debouncedFetchPosts = useCallback(debounce(fetchPosts, 300), [fetchPosts]);
+
+  const onMapReady = useCallback((map: LeafletMap) => {
+    mapRef.current = map;
+    // Add event listeners for move and zoom
+    map.on('moveend', () => debouncedFetchPosts(map));
+    map.on('zoomend', () => debouncedFetchPosts(map));
+    // Initial fetch
+    fetchPosts(map);
+  }, [fetchPosts, debouncedFetchPosts]);
+
 
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
@@ -145,38 +147,37 @@ export default function MapViewer() {
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <MapEventsHandler onBoundsChange={debouncedFetchPosts} />
+        <MapEventsHandler onMapReady={onMapReady} />
         
         <Marker position={position} icon={userIcon}>
           <Popup>You are here.</Popup>
         </Marker>
         
-        <MarkerClusterGroup chunkedLoading>
-          {posts.map(post => {
-              const pulseClassName = getPulseClassName(post.createdat);
-              const postIcon = new L.DivIcon({
-                html: `<div class="pulsing-dot ${pulseClassName}"></div>`,
-                className: 'bg-transparent border-0',
-                iconSize: [16, 16],
-                iconAnchor: [8, 8],
-              });
+        {posts.map(post => {
+            const pulseClassName = getPulseClassName(post.createdat);
+            const postIcon = new L.DivIcon({
+              html: `<div class="pulsing-dot ${pulseClassName}"></div>`,
+              className: 'bg-transparent border-0',
+              iconSize: [16, 16],
+              iconAnchor: [8, 8],
+            });
 
-              return (
-                  <Marker key={post.id} position={[post.latitude, post.longitude]} icon={postIcon}>
-                    <Popup>
-                        <div className="w-48">
-                            <p className="font-semibold text-base mb-1 truncate">{post.content || "Media Post"}</p>
-                            <p className="text-xs text-muted-foreground mb-2">By: {post.authorname || 'Anonymous'}</p>
-                            <Button asChild size="sm" className="w-full">
-                                <Link href={`/posts/${post.id}`}>View Pulse</Link>
-                            </Button>
-                        </div>
-                    </Popup>
-                  </Marker>
-              );
-          })}
-        </MarkerClusterGroup>
+            return (
+                <Marker key={post.id} position={[post.latitude, post.longitude]} icon={postIcon}>
+                  <Popup>
+                      <div className="w-48">
+                          <p className="font-semibold text-base mb-1 truncate">{post.content || "Media Post"}</p>
+                          <p className="text-xs text-muted-foreground mb-2">By: {post.authorname || 'Anonymous'}</p>
+                          <Button asChild size="sm" className="w-full">
+                              <Link href={`/posts/${post.id}`}>View Pulse</Link>
+                          </Button>
+                      </div>
+                  </Popup>
+                </Marker>
+            );
+        })}
       </MapContainer>
     </div>
   );
 }
+
