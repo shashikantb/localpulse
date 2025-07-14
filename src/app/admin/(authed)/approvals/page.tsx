@@ -4,7 +4,7 @@ import type { FC } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { getPendingUsers, approveUser, rejectUser } from './actions';
-import { UserCheck, UserX, Building, ShieldCheck, Mail, Calendar, CheckBadge } from 'lucide-react';
+import { UserCheck, UserX, Building, ShieldCheck, Mail, Calendar, BadgeCheck } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { revalidatePath } from 'next/cache';
 
@@ -51,7 +51,7 @@ const UserApprovalCard: FC<{ user: Awaited<ReturnType<typeof getPendingUsers>>[0
          </Button>
          {isBusiness && (
             <Button formAction={handleApproveAsVerified} variant="outline" size="sm" className="border-green-600 text-green-600 hover:bg-green-600 hover:text-white">
-                <CheckBadge className="mr-2 h-4 w-4" /> Approve as Verified
+                <BadgeCheck className="mr-2 h-4 w-4" /> Approve as Verified
             </Button>
          )}
          <Button formAction={handleReject} variant="destructive" size="sm">

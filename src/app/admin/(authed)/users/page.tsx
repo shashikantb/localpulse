@@ -4,7 +4,7 @@ import type { FC } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Users, PlusCircle, Search, CheckCircle, XCircle, Clock, CheckBadge } from 'lucide-react';
+import { Users, PlusCircle, Search, CheckCircle, XCircle, Clock, BadgeCheck } from 'lucide-react';
 import { getAllUsersDb } from '@/lib/db';
 import { Badge } from '@/components/ui/badge';
 import UserActions from '@/components/admin/user-actions';
@@ -27,7 +27,7 @@ const AdminManageUsersPage: FC = async () => {
 
   const getStatusIcon = (status: UserStatus) => {
     switch (status) {
-        case 'verified': return <CheckBadge className="w-3 h-3 mr-1 text-green-500" />;
+        case 'verified': return <BadgeCheck className="w-3 h-3 mr-1 text-green-500" />;
         case 'approved': return <CheckCircle className="w-3 h-3 mr-1 text-primary-foreground" />;
         case 'pending': return <Clock className="w-3 h-3 mr-1 text-yellow-500" />;
         case 'rejected': return <XCircle className="w-3 h-3 mr-1 text-red-500" />;
