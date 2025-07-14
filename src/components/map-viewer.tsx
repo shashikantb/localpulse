@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import 'leaflet/dist/leaflet.css';
@@ -9,54 +10,49 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import type { LatLngExpression, Map as LeafletMap } from 'leaflet';
 import L from 'leaflet';
-import { Loader2 } from 'lucide-react';
+import { Briefcase, Loader2 } from 'lucide-react';
 import Link from 'next/link';
-import { getPostsForMap } from '@/app/actions';
-import type { Post } from '@/lib/db-types';
+import { getPostsForMap, getBusinessesForMap } from '@/app/actions';
+import type { Post, BusinessUser } from '@/lib/db-types';
 import { useToast } from '@/hooks/use-toast';
 import { differenceInHours } from 'date-fns';
 import { Button } from './ui/button';
 
-// Extend the Leaflet 'L' object with the heatLayer method
 declare module 'leaflet' {
     function heatLayer(latlngs: L.HeatLatLngTuple[], options?: any): any;
 }
 
-const HeatmapComponent = ({ posts }: { posts: Post[] }) => {
+const HeatmapComponent = ({ items }: { items: (Post | BusinessUser)[] }) => {
     const map = useMap();
     const heatmapLayerRef = useRef<any | null>(null);
     const [isHeatmapReady, setIsHeatmapReady] = useState(false);
 
     useEffect(() => {
-        // Dynamically import leaflet.heat on the client-side.
-        // This ensures the code only runs in the browser.
+        if (isHeatmapReady) return;
         import('leaflet.heat').then(() => {
             setIsHeatmapReady(true);
-        });
-    }, []);
+        }).catch(err => console.error("Failed to load leaflet.heat", err));
+    }, [isHeatmapReady]);
 
     useEffect(() => {
         if (!isHeatmapReady || !map) return;
 
-        // Clean up the previous heatmap layer if it exists
         if (heatmapLayerRef.current) {
             map.removeLayer(heatmapLayerRef.current);
         }
 
-        if (posts.length > 0) {
-            const points = posts.map(p => [p.latitude, p.longitude, 1] as L.HeatLatLngTuple);
-            // Use L.heatLayer which is now attached to the global L object
+        if (items.length > 0) {
+            const points = items.map(p => [p.latitude, p.longitude, 1] as L.HeatLatLngTuple);
             heatmapLayerRef.current = L.heatLayer(points, { 
                 radius: 20, 
                 blur: 15,
                 max: 1.0
             }).addTo(map);
         }
-    }, [posts, map, isHeatmapReady]);
+    }, [items, map, isHeatmapReady]);
 
-    return null; // This component does not render any JSX
+    return null;
 };
-
 
 const MapEvents = ({ onMapChange }: { onMapChange: (map: LeafletMap) => void }) => {
     const map = useMapEvents({
@@ -87,6 +83,7 @@ export default function MapViewer() {
   const [position, setPosition] = useState<LatLngExpression | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [businesses, setBusinesses] = useState<BusinessUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
@@ -108,6 +105,15 @@ export default function MapViewer() {
     shadowSize: [41, 41]
   });
 
+  const businessIcon = new L.Icon({
+    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    shadowSize: [41, 41]
+  });
+
   const getPulseClassName = (postDate: string): string => {
     const hours = differenceInHours(new Date(), new Date(postDate));
     if (hours < 1) return 'pulse-fast';
@@ -115,7 +121,7 @@ export default function MapViewer() {
     return 'pulse-slow';
   };
 
-  const fetchAndSetPosts = useCallback(async (map: LeafletMap) => {
+  const fetchMapData = useCallback(async (map: LeafletMap) => {
     setIsLoading(true);
     try {
       const bounds = map.getBounds();
@@ -123,14 +129,18 @@ export default function MapViewer() {
         ne: { lat: bounds.getNorthEast().lat, lng: bounds.getNorthEast().lng },
         sw: { lat: bounds.getSouthWest().lat, lng: bounds.getSouthWest().lng },
       };
-      const fetchedPosts = await getPostsForMap(mapBounds);
+      const [fetchedPosts, fetchedBusinesses] = await Promise.all([
+        getPostsForMap(mapBounds),
+        getBusinessesForMap(mapBounds)
+      ]);
       setPosts(fetchedPosts);
+      setBusinesses(fetchedBusinesses);
     } catch (err) {
       console.error("Failed to fetch map data", err);
       toast({
         variant: "destructive",
         title: "Could not load data",
-        description: "There was an error fetching posts for the map.",
+        description: "There was an error fetching data for the map.",
       });
     } finally {
       setIsLoading(false);
@@ -151,7 +161,7 @@ export default function MapViewer() {
     );
   }, []);
 
-  const debouncedFetch = useCallback(debounce(fetchAndSetPosts, 500), [fetchAndSetPosts]);
+  const debouncedFetch = useCallback(debounce(fetchMapData, 500), [fetchMapData]);
 
   if (error) {
     return <div className="p-4 text-center text-red-500">{error}</div>;
@@ -171,7 +181,7 @@ export default function MapViewer() {
       {isLoading && (
          <div className="absolute top-4 right-4 z-[1000] bg-background/80 p-2 rounded-md shadow-lg flex items-center">
             <Loader2 className="h-5 w-5 animate-spin text-primary" />
-            <span className="ml-2 text-sm font-medium">Loading Pulses...</span>
+            <span className="ml-2 text-sm font-medium">Loading Data...</span>
          </div>
       )}
       <MapContainer
@@ -187,14 +197,14 @@ export default function MapViewer() {
         
         <MapEvents onMapChange={debouncedFetch} />
 
-        <HeatmapComponent posts={posts} />
+        <HeatmapComponent items={[...posts, ...businesses]} />
         
         <Marker position={position} icon={userIcon}>
           <Popup>You are here.</Popup>
         </Marker>
         
         {posts.map(post => {
-            if (!post) return null; // Guard clause
+            if (!post || !post.latitude || !post.longitude) return null;
             const pulseClassName = getPulseClassName(post.createdat);
             const postIcon = new L.DivIcon({
               html: `<div class="pulsing-dot ${pulseClassName}"></div>`,
@@ -204,7 +214,7 @@ export default function MapViewer() {
             });
 
             return (
-                <Marker key={post.id} position={[post.latitude, post.longitude]} icon={postIcon}>
+                <Marker key={`post-${post.id}`} position={[post.latitude, post.longitude]} icon={postIcon}>
                   <Popup>
                       <div className="w-48">
                           <p className="font-semibold text-base mb-1 truncate">{post.content || "Media Post"}</p>
@@ -216,6 +226,26 @@ export default function MapViewer() {
                   </Popup>
                 </Marker>
             );
+        })}
+
+        {businesses.map(business => {
+            if (!business || !business.latitude || !business.longitude) return null;
+            return (
+                <Marker key={`business-${business.id}`} position={[business.latitude, business.longitude]} icon={businessIcon}>
+                    <Popup>
+                        <div className="w-48">
+                            <p className="font-semibold text-base mb-1 truncate">{business.name}</p>
+                            <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1.5">
+                                <Briefcase className="w-3 h-3" />
+                                {business.business_category}
+                            </p>
+                            <Button asChild size="sm" className="w-full">
+                                <Link href={`/users/${business.id}`}>View Profile</Link>
+                            </Button>
+                        </div>
+                    </Popup>
+                </Marker>
+            )
         })}
       </MapContainer>
     </div>

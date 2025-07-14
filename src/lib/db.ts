@@ -1996,6 +1996,30 @@ export async function getNearbyBusinessesDb(options: {
   }
 }
 
+export async function getBusinessesInBoundsDb(bounds: { ne: { lat: number, lng: number }, sw: { lat: number, lng: number } }): Promise<BusinessUser[]> {
+  await ensureDbInitialized();
+  const dbPool = getDbPool();
+  if (!dbPool) return [];
+
+  const client = await dbPool.connect();
+  try {
+    const { ne, sw } = bounds;
+    const query = `
+      SELECT ${USER_COLUMNS_SANITIZED}, latitude, longitude
+      FROM users
+      WHERE role = 'Business'
+        AND status = 'approved'
+        AND latitude < $1 AND latitude > $2
+        AND longitude < $3 AND longitude > $4
+      LIMIT 200;
+    `;
+    const result = await client.query(query, [ne.lat, sw.lat, ne.lng, sw.lng]);
+    return result.rows;
+  } finally {
+    client.release();
+  }
+}
+
 export async function searchNearbyPostsDb(options: {
   latitude?: number;
   longitude?: number;

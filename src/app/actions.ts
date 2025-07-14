@@ -1104,6 +1104,16 @@ export async function getNearbyBusinesses(options: { page: number; limit: number
   }
 }
 
+export async function getBusinessesForMap(bounds: { ne: { lat: number, lng: number }, sw: { lat: number, lng: number } }): Promise<BusinessUser[]> {
+  try {
+    const businesses = await db.getBusinessesInBoundsDb(bounds);
+    return businesses;
+  } catch (error) {
+    console.error("Server action error fetching businesses for map:", error);
+    return [];
+  }
+}
+
 // --- Gorakshak Admin Actions ---
 export async function getGorakshakReport(adminLat: number, adminLon: number): Promise<GorakshakReportUser[]> {
   try {
