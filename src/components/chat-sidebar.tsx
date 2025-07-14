@@ -49,7 +49,7 @@ const ConversationItem = ({ conv }: { conv: Conversation }) => {
                     )}
                 </div>
                 <div className="flex justify-between items-center mt-0.5">
-                    <p className={cn("text-sm text-muted-foreground truncate", showUnread ? "font-bold text-foreground" : "")}>
+                    <p className={cn("text-sm text-muted-foreground break-words", showUnread ? "font-bold text-foreground" : "")}>
                         {conv.last_message_content || 'No messages yet.'}
                     </p>
                     {showUnread && (
@@ -124,8 +124,8 @@ const ChatSidebar = () => {
 
     return (
         <div className="flex flex-col h-full bg-card">
-            <div className="p-4 border-b flex items-center justify-between gap-4">
-                <h1 className="text-2xl font-bold text-primary flex-shrink-0">Chats</h1>
+            <div className="p-4 border-b flex items-center justify-between gap-2">
+                <h1 className="text-2xl font-bold text-primary flex-shrink-0 truncate">Chats</h1>
                 <div className="flex-1" />
                 <CreateGroupDialog>
                     <Button variant="ghost" size="icon" className="flex-shrink-0">
