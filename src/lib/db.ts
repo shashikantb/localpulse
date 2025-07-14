@@ -1,7 +1,7 @@
 
 
 import { Pool, Client, type QueryResult } from 'pg';
-import type { PointTransaction, UserForNotification, PointTransactionReason, User as DbUser, Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest, FamilyMember, FamilyMemberLocation, SortOption, UpdateBusinessCategory, BusinessUser, GorakshakReportUser, UserStatus, Poll } from '@/lib/db-types';
+import type { ConversationDetails, PointTransaction, UserForNotification, PointTransactionReason, User as DbUser, Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest, FamilyMember, FamilyMemberLocation, SortOption, UpdateBusinessCategory, BusinessUser, GorakshakReportUser, UserStatus, Poll } from '@/lib/db-types';
 import bcrypt from 'bcryptjs';
 import { customAlphabet } from 'nanoid';
 
@@ -2529,4 +2529,188 @@ export async function getAdminDashboardStatsDb(): Promise<{ totalUsers: number; 
   } finally {
     client.release();
   }
+}
+
+export async function getPotentialGroupMembersDb(userId: number): Promise<FollowUser[]> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return [];
+    
+    const client = await dbPool.connect();
+    try {
+        // Fetches users who follow the current user (followers) AND family members
+        const query = `
+            WITH family_members AS (
+                SELECT user_id_2 as member_id FROM family_relationships WHERE user_id_1 = $1 AND status = 'approved'
+                UNION
+                SELECT user_id_1 as member_id FROM family_relationships WHERE user_id_2 = $1 AND status = 'approved'
+            ),
+            followers AS (
+                SELECT follower_id as member_id FROM user_followers WHERE following_id = $1
+            ),
+            all_relations AS (
+                SELECT member_id FROM family_members
+                UNION
+                SELECT member_id FROM followers
+            )
+            SELECT u.id, u.name, u.profilepictureurl
+            FROM users u
+            JOIN all_relations ar ON u.id = ar.member_id
+            WHERE u.status IN ('approved', 'verified')
+            ORDER BY u.name;
+        `;
+        const result = await client.query(query, [userId]);
+        return result.rows;
+    } finally {
+        client.release();
+    }
+}
+
+export async function getConversationDetailsDb(conversationId: number, currentUserId: number): Promise<ConversationDetails | null> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return null;
+
+    const client = await dbPool.connect();
+    try {
+        // First, check if the current user is a participant.
+        const authCheck = await client.query('SELECT 1 FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2', [conversationId, currentUserId]);
+        if (authCheck.rowCount === 0) {
+            return null; // User is not part of the conversation.
+        }
+
+        const detailsQuery = `
+            SELECT 
+                c.id, c.is_group, c.group_name, c.group_avatar_url,
+                CASE 
+                    WHEN c.is_group THEN c.group_name
+                    ELSE other_user.name
+                END as display_name,
+                CASE 
+                    WHEN c.is_group THEN c.group_avatar_url
+                    ELSE other_user.profilepictureurl
+                END as display_avatar_url
+            FROM conversations c
+            LEFT JOIN conversation_participants other_cp ON c.id = other_cp.conversation_id AND other_cp.user_id != $1
+            LEFT JOIN users other_user ON other_cp.user_id = other_user.id
+            WHERE c.id = $2;
+        `;
+        const detailsResult = await client.query(detailsQuery, [currentUserId, conversationId]);
+        if (detailsResult.rowCount === 0) return null;
+
+        const conversationDetails = detailsResult.rows[0];
+
+        const participantsQuery = `
+            SELECT u.id, u.name, u.profilepictureurl, cp.is_admin
+            FROM users u
+            JOIN conversation_participants cp ON u.id = cp.user_id
+            WHERE cp.conversation_id = $1
+            ORDER BY cp.is_admin DESC, u.name ASC;
+        `;
+        const participantsResult = await client.query(participantsQuery, [conversationId]);
+        
+        return {
+            ...conversationDetails,
+            participants: participantsResult.rows,
+        };
+    } finally {
+        client.release();
+    }
+}
+
+
+export async function getConversationParticipantsDb(conversationId: number): Promise<ConversationParticipant[]> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return [];
+    const client = await dbPool.connect();
+    try {
+        const query = `
+            SELECT u.id, u.name, u.profilepictureurl, cp.is_admin
+            FROM users u
+            JOIN conversation_participants cp ON u.id = cp.user_id
+            WHERE cp.conversation_id = $1;
+        `;
+        const result = await client.query(query, [conversationId]);
+        return result.rows;
+    } finally {
+        client.release();
+    }
+}
+
+export async function isUserGroupAdminDb(conversationId: number, userId: number): Promise<boolean> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return false;
+    const client = await dbPool.connect();
+    try {
+        const query = 'SELECT is_admin FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2';
+        const result = await client.query(query, [conversationId, userId]);
+        return result.rows[0]?.is_admin || false;
+    } finally {
+        client.release();
+    }
+}
+
+export async function addParticipantsToGroupDb(conversationId: number, userIds: number[]): Promise<void> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) throw new Error("Database not configured.");
+    const client = await dbPool.connect();
+    try {
+        const values = userIds.map(id => `(${conversationId}, ${id}, false)`).join(',');
+        const query = `INSERT INTO conversation_participants (conversation_id, user_id, is_admin) VALUES ${values} ON CONFLICT DO NOTHING;`;
+        await client.query(query);
+    } finally {
+        client.release();
+    }
+}
+
+export async function removeParticipantFromGroupDb(conversationId: number, userId: number): Promise<void> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) throw new Error("Database not configured.");
+    const client = await dbPool.connect();
+    try {
+        await client.query('BEGIN');
+        
+        await client.query('DELETE FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2', [conversationId, userId]);
+        
+        // Check if there are any admins left
+        const adminCheck = await client.query('SELECT 1 FROM conversation_participants WHERE conversation_id = $1 AND is_admin = true', [conversationId]);
+        if (adminCheck.rowCount === 0) {
+            // If no admins are left, make the oldest remaining member an admin
+            const makeAdminQuery = `
+                UPDATE conversation_participants
+                SET is_admin = true
+                WHERE user_id = (
+                    SELECT user_id FROM conversation_participants
+                    WHERE conversation_id = $1
+                    ORDER BY (SELECT createdat FROM users WHERE id = user_id) ASC
+                    LIMIT 1
+                ) AND conversation_id = $1;
+            `;
+            await client.query(makeAdminQuery, [conversationId]);
+        }
+        
+        await client.query('COMMIT');
+    } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+    } finally {
+        client.release();
+    }
+}
+
+export async function updateGroupAvatarDb(conversationId: number, imageUrl: string): Promise<void> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) throw new Error("Database not configured.");
+    const client = await dbPool.connect();
+    try {
+        const query = `UPDATE conversations SET group_avatar_url = $1 WHERE id = $2 AND is_group = true;`;
+        await client.query(query, [imageUrl, conversationId]);
+    } finally {
+        client.release();
+    }
 }

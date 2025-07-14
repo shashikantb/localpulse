@@ -758,6 +758,15 @@ export async function getUserWithFollowInfo(profileUserId: number): Promise<{ us
   return { user: profileUser, stats, isFollowing };
 }
 
+export async function getFollowingList(userId: number): Promise<FollowUser[]> {
+    try {
+        return await db.getFollowingListDb(userId);
+    } catch (error) {
+        console.error(`Error fetching following list for user ${userId}:`, error);
+        return [];
+    }
+}
+
 export async function toggleFollow(targetUserId: number): Promise<{ success: boolean; isFollowing?: boolean; error?: string; }> {
   const { user: sessionUser } = await getSession();
   
