@@ -1,6 +1,7 @@
 
 import type { FC } from 'react';
 import { Suspense } from 'react';
+import Link from 'next/link';
 import { getSession } from './auth/actions';
 import PostComposerLoader, { PostComposerSkeleton } from '@/components/post-composer-loader';
 import PostFeedLoader from '@/components/post-feed-loader';
@@ -8,6 +9,8 @@ import { PostFeedSkeleton } from '@/components/post-feed-skeleton';
 import StatusFeed from '@/components/status-feed';
 import { StatusFeedSkeleton } from '@/components/status-feed-skeleton';
 import { getPosts } from './actions';
+import { Button } from '@/components/ui/button';
+import { Map, Sparkles } from 'lucide-react';
 
 async function PostComposerWithSession() {
   const { user } = await getSession();
@@ -38,6 +41,21 @@ const HomePage: FC = () => {
         <Suspense fallback={<PostComposerSkeleton />}>
           <PostComposerWithSession />
         </Suspense>
+
+        <div className="grid grid-cols-2 gap-4">
+            <Button variant="outline" asChild className="h-16 text-base shadow-lg hover:shadow-primary/20 bg-card/80 backdrop-blur-sm border-border/60 hover:border-primary/50 transition-all duration-300">
+                <Link href="/map">
+                    <Map className="mr-3 h-6 w-6 text-primary"/>
+                    Live Map
+                </Link>
+            </Button>
+            <Button variant="outline" asChild className="h-16 text-base shadow-lg hover:shadow-primary/20 bg-card/80 backdrop-blur-sm border-border/60 hover:border-primary/50 transition-all duration-300">
+                <Link href="/helper">
+                    <Sparkles className="mr-3 h-6 w-6 text-accent"/>
+                    AI Helper
+                </Link>
+            </Button>
+        </div>
         
         <Suspense fallback={<PostFeedSkeleton />}>
           <PostFeedWithInitialData />

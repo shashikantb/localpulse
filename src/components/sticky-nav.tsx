@@ -5,7 +5,7 @@ import type { FC } from 'react';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Film, User as UserIcon, MessageSquare, Map, Sparkles } from 'lucide-react';
+import { Home, Film, User as UserIcon, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getUnreadMessageCount } from '@/app/actions';
 import type { User } from '@/lib/db-types';
@@ -38,14 +38,9 @@ const StickyNav: FC<StickyNavProps> = ({ user }) => {
     return () => clearInterval(intervalId);
   }, [user]); // Depend on the user prop
 
-  const leadingNavItems = [
+  const navItems = [
     { name: 'Home', href: '/', icon: Home, current: pathname === '/' },
     { name: 'Reels', href: '/reels', icon: Film, current: pathname === '/reels' },
-  ];
-  
-  const trailingNavItems = [
-    { name: 'Map', href: '/map', icon: Map, current: pathname === '/map' },
-    { name: 'Helper', href: '/helper', icon: Sparkles, current: pathname.startsWith('/helper') },
     { name: 'Chat', href: '/chat', icon: MessageSquare, current: pathname.startsWith('/chat'), requiresAuth: true, badgeCount: unreadCount },
     { 
       name: 'Profile', 
@@ -83,7 +78,9 @@ const StickyNav: FC<StickyNavProps> = ({ user }) => {
   return (
     <nav className="sticky top-14 z-40 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto flex h-14 max-w-2xl items-center justify-around px-2">
-          {leadingNavItems.map(renderNavItem)}
+          
+          <div className="flex-1 flex h-full">{renderNavItem(navItems.find(item => item.name === 'Home'))}</div>
+          <div className="flex-1 flex h-full">{renderNavItem(navItems.find(item => item.name === 'Reels'))}</div>
           
           {user && (
             <div className="flex h-full flex-col items-center justify-center">
@@ -91,7 +88,8 @@ const StickyNav: FC<StickyNavProps> = ({ user }) => {
             </div>
           )}
           
-          {trailingNavItems.map(renderNavItem)}
+          <div className="flex-1 flex h-full">{renderNavItem(navItems.find(item => item.name === 'Chat'))}</div>
+          <div className="flex-1 flex h-full">{renderNavItem(navItems.find(item => item.name === 'Profile'))}</div>
       </div>
     </nav>
   );
