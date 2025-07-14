@@ -31,13 +31,13 @@ const ConversationItem = ({ conv }: { conv: Conversation }) => {
             <Avatar className="h-12 w-12 border-2"
              style={{ borderColor: isActive ? 'hsl(var(--primary))' : 'transparent' }}
             >
-                <AvatarImage src={conv.participant_profile_picture_url || undefined} alt={conv.participant_name} />
-                <AvatarFallback>{conv.participant_name.charAt(0)}</AvatarFallback>
+                <AvatarImage src={conv.display_avatar_url || undefined} alt={conv.display_name} />
+                <AvatarFallback>{conv.display_name?.charAt(0) || '?'}</AvatarFallback>
             </Avatar>
             <div className="flex-1 overflow-hidden">
                 <div className="flex justify-between items-baseline">
                     <p className={cn("font-semibold truncate", showUnread ? "text-primary" : "")}>
-                        {conv.participant_name}
+                        {conv.display_name}
                     </p>
                     {conv.last_message_at && (
                         <p className="text-xs text-muted-foreground flex-shrink-0">
