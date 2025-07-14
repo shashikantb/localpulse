@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -14,7 +15,7 @@ import {
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { getFollowingList, createGroup } from '@/app/actions';
+import { getPotentialGroupMembers, createGroup } from '@/app/actions';
 import type { FollowUser } from '@/lib/db-types';
 import { ScrollArea } from './ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
@@ -26,7 +27,7 @@ import { useRouter } from 'next/navigation';
 export default function CreateGroupDialog({ children }: { children: React.ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [groupName, setGroupName] = useState('');
-  const [following, setFollowing] = useState<FollowUser[]>([]);
+  const [potentialMembers, setPotentialMembers] = useState<FollowUser[]>([]);
   const [selectedMembers, setSelectedMembers] = useState<Set<number>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -36,9 +37,8 @@ export default function CreateGroupDialog({ children }: { children: React.ReactN
   useEffect(() => {
     if (isOpen) {
       setIsLoading(true);
-      // The user ID for getFollowingList is retrieved from the session on the server
-      getFollowingList(0).then((users) => {
-        setFollowing(users);
+      getPotentialGroupMembers().then((users) => {
+        setPotentialMembers(users);
         setIsLoading(false);
       });
     }
@@ -87,7 +87,7 @@ export default function CreateGroupDialog({ children }: { children: React.ReactN
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Create New Group</DialogTitle>
-          <DialogDescription>Name your group and add members from your following list.</DialogDescription>
+          <DialogDescription>Name your group and add members from your followers and family.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <Input
@@ -99,9 +99,9 @@ export default function CreateGroupDialog({ children }: { children: React.ReactN
           <h4 className="text-sm font-medium text-muted-foreground">Add Members</h4>
           <ScrollArea className="h-48 border rounded-md">
             {isLoading ? (
-              <div className="p-4 text-center text-sm text-muted-foreground">Loading followers...</div>
-            ) : following.length > 0 ? (
-              following.map(user => (
+              <div className="p-4 text-center text-sm text-muted-foreground">Loading potential members...</div>
+            ) : potentialMembers.length > 0 ? (
+              potentialMembers.map(user => (
                 <Label key={user.id} className="flex items-center gap-3 p-3 cursor-pointer hover:bg-muted">
                    <Checkbox
                         checked={selectedMembers.has(user.id)}
@@ -116,7 +116,7 @@ export default function CreateGroupDialog({ children }: { children: React.ReactN
                 </Label>
               ))
             ) : (
-              <div className="p-4 text-center text-sm text-muted-foreground">You are not following anyone yet.</div>
+              <div className="p-4 text-center text-sm text-muted-foreground">You don't have any followers or family members to add yet.</div>
             )}
           </ScrollArea>
         </div>

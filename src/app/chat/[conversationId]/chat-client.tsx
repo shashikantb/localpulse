@@ -3,12 +3,12 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import type { Message, User, ConversationParticipant } from '@/lib/db-types';
+import type { Message, User, ConversationDetails } from '@/lib/db-types';
 import { getMessages, sendMessage } from '@/app/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Send, Loader2 } from 'lucide-react';
+import { Send, Loader2, Users } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -16,7 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 
 interface ChatClientProps {
   initialMessages: Message[];
-  partner: ConversationParticipant;
+  conversationDetails: ConversationDetails;
   sessionUser: User;
   conversationId: number;
 }
@@ -52,7 +52,7 @@ const renderChatMessageContent = (content: string) => {
 };
 
 
-export default function ChatClient({ initialMessages, partner, sessionUser, conversationId }: ChatClientProps) {
+export default function ChatClient({ initialMessages, conversationDetails, sessionUser, conversationId }: ChatClientProps) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [newMessage, setNewMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -63,6 +63,8 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
   
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
+
+  const partner = !conversationDetails.is_group ? conversationDetails.participants?.[0] : null;
 
   useEffect(() => {
     let isMounted = true;
@@ -112,16 +114,23 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
     setIsSending(false);
   };
 
+  const headerLink = partner ? `/users/${partner.id}` : '#';
+
   return (
     <div className="flex flex-col bg-background h-full overflow-hidden">
         {/* Header */}
         <header className="flex-shrink-0 flex items-center p-3 border-b bg-card">
-            <Link href={`/users/${partner.id}`} className="flex items-center gap-3 hover:bg-muted p-2 rounded-md">
+            <Link href={headerLink} className="flex items-center gap-3 hover:bg-muted p-2 rounded-md">
                 <Avatar>
-                    <AvatarImage src={partner.profilepictureurl || undefined} alt={partner.name} />
-                    <AvatarFallback>{partner.name.charAt(0)}</AvatarFallback>
+                    <AvatarImage src={conversationDetails.display_avatar_url || undefined} alt={conversationDetails.display_name} />
+                    <AvatarFallback>{conversationDetails.is_group ? <Users /> : conversationDetails.display_name.charAt(0)}</AvatarFallback>
                 </Avatar>
-                <h2 className="text-lg font-semibold">{partner.name}</h2>
+                <div>
+                  <h2 className="text-lg font-semibold">{conversationDetails.display_name}</h2>
+                  {conversationDetails.is_group && (
+                     <p className="text-xs text-muted-foreground">{conversationDetails.participants.length} members</p>
+                  )}
+                </div>
             </Link>
         </header>
 
@@ -153,6 +162,8 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
         <div className="flex-grow overflow-y-auto p-4 space-y-4">
             {messages.map((message) => {
                 const isSender = message.sender_id === sessionUser.id;
+                const senderDetails = conversationDetails.participants.find(p => p.id === message.sender_id);
+
                 return (
                 <div
                     key={message.id}
@@ -160,8 +171,8 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
                 >
                     {!isSender && (
                     <Avatar className="h-8 w-8 self-start">
-                        <AvatarImage src={partner.profilepictureurl || undefined} />
-                        <AvatarFallback>{partner.name.charAt(0)}</AvatarFallback>
+                        <AvatarImage src={senderDetails?.profilepictureurl || undefined} />
+                        <AvatarFallback>{senderDetails?.name.charAt(0)}</AvatarFallback>
                     </Avatar>
                     )}
                     <div
@@ -172,6 +183,9 @@ export default function ChatClient({ initialMessages, partner, sessionUser, conv
                         : 'bg-muted text-foreground rounded-bl-none'
                     )}
                     >
+                    {!isSender && conversationDetails.is_group && (
+                      <p className="text-xs font-semibold text-accent mb-1">{senderDetails?.name}</p>
+                    )}
                     <p className="text-sm whitespace-pre-wrap break-words">{renderChatMessageContent(message.content)}</p>
                     <span className={cn('text-xs mt-1.5 opacity-70', isSender ? 'self-end' : 'self-start')}>
                         {format(new Date(message.created_at), 'p')}

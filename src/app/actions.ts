@@ -3,7 +3,7 @@
 'use server';
 
 import * as db from '@/lib/db';
-import type { Poll, Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus, FamilyMember, FamilyMemberLocation, PendingFamilyRequest, Conversation, Message, ConversationParticipant, SortOption, BusinessUser, GorakshakReportUser, PointTransaction, UserForNotification } from '@/lib/db-types';
+import type { ConversationDetails, Poll, Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus, FamilyMember, FamilyMemberLocation, PendingFamilyRequest, Conversation, Message, ConversationParticipant, SortOption, BusinessUser, GorakshakReportUser, PointTransaction, UserForNotification } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 import { getSession, encrypt } from '@/app/auth/actions';
 import { getGcsClient, getGcsBucketName } from '@/lib/gcs';
@@ -236,27 +236,40 @@ async function sendNotificationForNewPost(post: Post, mentionedUserIds: number[]
 async function sendChatNotification(conversationId: number, sender: User, content: string, title?: string) {
   try {
     if (!firebaseAdmin) return;
-    const partner = await db.getConversationPartnerDb(conversationId, sender.id);
-    if (!partner) return;
+    const participants = await db.getConversationParticipantsDb(conversationId);
+    if (!participants) return;
 
-    const deviceTokens = await db.getDeviceTokensForUsersDb([partner.id]);
+    const recipientIds = participants.map(p => p.id).filter(id => id !== sender.id);
+    if(recipientIds.length === 0) return;
+
+    const deviceTokens = await db.getDeviceTokensForUsersDb(recipientIds);
     if (deviceTokens.length === 0) return;
     
-    const freshToken = await encrypt({ userId: partner.id });
-    const notificationTitle = title || `New message from ${sender.name}`;
+    // Default title for 1-on-1 chats
+    let notificationTitle = title || `New message from ${sender.name}`;
+
+    const convDetails = await db.getConversationDetailsDb(conversationId, sender.id);
+    if(convDetails?.is_group){
+      // For group chats, the title should include the group name
+      notificationTitle = title || `New message in ${convDetails.display_name}`;
+    }
+    
     const notificationBody = content.length > 100 ? `${content.substring(0, 97)}...` : content;
 
-    const messages = deviceTokens.map(({ token }) => ({
-        token: token,
-        notification: {
-            title: notificationTitle,
-            body: notificationBody,
-        },
-        data: {
-            user_auth_token: freshToken
-        },
-        android: { priority: 'high' as const },
-        apns: { payload: { aps: { 'content-available': 1 } } }
+    const messages = await Promise.all(deviceTokens.map(async ({ token, user_id }) => {
+        const freshToken = await encrypt({ userId: user_id });
+        return {
+            token: token,
+            notification: {
+                title: notificationTitle,
+                body: notificationBody,
+            },
+            data: {
+                user_auth_token: freshToken
+            },
+            android: { priority: 'high' as const },
+            apns: { payload: { aps: { 'content-available': 1 } } }
+        }
     }));
 
     const response = await firebaseAdmin.messaging().sendEach(messages as any);
@@ -775,13 +788,13 @@ export async function toggleFollow(targetUserId: number): Promise<{ success: boo
   }
 }
 
-export async function getFollowingList(userId: number): Promise<FollowUser[]> {
+export async function getPotentialGroupMembers(): Promise<FollowUser[]> {
+  const { user } = await getSession();
+  if (!user) return [];
   try {
-    const { user } = await getSession();
-    if (!user) return [];
-    return await db.getFollowingListDb(user.id);
+    return await db.getPotentialGroupMembersDb(user.id);
   } catch (error) {
-    console.error(`Error fetching following list for user ${userId}:`, error);
+    console.error(`Error fetching potential group members for user ${user.id}:`, error);
     return [];
   }
 }
@@ -1128,11 +1141,13 @@ export async function sendSosMessage(latitude: number, longitude: number): Promi
 }
 
 
-export async function getConversationPartner(conversationId: number, currentUserId: number): Promise<ConversationParticipant | null> {
+export async function getConversationDetails(conversationId: number): Promise<ConversationDetails | null> {
+    const { user } = await getSession();
+    if (!user) return null;
     try {
-        return await db.getConversationPartnerDb(conversationId, currentUserId);
+        return await db.getConversationDetailsDb(conversationId, user.id);
     } catch (error) {
-        console.error(`Server action error fetching partner for conversation ${conversationId}:`, error);
+        console.error(`Server action error fetching details for conversation ${conversationId}:`, error);
         return null;
     }
 }
@@ -1181,6 +1196,70 @@ export async function createGroup(groupName: string, memberIds: number[]): Promi
     } catch (error: any) {
         console.error('Error creating group:', error);
         return { success: false, error: 'Failed to create group due to a server error.' };
+    }
+}
+
+export async function leaveGroup(conversationId: number): Promise<{ success: boolean; error?: string; }> {
+    const { user } = await getSession();
+    if (!user) {
+        return { success: false, error: 'Authentication required.' };
+    }
+    try {
+        await db.removeParticipantFromGroupDb(conversationId, user.id);
+        revalidatePath('/chat');
+        redirect('/chat');
+        return { success: true };
+    } catch(e: any) {
+        return { success: false, error: e.message };
+    }
+}
+
+export async function removeMemberFromGroup(conversationId: number, userIdToRemove: number): Promise<{ success: boolean, error?: string }> {
+    const { user: sessionUser } = await getSession();
+    if (!sessionUser) return { success: false, error: "Authentication required." };
+    
+    const isAdmin = await db.isUserGroupAdminDb(conversationId, sessionUser.id);
+    if (!isAdmin) return { success: false, error: "You are not an admin of this group." };
+    
+    try {
+        await db.removeParticipantFromGroupDb(conversationId, userIdToRemove);
+        revalidatePath(`/chat/${conversationId}`);
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+}
+
+export async function addMembersToGroup(conversationId: number, userIdsToAdd: number[]): Promise<{ success: boolean; error?: string }> {
+    const { user: sessionUser } = await getSession();
+    if (!sessionUser) return { success: false, error: "Authentication required." };
+    
+    const isAdmin = await db.isUserGroupAdminDb(conversationId, sessionUser.id);
+    if (!isAdmin) return { success: false, error: "You are not an admin of this group." };
+
+    try {
+        await db.addParticipantsToGroupDb(conversationId, userIdsToAdd);
+        revalidatePath(`/chat/${conversationId}`);
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+}
+
+export async function updateGroupAvatar(conversationId: number, imageUrl: string): Promise<{ success: boolean; error?: string }> {
+    const { user: sessionUser } = await getSession();
+    if (!sessionUser) return { success: false, error: "Authentication required." };
+
+    const isAdmin = await db.isUserGroupAdminDb(conversationId, sessionUser.id);
+    if (!isAdmin) return { success: false, error: "You are not an admin of this group." };
+
+    try {
+        await db.updateGroupAvatarDb(conversationId, imageUrl);
+        revalidatePath(`/chat/${conversationId}`);
+        revalidatePath('/chat');
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
     }
 }
 
