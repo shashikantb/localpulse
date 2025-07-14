@@ -5,7 +5,7 @@ import type { FC } from 'react';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Film, User as UserIcon, MessageSquare, Map } from 'lucide-react';
+import { Home, Film, User as UserIcon, MessageSquare, Map, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getUnreadMessageCount } from '@/app/actions';
 import type { User } from '@/lib/db-types';
@@ -45,6 +45,7 @@ const StickyNav: FC<StickyNavProps> = ({ user }) => {
   
   const trailingNavItems = [
     { name: 'Map', href: '/map', icon: Map, current: pathname === '/map' },
+    { name: 'Helper', href: '/helper', icon: Sparkles, current: pathname.startsWith('/helper') },
     { name: 'Chat', href: '/chat', icon: MessageSquare, current: pathname.startsWith('/chat'), requiresAuth: true, badgeCount: unreadCount },
     { 
       name: 'Profile', 
