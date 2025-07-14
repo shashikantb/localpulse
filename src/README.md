@@ -36,6 +36,11 @@ JWT_SECRET=your_super_secret_jwt_key_here
 # This key is required to power the "AI Local Helper" feature.
 # It allows the app to connect to Google's Gemini models.
 # Get your key from Google AI Studio: https://aistudio.google.com/app/apikey
+#
+# COST: The Gemini API has a generous free tier. For many apps, especially
+# during development and early stages, usage will likely fall within this
+# free tier, meaning there is no cost. You only pay for what you use
+# above the free limit, and this requires setting up a billing account.
 GOOGLE_GENAI_API_KEY=your_google_genai_api_key
 
 # Admin Credentials (change these for production)
