@@ -41,7 +41,10 @@ const StickyNav: FC<StickyNavProps> = ({ user }) => {
   const navItems = [
     { name: 'Home', href: '/', icon: Home, current: pathname === '/' },
     { name: 'Reels', href: '/reels', icon: Film, current: pathname === '/reels' },
-    { name: 'Chat', href: '/chat', icon: MessageSquare, current: pathname.startsWith('/chat'), requiresAuth: true, badgeCount: unreadCount },
+  ];
+
+  const authNavItems = [
+    { name: 'Chat', href: '/chat', icon: MessageSquare, current: pathname.startsWith('/chat'), badgeCount: unreadCount },
     { 
       name: 'Profile', 
       href: user ? `/users/${user.id}` : '/login', 
@@ -50,46 +53,59 @@ const StickyNav: FC<StickyNavProps> = ({ user }) => {
     }
   ];
 
-  const renderNavItem = (item: any) => {
-    if (item.requiresAuth && !user) return null;
-    return (
-      <Link
-        key={item.name}
-        href={item.href}
-        className={cn(
-            'relative flex h-full w-full flex-row items-center justify-center space-x-2 border-b-2 px-2 text-sm font-medium transition-colors sm:flex-col sm:space-x-0 sm:space-y-1 sm:pt-2',
-            item.current
-            ? 'border-primary text-primary'
-            : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'
-        )}
-        aria-current={item.current ? 'page' : undefined}
-      >
-        <item.icon className="h-5 w-5" />
-        <span className="hidden sm:inline">{item.name}</span>
-        {item.badgeCount > 0 && (
-            <span className="absolute top-1 right-2 sm:right-auto sm:left-1/2 sm:ml-4 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-accent-foreground text-[10px] font-bold ring-2 ring-background">
-                {item.badgeCount > 9 ? '9+' : item.badgeCount}
-            </span>
-        )}
-      </Link>
-    );
-  };
+  const renderNavItem = (item: any) => (
+    <div key={item.name} className="flex-1 flex h-full">
+        <Link
+            href={item.href}
+            className={cn(
+                'relative flex h-full w-full flex-row items-center justify-center space-x-2 border-b-2 px-2 text-sm font-medium transition-colors sm:flex-col sm:space-x-0 sm:space-y-1 sm:pt-2',
+                item.current
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'
+            )}
+            aria-current={item.current ? 'page' : undefined}
+        >
+            <item.icon className="h-5 w-5" />
+            <span className="hidden sm:inline">{item.name}</span>
+            {item.badgeCount > 0 && (
+                <span className="absolute top-1 right-2 sm:right-auto sm:left-1/2 sm:ml-4 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-accent-foreground text-[10px] font-bold ring-2 ring-background">
+                    {item.badgeCount > 9 ? '9+' : item.badgeCount}
+                </span>
+            )}
+        </Link>
+    </div>
+  );
 
   return (
     <nav className="sticky top-14 z-40 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto flex h-14 max-w-2xl items-center justify-around px-2">
-          
-          <div className="flex-1 flex h-full">{renderNavItem(navItems.find(item => item.name === 'Home'))}</div>
-          <div className="flex-1 flex h-full">{renderNavItem(navItems.find(item => item.name === 'Reels'))}</div>
-          
+          {navItems.map(renderNavItem)}
+
           {user && (
-            <div className="flex h-full flex-col items-center justify-center">
-              <SosButton />
+            <>
+                <div className="flex h-full flex-col items-center justify-center flex-1">
+                    <SosButton />
+                </div>
+                {authNavItems.map(renderNavItem)}
+            </>
+          )}
+
+          {!user && (
+            <div className="flex-1 flex h-full">
+                <Link
+                    href="/login"
+                    className={cn(
+                        'relative flex h-full w-full flex-row items-center justify-center space-x-2 border-b-2 px-2 text-sm font-medium transition-colors sm:flex-col sm:space-x-0 sm:space-y-1 sm:pt-2',
+                        pathname.startsWith('/login') || pathname.startsWith('/signup')
+                        ? 'border-primary text-primary'
+                        : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'
+                    )}
+                >
+                    <UserIcon className="h-5 w-5" />
+                    <span className="hidden sm:inline">Profile</span>
+                </Link>
             </div>
           )}
-          
-          <div className="flex-1 flex h-full">{renderNavItem(navItems.find(item => item.name === 'Chat'))}</div>
-          <div className="flex-1 flex h-full">{renderNavItem(navItems.find(item => item.name === 'Profile'))}</div>
       </div>
     </nav>
   );
