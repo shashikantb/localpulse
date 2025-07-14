@@ -17,19 +17,19 @@ import { useToast } from '@/hooks/use-toast';
 import { differenceInHours } from 'date-fns';
 import { Button } from './ui/button';
 
-// Dynamically import leaflet.heat on the client side
-const leafletHeat = typeof window !== 'undefined' ? require('leaflet.heat') : null;
-
-const getPulseClassName = (postDate: string): string => {
-  const hours = differenceInHours(new Date(), new Date(postDate));
-  if (hours < 1) return 'pulse-fast';
-  if (hours < 6) return 'pulse-medium';
-  return 'pulse-slow';
-};
+type LeafletHeatType = (latlngs: L.HeatLatLngTuple[], options?: any) => any;
 
 const HeatmapComponent = ({ posts }: { posts: Post[] }) => {
     const map = useMap();
     const heatmapLayerRef = useRef<any | null>(null);
+    const [leafletHeat, setLeafletHeat] = useState<LeafletHeatType | null>(null);
+
+    useEffect(() => {
+        // Dynamically import leaflet.heat on the client-side
+        import('leaflet.heat').then(heat => {
+            setLeafletHeat(() => heat.default);
+        });
+    }, []);
 
     useEffect(() => {
         if (!leafletHeat || !map) return;
@@ -46,7 +46,7 @@ const HeatmapComponent = ({ posts }: { posts: Post[] }) => {
                 max: 1.0
             }).addTo(map);
         }
-    }, [posts, map]);
+    }, [posts, map, leafletHeat]);
 
     return null;
 };
@@ -101,6 +101,13 @@ export default function MapViewer() {
     popupAnchor: [1, -34],
     shadowSize: [41, 41]
   });
+
+  const getPulseClassName = (postDate: string): string => {
+    const hours = differenceInHours(new Date(), new Date(postDate));
+    if (hours < 1) return 'pulse-fast';
+    if (hours < 6) return 'pulse-medium';
+    return 'pulse-slow';
+  };
 
   const addPostsIncrementally = useCallback((postsToAdd: Post[]) => {
       setPosts([]);
