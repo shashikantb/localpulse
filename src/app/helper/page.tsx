@@ -79,13 +79,22 @@ export default function HelperPage() {
       const response = await localHelper(helperInput);
       const assistantMessage: Message = { role: 'assistant', content: response };
       setMessages((prev) => [...prev, assistantMessage]);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error calling local helper AI:', error);
-      toast({
-        variant: 'destructive',
-        title: 'AI Error',
-        description: 'The local helper is currently unavailable. Please try again later.',
-      });
+      // Check for the specific 503 error
+      if (error.message && error.message.includes('503')) {
+          toast({
+            variant: 'destructive',
+            title: 'AI Helper is Busy',
+            description: 'The AI model is currently overloaded. Please try again in a few moments.',
+          });
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'AI Error',
+          description: 'The local helper is currently unavailable. Please try again later.',
+        });
+      }
        setMessages((prev) => prev.slice(0, -1)); // Remove the user's message on error
     } finally {
       setIsLoading(false);
