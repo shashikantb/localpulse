@@ -20,11 +20,25 @@ import type { Post } from '@/lib/db-types';
 import { useToast } from '@/hooks/use-toast';
 import { differenceInHours } from 'date-fns';
 
-function MapEvents({ onMapReady }: { onMapReady: (map: LeafletMap) => void }) {
+// A simple debounce function to prevent excessive API calls
+function debounce<F extends (...args: any[]) => any>(func: F, wait: number): (...args: Parameters<F>) => void {
+    let timeout: NodeJS.Timeout | null = null;
+    return function(...args: Parameters<F>) {
+        if (timeout) {
+            clearTimeout(timeout);
+        }
+        timeout = setTimeout(() => {
+            func(...args);
+        }, wait);
+    };
+}
+
+
+function MapEventsHandler({ onBoundsChange }: { onBoundsChange: (map: LeafletMap) => void }) {
   const map = useMapEvents({
-    moveend: () => onMapReady(map),
-    zoomend: () => onMapReady(map),
-    load: () => onMapReady(map), // Use this to trigger initial data fetch
+    moveend: () => onBoundsChange(map),
+    zoomend: () => onBoundsChange(map),
+    load: () => onBoundsChange(map),
   });
   return null;
 }
@@ -43,9 +57,7 @@ export default function MapViewer() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
-  const mapRef = useRef<LeafletMap | null>(null);
   const isFetchingRef = useRef(false);
-
 
   const userIcon = new L.Icon({
     iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
@@ -55,38 +67,38 @@ export default function MapViewer() {
     popupAnchor: [1, -34],
     shadowSize: [41, 41]
   });
-  
-  const handleMapReady = useCallback((map: LeafletMap) => {
-    mapRef.current = map;
+
+  const fetchPosts = useCallback(async (map: LeafletMap) => {
     if (isFetchingRef.current) return;
 
     isFetchingRef.current = true;
     setIsLoading(true);
 
-    const bounds = map.getBounds();
-    const mapBounds = {
-      ne: { lat: bounds.getNorthEast().lat, lng: bounds.getNorthEast().lng },
-      sw: { lat: bounds.getSouthWest().lat, lng: bounds.getSouthWest().lng },
-    };
+    try {
+      const bounds = map.getBounds();
+      const mapBounds = {
+        ne: { lat: bounds.getNorthEast().lat, lng: bounds.getNorthEast().lng },
+        sw: { lat: bounds.getSouthWest().lat, lng: bounds.getSouthWest().lng },
+      };
+      
+      const fetchedPosts = await getPostsForMap(mapBounds);
+      setPosts(fetchedPosts);
 
-    getPostsForMap(mapBounds)
-      .then(fetchedPosts => {
-        setPosts(fetchedPosts);
-      })
-      .catch(err => {
-        console.error("Failed to fetch map data", err);
-        toast({
-          variant: "destructive",
-          title: "Could not load data",
-          description: "There was an error fetching posts for the map.",
-        });
-      })
-      .finally(() => {
-        setIsLoading(false);
-        isFetchingRef.current = false;
+    } catch (err) {
+      console.error("Failed to fetch map data", err);
+      toast({
+        variant: "destructive",
+        title: "Could not load data",
+        description: "There was an error fetching posts for the map.",
       });
+    } finally {
+      setIsLoading(false);
+      isFetchingRef.current = false;
+    }
   }, [toast]);
   
+  // Create a debounced version of the fetch function.
+  const debouncedFetchPosts = useCallback(debounce(fetchPosts, 300), [fetchPosts]);
 
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
@@ -96,14 +108,9 @@ export default function MapViewer() {
       (err) => {
         console.error(err);
         setError('Could not get your location. Please enable location services and refresh.');
-        // Default to a central location in India if geolocation fails
-        setPosition([20.5937, 78.9629]);
+        setPosition([20.5937, 78.9629]); // Default to central India
       },
-      {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0
-      }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   }, []);
 
@@ -138,7 +145,7 @@ export default function MapViewer() {
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <MapEvents onMapReady={handleMapReady} />
+        <MapEventsHandler onBoundsChange={debouncedFetchPosts} />
         
         <Marker position={position} icon={userIcon}>
           <Popup>You are here.</Popup>
