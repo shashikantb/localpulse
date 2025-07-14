@@ -1,17 +1,15 @@
 
-
 'use client';
 
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css';
 import 'leaflet-defaulticon-compatibility';
-import 'react-leaflet-cluster/dist/MarkerCluster.css';
-import 'react-leaflet-cluster/dist/MarkerCluster.Default.css';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import type { LatLngExpression, Map as LeafletMap } from 'leaflet';
 import L from 'leaflet';
+import 'leaflet.heat'; // Import leaflet.heat
 import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { getPostsForMap } from '@/app/actions';
@@ -19,7 +17,6 @@ import type { Post } from '@/lib/db-types';
 import { useToast } from '@/hooks/use-toast';
 import { differenceInHours } from 'date-fns';
 import { Button } from './ui/button';
-import MarkerClusterGroup from 'react-leaflet-cluster';
 
 // A simple debounce function to prevent excessive API calls
 function debounce<F extends (...args: any[]) => any>(func: F, wait: number): (...args: Parameters<F>) => void {
@@ -39,6 +36,32 @@ const getPulseClassName = (postDate: string): string => {
   if (hours < 1) return 'pulse-fast';
   if (hours < 6) return 'pulse-medium';
   return 'pulse-slow';
+};
+
+const HeatmapComponent = ({ posts }: { posts: Post[] }) => {
+    const map = useMap();
+    const heatmapLayerRef = useRef<L.HeatLayer | null>(null);
+
+    useEffect(() => {
+        if (!map) return;
+
+        // Create or update heatmap layer
+        if (heatmapLayerRef.current) {
+            map.removeLayer(heatmapLayerRef.current);
+        }
+
+        if (posts.length > 0) {
+            const points = posts.map(p => [p.latitude, p.longitude, 1] as L.HeatLatLngTuple);
+            heatmapLayerRef.current = (L as any).heatLayer(points, { 
+                radius: 20, 
+                blur: 15,
+                max: 1.0
+            }).addTo(map);
+        }
+        
+    }, [posts, map]);
+
+    return null; // This component doesn't render anything itself
 };
 
 
@@ -151,11 +174,12 @@ export default function MapViewer() {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         
+        <HeatmapComponent posts={posts} />
+        
         <Marker position={position} icon={userIcon}>
           <Popup>You are here.</Popup>
         </Marker>
         
-        <MarkerClusterGroup>
         {posts.map(post => {
             const pulseClassName = getPulseClassName(post.createdat);
             const postIcon = new L.DivIcon({
@@ -179,7 +203,6 @@ export default function MapViewer() {
                 </Marker>
             );
         })}
-        </MarkerClusterGroup>
       </MapContainer>
     </div>
   );
