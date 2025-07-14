@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -13,6 +12,8 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import ChatInfoSidebar from './chat-info-sidebar';
 
 interface ChatClientProps {
   initialMessages: Message[];
@@ -114,24 +115,39 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
     setIsSending(false);
   };
 
-  const headerLink = partner ? `/users/${partner.id}` : '#';
+  const headerContent = (
+      <div className="flex items-center gap-3 hover:bg-muted p-2 rounded-md">
+        <Avatar>
+            <AvatarImage src={conversationDetails.display_avatar_url || undefined} alt={conversationDetails.display_name} />
+            <AvatarFallback>{conversationDetails.is_group ? <Users /> : conversationDetails.display_name.charAt(0)}</AvatarFallback>
+        </Avatar>
+        <div>
+          <h2 className="text-lg font-semibold">{conversationDetails.display_name}</h2>
+          {conversationDetails.is_group && (
+              <p className="text-xs text-muted-foreground">{conversationDetails.participants.length} members</p>
+          )}
+        </div>
+      </div>
+  );
 
   return (
     <div className="flex flex-col bg-background h-full overflow-hidden">
         {/* Header */}
         <header className="flex-shrink-0 flex items-center p-3 border-b bg-card">
-            <Link href={headerLink} className="flex items-center gap-3 hover:bg-muted p-2 rounded-md">
-                <Avatar>
-                    <AvatarImage src={conversationDetails.display_avatar_url || undefined} alt={conversationDetails.display_name} />
-                    <AvatarFallback>{conversationDetails.is_group ? <Users /> : conversationDetails.display_name.charAt(0)}</AvatarFallback>
-                </Avatar>
-                <div>
-                  <h2 className="text-lg font-semibold">{conversationDetails.display_name}</h2>
-                  {conversationDetails.is_group && (
-                     <p className="text-xs text-muted-foreground">{conversationDetails.participants.length} members</p>
-                  )}
-                </div>
-            </Link>
+            {conversationDetails.is_group ? (
+                <Sheet>
+                    <SheetTrigger asChild>
+                        <button className="w-full">{headerContent}</button>
+                    </SheetTrigger>
+                    <SheetContent className="w-[300px] sm:w-[400px] p-0" side="left">
+                        <ChatInfoSidebar conversationId={conversationId} />
+                    </SheetContent>
+                </Sheet>
+            ) : (
+                <Link href={partner ? `/users/${partner.id}` : '#'}>
+                    {headerContent}
+                </Link>
+            )}
         </header>
 
         {/* Message Input Form (Now at the top) */}

@@ -1,16 +1,25 @@
 
-
 import { getMessages, getConversationDetails, markConversationAsRead } from '@/app/actions';
 import { getSession } from '@/app/auth/actions';
 import { notFound, redirect } from 'next/navigation';
 import ChatClient from './chat-client';
 import { Suspense } from 'react';
-import ChatInfoSidebar, { ChatInfoSidebarSkeleton } from './chat-info-sidebar';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Button } from '@/components/ui/button';
-import { Users, PanelLeftOpen } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export const dynamic = 'force-dynamic';
+
+const ChatClientSkeleton = () => (
+    <div className="flex flex-col h-full">
+        <div className="p-3 border-b"><Skeleton className="h-12 w-3/4"/></div>
+        <div className="p-4 border-b"><Skeleton className="h-10 w-full"/></div>
+        <div className="flex-grow p-4 space-y-4">
+            <div className="flex justify-start"><Skeleton className="h-16 w-1/2 rounded-lg"/></div>
+            <div className="flex justify-end"><Skeleton className="h-20 w-3/5 rounded-lg"/></div>
+            <div className="flex justify-start"><Skeleton className="h-12 w-2/5 rounded-lg"/></div>
+        </div>
+    </div>
+)
+
 
 export default async function ConversationPage({ params }: { params: { conversationId: string } }) {
   const { user: sessionUser } = await getSession();
@@ -23,55 +32,31 @@ export default async function ConversationPage({ params }: { params: { conversat
     notFound();
   }
   
+  // Mark as read first
+  await markConversationAsRead(conversationId);
+
+  // Then fetch details
   const [initialMessages, conversationDetails] = await Promise.all([
     getMessages(conversationId),
     getConversationDetails(conversationId),
-    markConversationAsRead(conversationId) // Mark as read on load
   ]);
 
   if (!conversationDetails) {
     notFound();
   }
 
-  const chatInfoContent = (
-    <Suspense fallback={<ChatInfoSidebarSkeleton />}>
-      <ChatInfoSidebar conversationId={conversationId} />
-    </Suspense>
-  );
-
   return (
     <div className="flex h-full">
       <div className="flex-1 flex flex-col h-full overflow-hidden">
-        <ChatClient
-          initialMessages={initialMessages}
-          conversationDetails={conversationDetails}
-          sessionUser={sessionUser}
-          conversationId={conversationId}
-        />
+        <Suspense fallback={<ChatClientSkeleton/>}>
+            <ChatClient
+            initialMessages={initialMessages}
+            conversationDetails={conversationDetails}
+            sessionUser={sessionUser}
+            conversationId={conversationId}
+            />
+        </Suspense>
       </div>
-
-      {conversationDetails.is_group && (
-        <>
-          {/* Desktop Sidebar */}
-          <aside className="w-80 border-l flex-col hidden lg:flex h-full">
-            {chatInfoContent}
-          </aside>
-          {/* Mobile Sheet */}
-          <div className="absolute top-[10px] right-[10px] lg:hidden">
-              <Sheet>
-                  <SheetTrigger asChild>
-                      <Button variant="ghost" size="icon">
-                          <Users className="h-5 w-5" />
-                          <span className="sr-only">Group Info</span>
-                      </Button>
-                  </SheetTrigger>
-                  <SheetContent className="w-[300px] sm:w-[400px] p-0">
-                      {chatInfoContent}
-                  </SheetContent>
-              </Sheet>
-          </div>
-        </>
-      )}
     </div>
   );
 }
