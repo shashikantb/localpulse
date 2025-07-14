@@ -13,9 +13,12 @@ import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { getPostsForMap } from '@/app/actions';
 import type { Post } from '@/lib/db-types';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from './ui/use-toast';
 import { differenceInHours } from 'date-fns';
 import { Button } from './ui/button';
+
+// Dynamically import leaflet.heat on the client side
+const leafletHeat = typeof window !== 'undefined' ? require('leaflet.heat') : null;
 
 const getPulseClassName = (postDate: string): string => {
   const hours = differenceInHours(new Date(), new Date(postDate));
@@ -29,29 +32,23 @@ const HeatmapComponent = ({ posts }: { posts: Post[] }) => {
     const heatmapLayerRef = useRef<any | null>(null);
 
     useEffect(() => {
-        // Dynamically import leaflet.heat only on the client side
-        import('leaflet.heat').then((heat) => {
-            if (!map) return;
-            const Lheat = (heat as any).default || heat;
+        if (!leafletHeat || !map) return;
 
-            // Create or update heatmap layer
-            if (heatmapLayerRef.current) {
-                map.removeLayer(heatmapLayerRef.current);
-            }
+        if (heatmapLayerRef.current) {
+            map.removeLayer(heatmapLayerRef.current);
+        }
 
-            if (posts.length > 0) {
-                const points = posts.map(p => [p.latitude, p.longitude, 1] as L.HeatLatLngTuple);
-                heatmapLayerRef.current = Lheat(points, { 
-                    radius: 20, 
-                    blur: 15,
-                    max: 1.0
-                }).addTo(map);
-            }
-        }).catch(err => console.error("Failed to load leaflet.heat", err));
-        
+        if (posts.length > 0) {
+            const points = posts.map(p => [p.latitude, p.longitude, 1] as L.HeatLatLngTuple);
+            heatmapLayerRef.current = leafletHeat(points, { 
+                radius: 20, 
+                blur: 15,
+                max: 1.0
+            }).addTo(map);
+        }
     }, [posts, map]);
 
-    return null; // This component doesn't render anything itself
+    return null;
 };
 
 
@@ -61,7 +58,6 @@ const MapEvents = ({ onMapChange }: { onMapChange: (map: LeafletMap) => void }) 
         zoomend: () => onMapChange(map),
     });
     
-    // Use an effect to trigger the initial fetch once the map is ready.
     useEffect(() => {
         onMapChange(map);
     }, [map, onMapChange]);
@@ -69,7 +65,6 @@ const MapEvents = ({ onMapChange }: { onMapChange: (map: LeafletMap) => void }) 
     return null;
 };
 
-// Simplified debounce function
 function debounce(func: (...args: any[]) => void, wait: number) {
     let timeout: NodeJS.Timeout;
     return function executedFunction(...args: any[]) {
@@ -82,7 +77,6 @@ function debounce(func: (...args: any[]) => void, wait: number) {
     };
 }
 
-
 export default function MapViewer() {
   const [position, setPosition] = useState<LatLngExpression | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -90,7 +84,6 @@ export default function MapViewer() {
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
-  // Fix for broken Leaflet icons in Next.js
   useEffect(() => {
       delete (L.Icon.Default.prototype as any)._getIconUrl;
       L.Icon.Default.mergeOptions({
@@ -110,7 +103,7 @@ export default function MapViewer() {
   });
 
   const addPostsIncrementally = useCallback((postsToAdd: Post[]) => {
-      setPosts([]); // Clear old posts from state immediately
+      setPosts([]);
       let i = 0;
       const interval = setInterval(() => {
           if (i < postsToAdd.length) {
@@ -119,7 +112,7 @@ export default function MapViewer() {
           } else {
               clearInterval(interval);
           }
-      }, 50); // Add one marker every 50ms
+      }, 50);
       return () => clearInterval(interval);
   }, []);
 
@@ -132,7 +125,7 @@ export default function MapViewer() {
         sw: { lat: bounds.getSouthWest().lat, lng: bounds.getSouthWest().lng },
       };
       const fetchedPosts = await getPostsForMap(mapBounds);
-      addPostsIncrementally(fetchedPosts);
+      setPosts(fetchedPosts);
     } catch (err) {
       console.error("Failed to fetch map data", err);
       toast({
@@ -141,12 +134,10 @@ export default function MapViewer() {
         description: "There was an error fetching posts for the map.",
       });
     } finally {
-      // This is crucial: ensure loading is always turned off.
       setIsLoading(false);
     }
-  }, [toast, addPostsIncrementally]);
+  }, [toast]);
   
-  // Set up initial geolocation
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -155,7 +146,7 @@ export default function MapViewer() {
       (err) => {
         console.error(err);
         setError('Could not get your location. Please enable location services and refresh.');
-        setPosition([20.5937, 78.9629]); // Default to central India
+        setPosition([20.5937, 78.9629]);
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
@@ -204,6 +195,7 @@ export default function MapViewer() {
         </Marker>
         
         {posts.map(post => {
+            if (!post) return null; // Add a guard clause to prevent crash
             const pulseClassName = getPulseClassName(post.createdat);
             const postIcon = new L.DivIcon({
               html: `<div class="pulsing-dot ${pulseClassName}"></div>`,
