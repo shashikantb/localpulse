@@ -26,12 +26,13 @@ const getPulseClassName = (postDate: string): string => {
 
 const HeatmapComponent = ({ posts }: { posts: Post[] }) => {
     const map = useMap();
-    const heatmapLayerRef = useRef<L.HeatLayer | null>(null);
+    const heatmapLayerRef = useRef<any | null>(null);
 
     useEffect(() => {
         // Dynamically import leaflet.heat only on the client side
-        import('leaflet.heat').then(() => {
+        import('leaflet.heat').then((heat) => {
             if (!map) return;
+            const Lheat = (heat as any).default || heat;
 
             // Create or update heatmap layer
             if (heatmapLayerRef.current) {
@@ -40,7 +41,7 @@ const HeatmapComponent = ({ posts }: { posts: Post[] }) => {
 
             if (posts.length > 0) {
                 const points = posts.map(p => [p.latitude, p.longitude, 1] as L.HeatLatLngTuple);
-                heatmapLayerRef.current = (L as any).heatLayer(points, { 
+                heatmapLayerRef.current = Lheat(points, { 
                     radius: 20, 
                     blur: 15,
                     max: 1.0
