@@ -13,7 +13,7 @@ import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { getPostsForMap } from '@/app/actions';
 import type { Post } from '@/lib/db-types';
-import { useToast } from './ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 import { differenceInHours } from 'date-fns';
 import { Button } from './ui/button';
 
