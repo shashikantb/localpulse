@@ -141,4 +141,20 @@
     @apply bg-background text-foreground;
     font-family: var(--font-geist-sans);
   }
+
+  /* Pulsing dot for map markers */
+  .pulsing-dot {
+    width: 1rem;
+    height: 1rem;
+    border-radius: 50%;
+    background-color: hsl(var(--primary));
+    box-shadow: 0 0 0 0 hsla(var(--primary), 0.7);
+    animation: pulse 2s infinite cubic-bezier(0.66, 0, 0, 1);
+  }
+
+  @keyframes pulse {
+    to {
+      box-shadow: 0 0 0 1rem hsla(var(--primary), 0);
+    }
+  }
 }

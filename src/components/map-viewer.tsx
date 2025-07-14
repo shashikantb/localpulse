@@ -44,6 +44,14 @@ export default function MapViewer() {
     popupAnchor: [1, -34],
     shadowSize: [41, 41]
   });
+
+  // Custom pulsing dot icon for posts
+  const postIcon = new L.DivIcon({
+    html: `<div class="pulsing-dot"></div>`,
+    className: 'bg-transparent border-0',
+    iconSize: [16, 16],
+    iconAnchor: [8, 8],
+  });
   
   const fetchMapData = useCallback(async (map: LeafletMap) => {
     setIsLoading(true);
@@ -122,7 +130,7 @@ export default function MapViewer() {
         {/* Posts Markers */}
         <MarkerClusterGroup chunkedLoading>
           {posts.map(post => (
-            <Marker key={post.id} position={[post.latitude, post.longitude]}>
+            <Marker key={post.id} position={[post.latitude, post.longitude]} icon={postIcon}>
               <Popup>
                 <div className="w-48">
                     <p className="font-semibold text-base mb-1 truncate">{post.content || "Media Post"}</p>
