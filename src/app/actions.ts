@@ -777,7 +777,9 @@ export async function toggleFollow(targetUserId: number): Promise<{ success: boo
 
 export async function getFollowingList(userId: number): Promise<FollowUser[]> {
   try {
-    return await db.getFollowingListDb(userId);
+    const { user } = await getSession();
+    if (!user) return [];
+    return await db.getFollowingListDb(user.id);
   } catch (error) {
     console.error(`Error fetching following list for user ${userId}:`, error);
     return [];
@@ -1154,6 +1156,31 @@ export async function markConversationAsRead(conversationId: number): Promise<vo
         revalidatePath('/chat'); // Revalidate sidebar and nav badge
     } catch (error) {
         console.error(`Server action error marking conversation ${conversationId} as read:`, error);
+    }
+}
+
+export async function createGroup(groupName: string, memberIds: number[]): Promise<{ success: boolean; error?: string; conversationId?: number }> {
+    const { user } = await getSession();
+    if (!user) {
+        return { success: false, error: 'You must be logged in to create a group.' };
+    }
+    if (!groupName.trim()) {
+        return { success: false, error: 'Group name cannot be empty.' };
+    }
+    if (memberIds.length === 0) {
+        return { success: false, error: 'A group must have at least one other member.' };
+    }
+
+    try {
+        const allMemberIds = Array.from(new Set([user.id, ...memberIds]));
+        const newConversation = await db.createGroupConversationDb(user.id, groupName.trim(), allMemberIds);
+        
+        revalidatePath('/chat');
+        return { success: true, conversationId: newConversation.id };
+
+    } catch (error: any) {
+        console.error('Error creating group:', error);
+        return { success: false, error: 'Failed to create group due to a server error.' };
     }
 }
 

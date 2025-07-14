@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -13,8 +14,7 @@ import {
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { getFollowingList } from '@/app/actions';
-import { createGroup } from '@/app/chat/actions';
+import { getFollowingList, createGroup } from '@/app/actions';
 import type { FollowUser } from '@/lib/db-types';
 import { ScrollArea } from './ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
@@ -36,7 +36,8 @@ export default function CreateGroupDialog({ children }: { children: React.ReactN
   useEffect(() => {
     if (isOpen) {
       setIsLoading(true);
-      getFollowingList(0).then((users) => { // Assuming getFollowingList doesn't need userId from client
+      // The user ID for getFollowingList is retrieved from the session on the server
+      getFollowingList(0).then((users) => {
         setFollowing(users);
         setIsLoading(false);
       });

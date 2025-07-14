@@ -1796,7 +1796,7 @@ export async function createGroupConversationDb(creatorId: number, groupName: st
     try {
         await client.query('BEGIN');
 
-        const createConvQuery = 'INSERT INTO conversations (is_group, group_name, created_by) VALUES (true, $1, $2) RETURNING *;';
+        const createConvQuery = 'INSERT INTO conversations (is_group, group_name, created_by, last_message_at) VALUES (true, $1, $2, NOW()) RETURNING *;';
         const convResult: QueryResult<Conversation> = await client.query(createConvQuery, [groupName, creatorId]);
         const newConversation = convResult.rows[0];
 
