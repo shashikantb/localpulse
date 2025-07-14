@@ -17,19 +17,6 @@ import { useToast } from '@/hooks/use-toast';
 import { differenceInHours } from 'date-fns';
 import { Button } from './ui/button';
 
-// A simple debounce function to prevent excessive API calls
-function debounce<F extends (...args: any[]) => any>(func: F, wait: number): (...args: Parameters<F>) => void {
-    let timeout: NodeJS.Timeout | null = null;
-    return function(...args: Parameters<F>) {
-        if (timeout) {
-            clearTimeout(timeout);
-        }
-        timeout = setTimeout(() => {
-            func(...args);
-        }, wait);
-    };
-}
-
 const getPulseClassName = (postDate: string): string => {
   const hours = differenceInHours(new Date(), new Date(postDate));
   if (hours < 1) return 'pulse-fast';
@@ -59,12 +46,13 @@ const HeatmapComponent = ({ posts }: { posts: Post[] }) => {
                     max: 1.0
                 }).addTo(map);
             }
-        });
+        }).catch(err => console.error("Failed to load leaflet.heat", err));
         
     }, [posts, map]);
 
     return null; // This component doesn't render anything itself
 };
+
 
 const MapEvents = ({ onMapChange }: { onMapChange: (map: LeafletMap) => void }) => {
     const map = useMapEvents({
@@ -72,12 +60,26 @@ const MapEvents = ({ onMapChange }: { onMapChange: (map: LeafletMap) => void }) 
         zoomend: () => onMapChange(map),
     });
     
+    // Use an effect to trigger the initial fetch once the map is ready.
     useEffect(() => {
-        onMapChange(map); // Initial fetch
+        onMapChange(map);
     }, [map, onMapChange]);
     
     return null;
 };
+
+// Simplified debounce function
+function debounce(func: (...args: any[]) => void, wait: number) {
+    let timeout: NodeJS.Timeout;
+    return function executedFunction(...args: any[]) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
 
 
 export default function MapViewer() {
@@ -86,6 +88,16 @@ export default function MapViewer() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
+
+  // Fix for broken Leaflet icons in Next.js
+  useEffect(() => {
+      delete (L.Icon.Default.prototype as any)._getIconUrl;
+      L.Icon.Default.mergeOptions({
+          iconRetinaUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png',
+          iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
+          shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
+      });
+  }, []);
 
   const userIcon = new L.Icon({
     iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
@@ -96,6 +108,20 @@ export default function MapViewer() {
     shadowSize: [41, 41]
   });
 
+  const addPostsIncrementally = useCallback((postsToAdd: Post[]) => {
+      setPosts([]); // Clear old posts from state immediately
+      let i = 0;
+      const interval = setInterval(() => {
+          if (i < postsToAdd.length) {
+              setPosts(current => [...current, postsToAdd[i]]);
+              i++;
+          } else {
+              clearInterval(interval);
+          }
+      }, 50); // Add one marker every 50ms
+      return () => clearInterval(interval);
+  }, []);
+
   const fetchAndSetPosts = useCallback(async (map: LeafletMap) => {
     setIsLoading(true);
     try {
@@ -105,7 +131,7 @@ export default function MapViewer() {
         sw: { lat: bounds.getSouthWest().lat, lng: bounds.getSouthWest().lng },
       };
       const fetchedPosts = await getPostsForMap(mapBounds);
-      setPosts(fetchedPosts);
+      addPostsIncrementally(fetchedPosts);
     } catch (err) {
       console.error("Failed to fetch map data", err);
       toast({
@@ -114,9 +140,10 @@ export default function MapViewer() {
         description: "There was an error fetching posts for the map.",
       });
     } finally {
+      // This is crucial: ensure loading is always turned off.
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [toast, addPostsIncrementally]);
   
   // Set up initial geolocation
   useEffect(() => {

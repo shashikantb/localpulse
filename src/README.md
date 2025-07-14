@@ -1,4 +1,3 @@
-
 # Firebase Studio (LocalPulse)
 
 This is a NextJS starter application, configured to use PostgreSQL as its database.
