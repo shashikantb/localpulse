@@ -6,7 +6,7 @@ import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility
 import 'leaflet-defaulticon-compatibility';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import type { LatLngExpression, Map as LeafletMap } from 'leaflet';
 import L from 'leaflet';
 import { Loader2 } from 'lucide-react';
@@ -66,6 +66,19 @@ const HeatmapComponent = ({ posts }: { posts: Post[] }) => {
     return null; // This component doesn't render anything itself
 };
 
+const MapEvents = ({ onMapChange }: { onMapChange: (map: LeafletMap) => void }) => {
+    const map = useMapEvents({
+        moveend: () => onMapChange(map),
+        zoomend: () => onMapChange(map),
+    });
+    
+    useEffect(() => {
+        onMapChange(map); // Initial fetch
+    }, [map, onMapChange]);
+    
+    return null;
+};
+
 
 export default function MapViewer() {
   const [position, setPosition] = useState<LatLngExpression | null>(null);
@@ -73,7 +86,6 @@ export default function MapViewer() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
-  const mapRef = useRef<LeafletMap | null>(null);
 
   const userIcon = new L.Icon({
     iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
@@ -84,7 +96,7 @@ export default function MapViewer() {
     shadowSize: [41, 41]
   });
 
-  const fetchPosts = useCallback(async (map: LeafletMap) => {
+  const fetchAndSetPosts = useCallback(async (map: LeafletMap) => {
     setIsLoading(true);
     try {
       const bounds = map.getBounds();
@@ -121,27 +133,7 @@ export default function MapViewer() {
     );
   }, []);
 
-  // Set up map event listeners once the map instance is ready
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    // Debounced fetch function
-    const debouncedFetch = debounce(() => fetchPosts(map), 500);
-
-    // Attach event listeners
-    map.on('moveend', debouncedFetch);
-    map.on('zoomend', debouncedFetch);
-    
-    // Initial fetch when map is ready
-    fetchPosts(map);
-
-    // Cleanup function
-    return () => {
-      map.off('moveend', debouncedFetch);
-      map.off('zoomend', debouncedFetch);
-    };
-  }, [fetchPosts]); // Rerun if fetchPosts function reference changes
+  const debouncedFetch = useCallback(debounce(fetchAndSetPosts, 500), [fetchAndSetPosts]);
 
   if (error) {
     return <div className="p-4 text-center text-red-500">{error}</div>;
@@ -169,13 +161,14 @@ export default function MapViewer() {
         zoom={13}
         scrollWheelZoom={true}
         className="h-full w-full z-0"
-        whenCreated={instance => { mapRef.current = instance; }}
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         
+        <MapEvents onMapChange={debouncedFetch} />
+
         <HeatmapComponent posts={posts} />
         
         <Marker position={position} icon={userIcon}>

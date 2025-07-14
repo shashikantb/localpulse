@@ -7,6 +7,7 @@ import PostFeedLoader from '@/components/post-feed-loader';
 import { PostFeedSkeleton } from '@/components/post-feed-skeleton';
 import StatusFeed from '@/components/status-feed';
 import { StatusFeedSkeleton } from '@/components/status-feed-skeleton';
+import { getPosts } from './actions';
 
 async function PostComposerWithSession() {
   const { user } = await getSession();
@@ -20,9 +21,8 @@ async function StatusFeedWithSession() {
 
 async function PostFeedWithInitialData() {
   const { user } = await getSession();
-  // We no longer pre-fetch posts on the server.
-  // The client component will handle all fetching.
-  return <PostFeedLoader sessionUser={user} initialPosts={[]} />;
+  const initialPosts = await getPosts({ page: 1, limit: 5 });
+  return <PostFeedLoader sessionUser={user} initialPosts={initialPosts} />;
 }
 
 

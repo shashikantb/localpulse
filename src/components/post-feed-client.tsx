@@ -137,7 +137,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser, initialPosts }) 
   const { toast } = useToast();
   
   const [feeds, setFeeds] = useState<{ [key in 'nearby' | 'family']: FeedState }>({
-    nearby: { ...initialFeedState, posts: initialPosts, isLoading: false, hasMore: initialPosts.length === POSTS_PER_PAGE },
+    nearby: { ...initialFeedState, posts: initialPosts, isLoading: initialPosts.length === 0, hasMore: initialPosts.length === POSTS_PER_PAGE },
     family: { ...initialFeedState, isLoading: false }, // Family feed doesn't load initially
   });
   const [businessFeed, setBusinessFeed] = useState<BusinessFeedState>(initialBusinessFeedState);
@@ -209,23 +209,13 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser, initialPosts }) 
 
   // Initial location fetch
   useEffect(() => {
-    // This flag ensures we only fetch based on new location once
-    let locationFetched = false;
-    
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const newLocation = { latitude: position.coords.latitude, longitude: position.coords.longitude };
           setLocation(newLocation);
-          
           if (sessionUser) {
             updateUserLocation(newLocation.latitude, newLocation.longitude).catch(err => console.warn("Silent location update failed:", err));
-          }
-          
-          // Re-fetch the nearby feed with the new location to update the view
-          if (!locationFetched) {
-            fetchPosts('nearby', 1, sortBy, newLocation);
-            locationFetched = true;
           }
         },
         () => {
@@ -234,8 +224,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser, initialPosts }) 
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionUser]); // Depend on sessionUser to update their location in DB if they log in
+  }, [sessionUser]);
   
 
   const handleTabChange = (value: string) => {
