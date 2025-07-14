@@ -144,7 +144,7 @@ export default function MapViewer() {
         zoom={13}
         scrollWheelZoom={true}
         className="h-full w-full z-0"
-        whenCreated={mapInstance => { mapRef.current = mapInstance; }}
+        ref={mapRef}
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
