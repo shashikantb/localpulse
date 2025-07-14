@@ -9,8 +9,8 @@
  */
 
 import { ai } from '@/ai/ai-instance';
-import { getNearbyBusinessesDb } from '@/lib/db';
-import type { BusinessUser } from '@/lib/db-types';
+import { getNearbyBusinessesDb, searchNearbyPostsDb } from '@/lib/db';
+import type { BusinessUser, Post } from '@/lib/db-types';
 import { z } from 'zod';
 
 const LocalHelperInputSchema = z.object({
@@ -43,12 +43,12 @@ const findNearbyBusinessesTool = ai.defineTool(
         name: z.string(),
         business_category: z.string().nullable(),
         distance: z.number().nullable(),
+        latitude: z.number().nullable(),
+        longitude: z.number().nullable(),
       })
     ),
   },
   async (input) => {
-    // The latitude and longitude are now directly part of the tool's input,
-    // making it more reliable and removing the dependency on flow context.
     const businesses = await getNearbyBusinessesDb({
       latitude: input.latitude,
       longitude: input.longitude,
@@ -61,9 +61,51 @@ const findNearbyBusinessesTool = ai.defineTool(
       name: b.name,
       business_category: b.business_category,
       distance: b.distance,
+      latitude: b.latitude,
+      longitude: b.longitude,
     }));
   }
 );
+
+// Tool for the AI to search recent nearby posts
+const searchNearbyPostsTool = ai.defineTool(
+  {
+    name: 'searchNearbyPosts',
+    description:
+      "Searches recent public posts (pulses) near the user's location based on a query. Use this to find information about current events, traffic, news, or other user-reported activities.",
+    inputSchema: z.object({
+      latitude: z.number().describe("The user's current latitude."),
+      longitude: z.number().describe("The user's current longitude."),
+      query: z
+        .string()
+        .describe(
+          'Keywords to search for in the posts, e.g., "traffic", "roadblock", "event", "latest", "news". If the user asks for "latest pulse", use an empty string for the query to get the most recent ones.'
+        ),
+    }),
+    outputSchema: z.array(
+      z.object({
+        content: z.string(),
+        authorname: z.string().nullable(),
+        distance: z.number().nullable(),
+      })
+    ),
+  },
+  async (input) => {
+    const posts = await searchNearbyPostsDb({
+      latitude: input.latitude,
+      longitude: input.longitude,
+      query: input.query,
+      limit: 5,
+    });
+
+    return posts.map((p: Post) => ({
+        content: p.content,
+        authorname: p.authorname,
+        distance: p.distance,
+    }));
+  }
+);
+
 
 // The main flow for the Local Helper
 const localHelperFlow = ai.defineFlow(
@@ -75,12 +117,18 @@ const localHelperFlow = ai.defineFlow(
   async (input) => {
     const { text } = await ai.generate({
       prompt: `You are a friendly and helpful local guide for the LocalPulse app.
-               Your goal is to answer the user's question based on the data provided by the available tools.
-               Be concise and helpful. If you find businesses, present them clearly, perhaps as a list.
-               If you can't find anything, say so politely.
-               The user is at latitude ${input.latitude} and longitude ${input.longitude}.
-               User's Question: ${input.query}`,
-      tools: [findNearbyBusinessesTool],
+Your goal is to answer the user's question based on the data provided by the available tools.
+Be concise and helpful. If you find businesses or posts, present them clearly as a list.
+
+- Use the \`findNearbyBusinesses\` tool for questions about shops, restaurants, or services.
+- Use the \`searchNearbyPosts\` tool for questions about real-time events, news, or user reports like traffic or "latest pulse". If the user asks for the "latest pulse", you should call searchNearbyPosts with an empty string for the query.
+- If you find a business with location data, provide a Google Maps link like this: \`https://www.google.com/maps?q=LATITUDE,LONGITUDE\`.
+
+If you can't find anything relevant with the tools, say so politely.
+The user is at latitude ${input.latitude} and longitude ${input.longitude}.
+
+User's Question: ${input.query}`,
+      tools: [findNearbyBusinessesTool, searchNearbyPostsTool],
       model: 'googleai/gemini-2.0-flash', // Use a powerful model for tool use
     });
 
