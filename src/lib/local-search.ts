@@ -13,8 +13,10 @@ export interface LocalSearchOutput {
   message: string;
 }
 
-const BUSINESS_KEYWORDS = ['business', 'shop', 'store', 'restaurant', 'bakery', 'saloon', 'parlour', 'service', 'mechanic', 'plumber', 'electrician', 'cafe'];
+const BUSINESS_KEYWORDS = ['business', 'shop', 'store', 'restaurant', 'bakery', 'saloon', 'parlour', 'service', 'mechanic', 'plumber', 'electrician', 'cafe', 'find'];
 const POST_KEYWORDS = ['latest', 'post', 'pulse', 'news', 'traffic', 'event', 'roadblock', 'update'];
+const HELP_KEYWORDS = ['help', 'what can you do', 'info', 'assistance', 'support', 'how do you work'];
+
 
 function formatBusinesses(businesses: any[]): string {
   if (businesses.length === 0) {
@@ -51,6 +53,13 @@ function formatPosts(posts: any[]): string {
 export async function localSearch(input: LocalSearchInput): Promise<LocalSearchOutput> {
   const queryLower = input.query.toLowerCase();
 
+  const isHelpQuery = HELP_KEYWORDS.some(keyword => queryLower.includes(keyword));
+  if (isHelpQuery) {
+    return {
+        message: "I can help you with two main things:\n\n1.  **Find local businesses:** Ask me to find a specific type of shop, like `\"restaurants near me\"` or `\"find a plumber\"`.\n\n2.  **Get local updates:** Ask me about recent posts, like `\"latest news\"` or `\"any traffic updates?\"`."
+    };
+  }
+
   const isBusinessQuery = BUSINESS_KEYWORDS.some(keyword => queryLower.includes(keyword));
   const isPostQuery = POST_KEYWORDS.some(keyword => queryLower.includes(keyword));
 
@@ -60,7 +69,6 @@ export async function localSearch(input: LocalSearchInput): Promise<LocalSearchO
       longitude: input.longitude,
       limit: 5,
       offset: 0,
-      // We pass the whole query to the DB function which can handle category extraction if needed
       category: input.query, 
     });
     return { message: formatBusinesses(businesses) };
@@ -89,5 +97,5 @@ export async function localSearch(input: LocalSearchInput): Promise<LocalSearchO
     return { message: formatBusinesses(businesses) };
   }
 
-  return { message: "Sorry, I can only search for local businesses or recent posts. Please try a query like 'find a restaurant' or 'latest news'." };
+  return { message: "My apologies, I couldn't find anything for that query. You can ask me to find businesses like 'restaurants' or 'plumbers', or ask about recent events with 'latest news' or 'traffic updates'." };
 }
