@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation';
 import * as jose from 'jose';
 import bcrypt from 'bcryptjs';
 import { createUserDb, getUserByEmailDb, getUserByIdDb, updateUserProfilePictureDb, updateUserNameDb, deleteUserDb } from '@/lib/db';
-import type { NewUser, User } from '@/lib/db-types';
+import type { NewUser, User, UserStatus } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 import { cache } from 'react';
 
@@ -61,8 +61,7 @@ export async function signUp(newUser: NewUser): Promise<{ success: boolean; erro
       return { success: false, error: 'An account with this email already exists.' };
     }
 
-    // All users are now approved automatically.
-    const status = 'approved';
+    const status: UserStatus = 'pending';
 
     const user = await createUserDb({ ...newUser, email: emailLower }, status);
     if (user) {
@@ -85,7 +84,7 @@ export async function login(email: string, password: string): Promise<{ success:
       return { success: false, error: 'Invalid email or password.' };
     }
     
-    if (user.status !== 'approved') {
+    if (user.status !== 'approved' && user.status !== 'verified') {
         if(user.status === 'pending') return { success: false, error: 'Your account is pending approval by an administrator.' };
         if(user.status === 'rejected') return { success: false, error: 'Your account has been rejected.' };
         return { success: false, error: 'This account is not active.' };

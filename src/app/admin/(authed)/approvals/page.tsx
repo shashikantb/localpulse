@@ -1,9 +1,10 @@
 
+
 import type { FC } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { getPendingUsers, approveUser, rejectUser } from './actions';
-import { UserCheck, UserX, Building, ShieldCheck, Mail, Calendar } from 'lucide-react';
+import { UserCheck, UserX, Building, ShieldCheck, Mail, Calendar, CheckBadge } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { revalidatePath } from 'next/cache';
 
@@ -13,7 +14,13 @@ const UserApprovalCard: FC<{ user: Awaited<ReturnType<typeof getPendingUsers>>[0
 
   const handleApprove = async () => {
     'use server';
-    await approveUser(user.id);
+    await approveUser(user.id, false);
+    revalidatePath('/admin/approvals');
+  }
+  
+  const handleApproveAsVerified = async () => {
+    'use server';
+    await approveUser(user.id, true);
     revalidatePath('/admin/approvals');
   }
   
@@ -23,23 +30,30 @@ const UserApprovalCard: FC<{ user: Awaited<ReturnType<typeof getPendingUsers>>[0
     revalidatePath('/admin/approvals');
   }
 
+  const isBusiness = user.role === 'Business';
+
   return (
     <div className="p-4 border rounded-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-card hover:bg-muted/50 transition-colors">
       <div className="space-y-1">
         <p className="font-semibold text-lg text-foreground">{user.name}</p>
         <p className="text-sm text-muted-foreground flex items-center gap-2"><Mail className="w-4 h-4" /> {user.email}</p>
         <div className="flex items-center gap-4 pt-1">
-            <Badge variant={user.role === 'Business' ? 'secondary' : 'default'} className="capitalize">
-              {user.role === 'Business' ? <Building className="w-3 h-3 mr-1"/> : <ShieldCheck className="w-3 h-3 mr-1"/>}
+            <Badge variant={isBusiness ? 'secondary' : 'default'} className="capitalize">
+              {isBusiness ? <Building className="w-3 h-3 mr-1"/> : <ShieldCheck className="w-3 h-3 mr-1"/>}
               {user.role}
             </Badge>
             <p className="text-xs text-muted-foreground flex items-center gap-1.5"><Calendar className="w-3 h-3"/> Joined: {new Date(user.createdat).toLocaleDateString()}</p>
         </div>
       </div>
-      <form className="flex gap-2 self-start md:self-center flex-shrink-0">
+      <form className="flex gap-2 self-start md:self-center flex-shrink-0 flex-wrap">
          <Button formAction={handleApprove} variant="default" size="sm" className="bg-green-600 hover:bg-green-700">
            <UserCheck className="mr-2 h-4 w-4" /> Approve
          </Button>
+         {isBusiness && (
+            <Button formAction={handleApproveAsVerified} variant="outline" size="sm" className="border-green-600 text-green-600 hover:bg-green-600 hover:text-white">
+                <CheckBadge className="mr-2 h-4 w-4" /> Approve as Verified
+            </Button>
+         )}
          <Button formAction={handleReject} variant="destructive" size="sm">
            <UserX className="mr-2 h-4 w-4" /> Reject
          </Button>

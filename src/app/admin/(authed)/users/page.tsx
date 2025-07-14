@@ -1,20 +1,23 @@
 
+
 import type { FC } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Users, PlusCircle, Search, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Users, PlusCircle, Search, CheckCircle, XCircle, Clock, CheckBadge } from 'lucide-react';
 import { getAllUsersDb } from '@/lib/db';
 import { Badge } from '@/components/ui/badge';
 import UserActions from '@/components/admin/user-actions';
+import type { UserStatus } from '@/lib/db-types';
 
 export const dynamic = 'force-dynamic';
 
 const AdminManageUsersPage: FC = async () => {
   const users = await getAllUsersDb();
 
-  const getStatusVariant = (status: string): "default" | "secondary" | "destructive" => {
+  const getStatusVariant = (status: UserStatus): "default" | "secondary" | "destructive" | "success" => {
     switch (status) {
+        case 'verified': return 'success';
         case 'approved': return 'default';
         case 'pending': return 'secondary';
         case 'rejected': return 'destructive';
@@ -22,11 +25,12 @@ const AdminManageUsersPage: FC = async () => {
     }
   }
 
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = (status: UserStatus) => {
     switch (status) {
-        case 'approved': return <CheckCircle className="w-3 h-3 mr-1 text-green-500"/>;
-        case 'pending': return <Clock className="w-3 h-3 mr-1 text-yellow-500"/>;
-        case 'rejected': return <XCircle className="w-3 h-3 mr-1 text-red-500"/>;
+        case 'verified': return <CheckBadge className="w-3 h-3 mr-1 text-green-500" />;
+        case 'approved': return <CheckCircle className="w-3 h-3 mr-1 text-primary-foreground" />;
+        case 'pending': return <Clock className="w-3 h-3 mr-1 text-yellow-500" />;
+        case 'rejected': return <XCircle className="w-3 h-3 mr-1 text-red-500" />;
         default: return null;
     }
   }

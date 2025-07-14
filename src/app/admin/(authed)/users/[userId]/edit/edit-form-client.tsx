@@ -8,7 +8,7 @@ import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 
-import type { User, UserRole } from '@/lib/db-types';
+import type { User, UserRole, UserStatus } from '@/lib/db-types';
 import { updateUser } from './actions';
 
 import { Button } from '@/components/ui/button';
@@ -23,7 +23,7 @@ const userUpdateSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters.'),
   email: z.string().email('Please enter a valid email address.'),
   role: z.enum(['Business', 'Gorakshak', 'Public(जनता)', 'Admin', 'Gorakshak Admin']),
-  status: z.enum(['pending', 'approved', 'rejected']),
+  status: z.enum(['pending', 'approved', 'rejected', 'verified']),
 });
 
 type UserUpdateFormInputs = z.infer<typeof userUpdateSchema>;
@@ -65,6 +65,8 @@ const UserEditForm: FC<UserEditFormProps> = ({ user }) => {
       });
     }
   };
+
+  const isBusinessUser = user.role === 'Business';
 
   return (
     <Form {...form}>
@@ -125,7 +127,7 @@ const UserEditForm: FC<UserEditFormProps> = ({ user }) => {
           render={({ field }) => (
             <FormItem>
               <Label>Status</Label>
-              <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}>
+              <Select onValueChange={field.onChange} defaultValue={field.value as UserStatus} disabled={isSubmitting}>
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue placeholder="Select a status" />
@@ -134,6 +136,7 @@ const UserEditForm: FC<UserEditFormProps> = ({ user }) => {
                 <SelectContent>
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="approved">Approved</SelectItem>
+                  {isBusinessUser && <SelectItem value="verified">Verified</SelectItem>}
                   <SelectItem value="rejected">Rejected</SelectItem>
                 </SelectContent>
               </Select>

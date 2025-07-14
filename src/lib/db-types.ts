@@ -43,6 +43,7 @@ export const BUSINESS_CATEGORIES = {
   ],
 };
 
+export type UserStatus = 'pending' | 'approved' | 'rejected' | 'verified';
 
 // Define the structure of a User for client-side use (omitting password)
 export interface User {
@@ -50,7 +51,7 @@ export interface User {
   email: string;
   name: string;
   role: UserRole;
-  status: 'pending' | 'approved' | 'rejected';
+  status: UserStatus;
   createdat: string;
   profilepictureurl?: string | null;
   mobilenumber?: string | null;
@@ -106,7 +107,7 @@ export type UpdatableUserFields = {
   name: string;
   email: string;
   role: UserRole;
-  status: 'pending' | 'approved' | 'rejected';
+  status: UserStatus;
 };
 
 export type UpdateBusinessCategory = {

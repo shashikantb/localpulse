@@ -103,7 +103,7 @@ const SignupPage: FC = () => {
         setIsSuccess(true);
         toast({
           title: 'Account Created!',
-          description: 'Your account is active and ready to use. You can now log in.',
+          description: 'Your account is now pending approval from an administrator.',
         });
       } else {
         setError(result.error || 'Failed to create account.');
@@ -125,7 +125,7 @@ const SignupPage: FC = () => {
             </CardHeader>
             <CardContent>
                 <p className="text-muted-foreground">
-                    {'Your account has been created and is ready to use. You can now log in.'}
+                    {'Your account is pending approval. You will be able to log in once an administrator reviews it.'}
                 </p>
             </CardContent>
             <CardFooter className="flex justify-center">
@@ -321,7 +321,7 @@ const SignupPage: FC = () => {
                             name="business_other_category"
                             render={({ field }) => (
                                 <FormItem>
-                                    <Label>Please Specify Your Business</Label>
+                                    <Label>Please Specify Your Business</FormLabel>
                                     <FormControl>
                                         <Input {...field} placeholder="e.g., Book Binding Service" disabled={isSubmitting} />
                                     </FormControl>

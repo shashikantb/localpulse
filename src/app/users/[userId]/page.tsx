@@ -6,7 +6,7 @@ import { getPostsByUserId, getPendingFamilyRequests, getFamilyRelationshipStatus
 import { getSession } from '@/app/auth/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardHeader, CardContent, CardTitle, CardDescription } from '@/components/ui/card';
-import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, MessageSquare, Settings, Users, Briefcase, Phone, FileBarChart, Award, Share2 } from 'lucide-react';
+import { Building, ShieldCheck, Mail, Calendar, User as UserIcon, Edit, MessageSquare, Settings, Users, Briefcase, Phone, FileBarChart, Award, Share2, CheckBadge } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { PostCard } from '@/components/post-card';
@@ -61,7 +61,7 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
     getFamilyRelationshipStatus(sessionUser, userId)
   ]);
 
-  if (!profileUser || profileUser.status !== 'approved') {
+  if (!profileUser || (profileUser.status !== 'approved' && profileUser.status !== 'verified')) {
     notFound();
   }
 
@@ -79,6 +79,7 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
 
   const isGorakshak = profileUser.role === 'Gorakshak' || profileUser.role === 'Gorakshak Admin';
   const isBusiness = profileUser.role === 'Business';
+  const isVerifiedBusiness = isBusiness && profileUser.status === 'verified';
 
 
   return (
@@ -120,6 +121,9 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
               <div className="flex items-center justify-center md:justify-start gap-4">
                   <div className="flex items-center gap-2">
                     <h1 className="text-3xl font-bold text-foreground">{profileUser.name}</h1>
+                    {isVerifiedBusiness && (
+                        <CheckBadge className="h-7 w-7 text-green-600" title="Verified Business" />
+                    )}
                     {isOwnProfile && (
                         <UsernameEditor currentName={profileUser.name}>
                             <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary">

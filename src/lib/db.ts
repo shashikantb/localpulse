@@ -1,7 +1,7 @@
 
 
 import { Pool, Client, type QueryResult } from 'pg';
-import type { Poll, PollOption, UserForNotification, PointTransaction, PointTransactionReason, User as DbUser, Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest, FamilyMember, FamilyMemberLocation, SortOption, UpdateBusinessCategory, BusinessUser, GorakshakReportUser } from '@/lib/db-types';
+import type { Poll, PollOption, UserForNotification, PointTransaction, PointTransactionReason, User as DbUser, Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest, FamilyMember, FamilyMemberLocation, SortOption, UpdateBusinessCategory, BusinessUser, GorakshakReportUser, UserStatus } from '@/lib/db-types';
 import bcrypt from 'bcryptjs';
 import { customAlphabet } from 'nanoid';
 
@@ -76,7 +76,7 @@ async function initializeDbSchema(): Promise<void> {
             email VARCHAR(255) UNIQUE NOT NULL,
             passwordhash VARCHAR(255) NOT NULL,
             role VARCHAR(50) NOT NULL CHECK (role IN ('Business', 'Gorakshak', 'Gorakshak Admin', 'Admin', 'Public(जनता)')),
-            status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+            status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'verified')),
             createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
             profilepictureurl TEXT,
             mobilenumber VARCHAR(20),
@@ -99,6 +99,10 @@ async function initializeDbSchema(): Promise<void> {
         await initClient.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code VARCHAR(10) UNIQUE;`);
         await initClient.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL;`);
         
+        // Add a check constraint to the user status
+        await initClient.query(`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_status_check;`);
+        await initClient.query(`ALTER TABLE users ADD CONSTRAINT users_status_check CHECK (status IN ('pending', 'approved', 'rejected', 'verified'));`);
+
         // Posts Table
         await initClient.query(`
         CREATE TABLE IF NOT EXISTS posts (
@@ -1212,7 +1216,7 @@ export async function getAllUsersDb(): Promise<User[]> {
     }
 }
 
-export async function updateUserStatusDb(userId: number, status: 'approved' | 'rejected'): Promise<User | null> {
+export async function updateUserStatusDb(userId: number, status: UserStatus): Promise<User | null> {
     await ensureDbInitialized();
     const dbPool = getDbPool();
     if (!dbPool) throw new Error("Database not configured. Cannot update user status.");
