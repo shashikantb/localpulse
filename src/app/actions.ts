@@ -658,6 +658,17 @@ export async function getPostById(postId: number): Promise<Post | null> {
   }
 }
 
+export async function getPostsForMap(bounds: { ne: { lat: number, lng: number }, sw: { lat: number, lng: number } }): Promise<Post[]> {
+  try {
+    const posts = await db.getPostsInBoundsDb(bounds);
+    // For the map, we don't need full enrichment, just the posts themselves.
+    return posts;
+  } catch (error) {
+    console.error("Server action error fetching posts for map:", error);
+    return [];
+  }
+}
+
 
 // --- Follower Actions ---
 
@@ -1115,4 +1126,44 @@ export async function getPointHistory(userId: number): Promise<PointTransaction[
     console.error(`Error fetching point history for user ${userId}:`, error);
     return [];
   }
+}
+
+// --- Admin Notification Functions ---
+export async function getAllUsersWithDeviceTokensDb(): Promise<UserForNotification[]> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return [];
+
+    const client = await dbPool.connect();
+    try {
+        const query = `
+            SELECT
+                u.id,
+                u.lp_points as total_points,
+                COALESCE(yp.points_yesterday, 0) as yesterday_points,
+                dt.token,
+                dt.user_auth_token
+            FROM
+                users u
+            JOIN
+                device_tokens dt ON u.id = dt.user_id
+            LEFT JOIN (
+                SELECT
+                    user_id,
+                    SUM(points) as points_yesterday
+                FROM
+                    lp_point_transactions
+                WHERE
+                    created_at >= NOW() - INTERVAL '1 day'
+                GROUP BY
+                    user_id
+            ) yp ON u.id = yp.user_id
+            WHERE
+                u.status = 'approved' AND dt.token IS NOT NULL;
+        `;
+        const result = await client.query(query);
+        return result.rows;
+    } finally {
+        client.release();
+    }
 }

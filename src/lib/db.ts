@@ -391,6 +391,33 @@ export async function getPostsDb(
   }
 }
 
+export async function getPostsInBoundsDb(bounds: { ne: { lat: number, lng: number }, sw: { lat: number, lng: number } }): Promise<Post[]> {
+  await ensureDbInitialized();
+  const dbPool = getDbPool();
+  if (!dbPool) return [];
+
+  const client = await dbPool.connect();
+  try {
+    const { ne, sw } = bounds;
+    // The bounding box is defined by two points: (sw.lat, sw.lng) and (ne.lat, ne.lng)
+    const query = `
+      SELECT ${POST_COLUMNS_WITH_JOINS}
+      FROM posts p
+      LEFT JOIN users u ON p.authorid = u.id
+      WHERE p.latitude < $1 AND p.latitude > $2
+        AND p.longitude < $3 AND p.longitude > $4
+        AND p.is_family_post = false
+      ORDER BY p.createdat DESC
+      LIMIT 200;
+    `;
+    const result = await client.query(query, [ne.lat, sw.lat, ne.lng, sw.lng]);
+    return result.rows;
+  } finally {
+    client.release();
+  }
+}
+
+
 export async function getFamilyPostsDb(
     userId: number,
     options: { limit: number; offset: number; sortBy?: SortOption } = { limit: 10, offset: 0, sortBy: 'newest' }
