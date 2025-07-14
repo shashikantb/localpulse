@@ -44,6 +44,8 @@ export default function MapViewer() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
+  const mapRef = useRef<LeafletMap | null>(null);
+
 
   const userIcon = new L.Icon({
     iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
@@ -85,6 +87,7 @@ export default function MapViewer() {
       (err) => {
         console.error(err);
         setError('Could not get your location. Please enable location services and refresh.');
+        // Default to a central location in India if geolocation fails
         setPosition([20.5937, 78.9629]);
       },
       {
@@ -116,7 +119,13 @@ export default function MapViewer() {
             <span className="ml-2 text-sm font-medium">Loading Pulses...</span>
          </div>
       )}
-      <MapContainer center={position} zoom={13} scrollWheelZoom={true} className="h-full w-full z-0">
+      <MapContainer
+        center={position}
+        zoom={13}
+        scrollWheelZoom={true}
+        className="h-full w-full z-0"
+        ref={mapRef}
+      >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
