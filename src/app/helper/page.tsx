@@ -2,13 +2,13 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { localHelper, type LocalHelperInput } from '@/ai/flows/local-helper-flow';
+import { localSearch, type LocalSearchOutput } from '@/lib/local-search';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Send, Bot, User, Loader2, Sparkles, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import Markdown from 'react-markdown';
 
@@ -38,7 +38,7 @@ export default function HelperPage() {
         },
         (error) => {
           console.error("Geolocation error:", error);
-          setLocationError("Could not get your location. The AI Helper needs your location to work correctly. Please enable it in your browser settings.");
+          setLocationError("Could not get your location. The Local Helper needs your location to work correctly. Please enable it in your browser settings.");
         }
       );
     } else {
@@ -71,30 +71,20 @@ export default function HelperPage() {
     setIsLoading(true);
 
     try {
-      const helperInput: LocalHelperInput = {
+      const response: LocalSearchOutput = await localSearch({
         query: input,
         latitude: location.latitude,
         longitude: location.longitude,
-      };
-      const response = await localHelper(helperInput);
-      const assistantMessage: Message = { role: 'assistant', content: response };
+      });
+      const assistantMessage: Message = { role: 'assistant', content: response.message };
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error: any) {
-      console.error('Error calling local helper AI:', error);
-      // Check for the specific 503 error
-      if (error.message && error.message.includes('503')) {
-          toast({
-            variant: 'destructive',
-            title: 'AI Helper is Busy',
-            description: 'The AI model is currently overloaded. Please try again in a few moments.',
-          });
-      } else {
-        toast({
-          variant: 'destructive',
-          title: 'AI Error',
-          description: 'The local helper is currently unavailable. Please try again later.',
-        });
-      }
+      console.error('Error calling local search:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'The local helper is currently unavailable. Please try again later.',
+      });
        setMessages((prev) => prev.slice(0, -1)); // Remove the user's message on error
     } finally {
       setIsLoading(false);
@@ -110,7 +100,7 @@ export default function HelperPage() {
             Local Helper
           </CardTitle>
           <CardDescription>
-            Ask me anything about your local area! I can find businesses, services, and more.
+            Ask me to find businesses or check for the latest local posts.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex-grow p-0 overflow-hidden flex flex-col">
@@ -120,7 +110,7 @@ export default function HelperPage() {
                     <div className="text-center text-muted-foreground pt-12">
                         <Bot className="mx-auto h-12 w-12 mb-4" />
                         <p className="font-semibold">Ask me something!</p>
-                        <p className="text-sm">e.g., "Find me a good restaurant" or "Is there a plumber nearby?"</p>
+                        <p className="text-sm">e.g., "Find a restaurant" or "latest pulse".</p>
                     </div>
                 )}
               {messages.map((m, i) => (
@@ -146,7 +136,7 @@ export default function HelperPage() {
                        <AvatarFallback className="bg-primary/10 text-primary"><Loader2 className="w-5 h-5 animate-spin"/></AvatarFallback>
                     </Avatar>
                     <div className="bg-muted p-3 rounded-2xl rounded-bl-none">
-                        <p className="text-sm italic text-muted-foreground">Thinking...</p>
+                        <p className="text-sm italic text-muted-foreground">Searching...</p>
                     </div>
                   </div>
               )}
