@@ -1,4 +1,5 @@
 
+
 'use client';
 import type { FC } from 'react';
 import React, { useState, useEffect, useRef } from 'react';
@@ -8,8 +9,8 @@ import dynamic from 'next/dynamic';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import type { Post, User } from '@/lib/db-types';
-import { formatDistanceToNowStrict } from 'date-fns';
-import { MapPin, UserCircle, MessageCircle, Map, Share2, ThumbsUp, Tag, Eye, BellRing, AlertTriangle, RefreshCw, ChevronLeft, ChevronRight, Image as ImageIcon, MoreHorizontal, Trash2, Megaphone } from 'lucide-react';
+import { formatDistanceToNowStrict, formatDistance } from 'date-fns';
+import { MapPin, UserCircle, MessageCircle, Map, Share2, ThumbsUp, Tag, Eye, BellRing, AlertTriangle, RefreshCw, ChevronLeft, ChevronRight, Image as ImageIcon, MoreHorizontal, Trash2, Megaphone, Zap, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toggleLikePost, recordPostView, likePostAnonymously, deleteUserPost } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -30,6 +31,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import FollowButton from './follow-button';
+import { Tooltip, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 
 const CommentSectionSkeleton = () => (
   <div className="px-5 pb-4 border-t border-border/30 pt-4 bg-muted/20 space-y-4">
@@ -62,6 +64,29 @@ const getAnonymousLikedPosts = (): number[] => {
     }
 };
 
+const Countdown: FC<{ expiryDate: string }> = ({ expiryDate }) => {
+    const [timeLeft, setTimeLeft] = useState('');
+    
+    useEffect(() => {
+        const calculateTimeLeft = () => {
+            const difference = +new Date(expiryDate) - +new Date();
+            if (difference > 0) {
+                setTimeLeft(formatDistance(new Date(expiryDate), new Date(), { addSuffix: true, includeSeconds: true }));
+            } else {
+                setTimeLeft('Expired');
+            }
+        };
+
+        calculateTimeLeft();
+        const timer = setInterval(calculateTimeLeft, 1000);
+        
+        return () => clearInterval(timer);
+    }, [expiryDate]);
+
+    return <span>{timeLeft}</span>;
+};
+
+
 interface PostCardProps {
   post: Post;
   userLocation: { latitude: number; longitude: number } | null;
@@ -92,6 +117,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
   const authorName = post.authorname || 'Anonymous Pulsar';
   const isOwnPost = sessionUser?.id === post.authorid;
   const isAnnouncement = post.authorname === 'LocalPulse Official';
+  const isRadarPost = post.expires_at || post.max_viewers;
 
   const [isLikedByClient, setIsLikedByClient] = useState(false);
   const [displayLikeCount, setDisplayLikeCount] = useState<number>(post.likecount);
@@ -366,11 +392,47 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
   return (
     <Card ref={cardRef} className={cn(
         "overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-300 ease-out border border-border/60 rounded-xl bg-card/80 backdrop-blur-sm hover:border-primary/50 transform hover:scale-[1.005]",
-        isAnnouncement && "bg-primary/5 border-primary/20"
+        isAnnouncement && "bg-primary/5 border-primary/20",
+        isRadarPost && "border-accent/50 bg-gradient-to-br from-accent/5 to-card"
     )}>
+        {isRadarPost && (
+            <div className="p-2 text-xs font-semibold text-center bg-accent/20 text-accent-foreground border-b border-accent/30 flex items-center justify-center gap-4">
+                <div className="flex items-center gap-1.5">
+                    <Zap className="h-4 w-4" />
+                    <span>Pulse Radar</span>
+                </div>
+                {post.expires_at && (
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger className="flex items-center gap-1.5 cursor-default">
+                                <Clock className="h-4 w-4" />
+                                <Countdown expiryDate={post.expires_at} />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>This pulse expires {new Date(post.expires_at).toLocaleString()}</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                )}
+                 {post.max_viewers && (
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger className="flex items-center gap-1.5 cursor-default">
+                                <Eye className="h-4 w-4" />
+                                <span>{post.viewcount} / {post.max_viewers}</span>
+                            </TooltipTrigger>
+                             <TooltipContent>
+                                <p>Viewed by {post.viewcount} of {post.max_viewers} max viewers.</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                )}
+            </div>
+        )}
       <CardHeader className={cn(
           "pb-3 pt-5 px-5 flex flex-row items-start space-x-4",
-          isAnnouncement ? "bg-primary/10" : "bg-gradient-to-br from-card to-muted/10"
+          isAnnouncement ? "bg-primary/10" : "bg-gradient-to-br from-card to-muted/10",
+          isRadarPost && "bg-transparent"
       )}>
         <Avatar className="h-12 w-12 border-2 border-primary/60 shadow-md">
           <AvatarImage src={post.authorprofilepictureurl ?? undefined} alt={authorName} />

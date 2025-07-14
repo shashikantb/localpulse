@@ -118,12 +118,16 @@ async function initializeDbSchema(): Promise<void> {
             authorid INTEGER REFERENCES users(id) ON DELETE SET NULL,
             is_family_post BOOLEAN DEFAULT false NOT NULL,
             hide_location BOOLEAN DEFAULT false NOT NULL,
-            lp_bonus_awarded BOOLEAN DEFAULT false NOT NULL
+            lp_bonus_awarded BOOLEAN DEFAULT false NOT NULL,
+            expires_at TIMESTAMPTZ,
+            max_viewers INTEGER
         );
         `);
          await initClient.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS is_family_post BOOLEAN DEFAULT false NOT NULL;`);
          await initClient.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS hide_location BOOLEAN DEFAULT false NOT NULL;`);
          await initClient.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS lp_bonus_awarded BOOLEAN DEFAULT false NOT NULL;`);
+         await initClient.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;`);
+         await initClient.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS max_viewers INTEGER;`);
         
         // Post Likes Table
         await initClient.query(`CREATE TABLE IF NOT EXISTS post_likes ( id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE, createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, post_id));`);
@@ -267,6 +271,7 @@ const POST_COLUMNS_WITH_JOINS = `
   p.id, p.content, p.latitude, p.longitude, p.createdat, p.likecount, 
   p.commentcount, p.viewcount, p.notifiedcount, p.city, p.hashtags, 
   p.is_family_post, p.hide_location, p.authorid, p.mediatype, p.mediaurls,
+  p.expires_at, p.max_viewers,
   u.name as authorname, u.role as authorrole,
   u.profilepictureurl as authorprofilepictureurl
 `;
@@ -298,7 +303,7 @@ export async function getPostsDb(
     const queryParams: (string | number | null)[] = [];
     let paramIndex = 1;
 
-    // Explicitly cast the user ID parameter to an integer to handle nulls gracefully.
+    // Explicitly cast the user ID parameter to handle nulls gracefully.
     const currentUserIdParam = options.currentUserId || null;
     queryParams.push(currentUserIdParam);
     const userIdParamIndex = paramIndex++;
@@ -372,7 +377,10 @@ export async function getPostsDb(
         ${followCheck} as "isAuthorFollowedByCurrentUser"
       FROM posts p
       LEFT JOIN users u ON p.authorid = u.id
-      WHERE p.is_family_post = false AND (p.authorid IS NULL OR p.authorid != (${officialUserSubquery}))
+      WHERE p.is_family_post = false 
+        AND (p.authorid IS NULL OR p.authorid != (${officialUserSubquery}))
+        AND (p.expires_at IS NULL OR p.expires_at > NOW())
+        AND (p.max_viewers IS NULL OR p.viewcount < p.max_viewers)
       ORDER BY ${orderByClause}
       LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}
     `;
@@ -407,6 +415,8 @@ export async function getPostsInBoundsDb(bounds: { ne: { lat: number, lng: numbe
       WHERE p.latitude < $1 AND p.latitude > $2
         AND p.longitude < $3 AND p.longitude > $4
         AND p.is_family_post = false
+        AND (p.expires_at IS NULL OR p.expires_at > NOW())
+        AND (p.max_viewers IS NULL OR p.viewcount < p.max_viewers)
       ORDER BY p.createdat DESC
       LIMIT 200;
     `;
@@ -493,6 +503,8 @@ export async function getMediaPostsDb(options: { limit: number; offset: number; 
         AND p.mediaurls IS NOT NULL 
         AND array_length(p.mediaurls, 1) > 0 
         AND p.mediaurls[1] IS NOT NULL
+        AND (p.expires_at IS NULL OR p.expires_at > NOW())
+        AND (p.max_viewers IS NULL OR p.viewcount < p.max_viewers)
       ORDER BY p.createdat DESC
       LIMIT $2 OFFSET $3
     `;
@@ -513,11 +525,11 @@ export async function addPostDb(newPost: DbNewPost): Promise<Post> {
     await client.query('BEGIN');
 
     const postQuery = `
-      INSERT INTO posts(content, latitude, longitude, mediaurls, mediatype, hashtags, city, authorid, is_family_post, hide_location)
-      VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      INSERT INTO posts(content, latitude, longitude, mediaurls, mediatype, hashtags, city, authorid, is_family_post, hide_location, expires_at, max_viewers)
+      VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *;
     `;
-    const postValues = [newPost.content, newPost.latitude, newPost.longitude, newPost.mediaurls, newPost.mediatype, newPost.hashtags, newPost.city, newPost.authorid, newPost.is_family_post, newPost.hide_location];
+    const postValues = [newPost.content, newPost.latitude, newPost.longitude, newPost.mediaurls, newPost.mediatype, newPost.hashtags, newPost.city, newPost.authorid, newPost.is_family_post, newPost.hide_location, newPost.expires_at, newPost.max_viewers];
     const postResult: QueryResult<Post> = await client.query(postQuery, postValues);
     const addedPost = postResult.rows[0];
 
@@ -2078,4 +2090,3 @@ export async function getAllUsersWithDeviceTokensDb(): Promise<UserForNotificati
         client.release();
     }
 }
-

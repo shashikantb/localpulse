@@ -139,6 +139,9 @@ export interface Post {
   isLikedByCurrentUser?: boolean; // Added to track if the session user liked this post
   isAuthorFollowedByCurrentUser?: boolean;
   mentions?: { id: number; name: string; }[];
+  // Pulse Radar fields
+  expires_at?: string | null;
+  max_viewers?: number | null;
 }
 
 // For creating a new post from the client
@@ -153,6 +156,9 @@ export type NewPost = {
   hideLocation: boolean;
   authorId?: number;
   mentionedUserIds?: number[];
+  // Pulse Radar fields
+  expires_at?: string | null;
+  max_viewers?: number | null;
 };
 
 // For inserting a new post into the DB
@@ -168,6 +174,9 @@ export type DbNewPost = {
   hide_location: boolean;
   authorid: number | null; 
   mentionedUserIds?: number[];
+  // Pulse Radar fields
+  expires_at?: string | null;
+  max_viewers?: number | null;
 };
 
 

@@ -327,6 +327,8 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
       hide_location: newPostData.hideLocation || false,
       authorid: user ? user.id : null,
       mentionedUserIds: newPostData.mentionedUserIds || [],
+      expires_at: newPostData.expires_at,
+      max_viewers: newPostData.max_viewers,
     };
 
     const addedPostDb = await db.addPostDb(postDataForDb);
@@ -1130,8 +1132,8 @@ export async function getPointHistory(userId: number): Promise<PointTransaction[
 
 // --- Admin Notification Functions ---
 export async function getAllUsersWithDeviceTokensDb(): Promise<UserForNotification[]> {
-    await ensureDbInitialized();
-    const dbPool = getDbPool();
+    await db.ensureDbInitialized();
+    const dbPool = db.getDbPool();
     if (!dbPool) return [];
 
     const client = await dbPool.connect();

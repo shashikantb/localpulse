@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import type { FC } from 'react';
@@ -30,7 +31,7 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
-import { Loader2, X, UploadCloud, Film, Image as ImageIcon, Tag, ChevronDown, Camera, User, Search, UserPlus, Video, XCircle, Users, MapPinOff } from 'lucide-react';
+import { Loader2, X, UploadCloud, Film, Image as ImageIcon, Tag, ChevronDown, Camera, User, Search, UserPlus, Video, XCircle, Users, MapPinOff, Zap, Clock, Eye } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
@@ -41,6 +42,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from './ui/badge';
 import { Progress } from './ui/progress';
 import { Checkbox } from './ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const MAX_IMAGE_COUNT = 5;
 const MAX_VIDEO_UPLOAD_LIMIT = 50 * 1024 * 1024; // 50MB
@@ -79,12 +81,15 @@ const formSchema = z.object({
   hashtags: z.array(z.string()),
   isFamilyPost: z.boolean().default(false),
   hideLocation: z.boolean().default(false),
+  isRadarPost: z.boolean().default(false),
+  radarExpiry: z.string().optional(),
+  radarMaxViewers: z.number().optional(),
 });
 
 type FormData = z.infer<typeof formSchema>;
 
 interface PostFormProps {
-  onSubmit: (content: string, hashtags: string[], isFamilyPost: boolean, hideLocation: boolean, mediaUrls?: string[], mediaType?: 'image' | 'video' | 'gallery', mentionedUserIds?: number[]) => Promise<void>;
+  onSubmit: (content: string, hashtags: string[], isFamilyPost: boolean, hideLocation: boolean, mediaUrls?: string[], mediaType?: 'image' | 'video' | 'gallery', mentionedUserIds?: number[], expires_at?: string, max_viewers?: number) => Promise<void>;
   submitting: boolean;
   sessionUser: UserType | null;
 }
@@ -122,10 +127,12 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
       hashtags: [],
       isFamilyPost: false,
       hideLocation: false,
+      isRadarPost: false,
     },
   });
 
   const contentValue = form.watch('content');
+  const isRadarPost = form.watch('isRadarPost');
   
   React.useEffect(() => {
     const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/;
@@ -249,6 +256,19 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
       const mentionedUserIds = taggedUsers.map(user => user.id);
       const hashtagsToSubmit = data.hashtags || [];
 
+      let expiresAt: string | undefined = undefined;
+      if (data.isRadarPost && data.radarExpiry) {
+        const now = new Date();
+        now.setMinutes(now.getMinutes() + parseInt(data.radarExpiry, 10));
+        expiresAt = now.toISOString();
+      }
+      const maxViewers = data.isRadarPost ? data.radarMaxViewers : undefined;
+      
+      if (data.isRadarPost && !expiresAt && !maxViewers) {
+        toast({ variant: 'destructive', title: 'Radar Post Error', description: 'Please set an expiry time or a maximum viewer count for a Radar Post.' });
+        return;
+      }
+
       if (selectedFiles.length > 0) {
         setIsUploading(true);
         setUploadProgress(0);
@@ -280,7 +300,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
               else if (mediaType === 'image') finalMediaType = 'image';
           }
 
-          await onSubmit(data.content, hashtagsToSubmit, data.isFamilyPost, data.hideLocation, uploadedUrls, finalMediaType, mentionedUserIds);
+          await onSubmit(data.content, hashtagsToSubmit, data.isFamilyPost, data.hideLocation, uploadedUrls, finalMediaType, mentionedUserIds, expiresAt, maxViewers);
 
         } catch (error: any) {
           console.error("A critical error occurred during the upload process:", error);
@@ -290,7 +310,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
           setIsUploading(false);
         }
       } else {
-        await onSubmit(data.content, hashtagsToSubmit, data.isFamilyPost, data.hideLocation, undefined, undefined, mentionedUserIds);
+        await onSubmit(data.content, hashtagsToSubmit, data.isFamilyPost, data.hideLocation, undefined, undefined, mentionedUserIds, expiresAt, maxViewers);
       }
       
       form.reset();
@@ -593,6 +613,79 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
                       Your location will still be used for nearby sorting.
                     </p>
                   </div>
+                </FormItem>
+              )}
+            />
+
+             <FormField
+              control={form.control}
+              name="isRadarPost"
+              render={({ field }) => (
+                <FormItem className="flex flex-col space-y-3 rounded-md border p-4 shadow-sm bg-gradient-to-tr from-accent/10 to-primary/10">
+                    <div className="flex flex-row items-start space-x-3">
+                        <FormControl>
+                            <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                            disabled={isButtonDisabled}
+                            />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                            <FormLabel className="flex items-center text-primary">
+                                <Zap className="mr-2 h-4 w-4 text-accent" />
+                                Pulse Radar Post
+                            </FormLabel>
+                            <p className="text-xs text-muted-foreground">
+                                Make this an exclusive, time-limited pulse.
+                            </p>
+                        </div>
+                    </div>
+                    {isRadarPost && (
+                        <div className="space-y-4 pt-4 border-t border-primary/20">
+                            <FormField
+                                control={form.control}
+                                name="radarExpiry"
+                                render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel className="flex items-center text-sm"><Clock className="mr-2 h-4 w-4" /> Expires In</FormLabel>
+                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                    <FormControl>
+                                        <SelectTrigger>
+                                        <SelectValue placeholder="Select expiry time (optional)" />
+                                        </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                        <SelectItem value="30">30 minutes</SelectItem>
+                                        <SelectItem value="60">1 hour</SelectItem>
+                                        <SelectItem value="120">2 hours</SelectItem>
+                                        <SelectItem value="360">6 hours</SelectItem>
+                                        <SelectItem value="720">12 hours</SelectItem>
+                                        <SelectItem value="1440">24 hours</SelectItem>
+                                    </SelectContent>
+                                    </Select>
+                                </FormItem>
+                                )}
+                            />
+                             <FormField
+                                control={form.control}
+                                name="radarMaxViewers"
+                                render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel className="flex items-center text-sm"><Eye className="mr-2 h-4 w-4" /> Max Viewers</FormLabel>
+                                    <FormControl>
+                                        <Input
+                                            type="number"
+                                            placeholder="e.g., 50 (optional)"
+                                            min="1"
+                                            {...field}
+                                            onChange={event => field.onChange(+event.target.value)}
+                                        />
+                                    </FormControl>
+                                </FormItem>
+                                )}
+                            />
+                        </div>
+                    )}
                 </FormItem>
               )}
             />
