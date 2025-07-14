@@ -149,12 +149,24 @@
     border-radius: 50%;
     background-color: hsl(var(--primary));
     box-shadow: 0 0 0 0 hsla(var(--primary), 0.7);
-    animation: pulse 2s infinite cubic-bezier(0.66, 0, 0, 1);
+    transform: scale(1);
   }
+
+  /* Different animation speeds for pulses */
+  .pulse-fast { animation: pulse 1s infinite cubic-bezier(0.66, 0, 0, 1); }
+  .pulse-medium { animation: pulse 2s infinite cubic-bezier(0.66, 0, 0, 1); }
+  .pulse-slow { animation: pulse 3s infinite cubic-bezier(0.66, 0, 0, 1); }
 
   @keyframes pulse {
     to {
       box-shadow: 0 0 0 1rem hsla(var(--primary), 0);
     }
+  }
+
+  /* Heatmap gradient override */
+  .leaflet-heatmap-layer {
+    filter:
+      contrast(150%)
+      saturate(150%);
   }
 }

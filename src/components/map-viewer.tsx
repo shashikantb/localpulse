@@ -8,7 +8,7 @@ import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility
 import 'leaflet-defaulticon-compatibility';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from 'react-leaflet';
 import type { LatLngExpression, Map as LeafletMap } from 'leaflet';
 import L from 'leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
@@ -18,24 +18,33 @@ import Link from 'next/link';
 import { getPostsForMap } from '@/app/actions';
 import type { Post } from '@/lib/db-types';
 import { useToast } from '@/hooks/use-toast';
+import { differenceInHours } from 'date-fns';
 
-// Component to handle map centering and data fetching on move/zoom
 function MapEvents({ onBoundsChange }: { onBoundsChange: (map: LeafletMap) => void }) {
   const map = useMapEvents({
     moveend: () => onBoundsChange(map),
     zoomend: () => onBoundsChange(map),
+    load: () => onBoundsChange(map), // Fetch data on initial load
   });
+  useMap(); // Re-renders the component when the map changes
   return null;
 }
+
+const getPulseClassName = (postDate: string): string => {
+  const hours = differenceInHours(new Date(), new Date(postDate));
+  if (hours < 1) return 'pulse-fast';
+  if (hours < 6) return 'pulse-medium';
+  return 'pulse-slow';
+};
+
 
 export default function MapViewer() {
   const [position, setPosition] = useState<LatLngExpression | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
-  // Custom icon for user's location
   const userIcon = new L.Icon({
     iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
     shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
@@ -45,14 +54,6 @@ export default function MapViewer() {
     shadowSize: [41, 41]
   });
 
-  // Custom pulsing dot icon for posts
-  const postIcon = new L.DivIcon({
-    html: `<div class="pulsing-dot"></div>`,
-    className: 'bg-transparent border-0',
-    iconSize: [16, 16],
-    iconAnchor: [8, 8],
-  });
-  
   const fetchMapData = useCallback(async (map: LeafletMap) => {
     setIsLoading(true);
     try {
@@ -84,7 +85,7 @@ export default function MapViewer() {
       (err) => {
         console.error(err);
         setError('Could not get your location. Please enable location services and refresh.');
-        setPosition([20.5937, 78.9629]); // Default to center of India
+        setPosition([20.5937, 78.9629]);
       },
       {
           enableHighAccuracy: true,
@@ -122,26 +123,34 @@ export default function MapViewer() {
         />
         <MapEvents onBoundsChange={fetchMapData} />
         
-        {/* User's Location Marker */}
         <Marker position={position} icon={userIcon}>
           <Popup>You are here.</Popup>
         </Marker>
         
-        {/* Posts Markers */}
         <MarkerClusterGroup chunkedLoading>
-          {posts.map(post => (
-            <Marker key={post.id} position={[post.latitude, post.longitude]} icon={postIcon}>
-              <Popup>
-                <div className="w-48">
-                    <p className="font-semibold text-base mb-1 truncate">{post.content || "Media Post"}</p>
-                    <p className="text-xs text-muted-foreground mb-2">By: {post.authorname || 'Anonymous'}</p>
-                    <Button asChild size="sm" className="w-full">
-                        <Link href={`/posts/${post.id}`}>View Pulse</Link>
-                    </Button>
-                </div>
-              </Popup>
-            </Marker>
-          ))}
+          {posts.map(post => {
+              const pulseClassName = getPulseClassName(post.createdat);
+              const postIcon = new L.DivIcon({
+                html: `<div class="pulsing-dot ${pulseClassName}"></div>`,
+                className: 'bg-transparent border-0',
+                iconSize: [16, 16],
+                iconAnchor: [8, 8],
+              });
+
+              return (
+                  <Marker key={post.id} position={[post.latitude, post.longitude]} icon={postIcon}>
+                    <Popup>
+                        <div className="w-48">
+                            <p className="font-semibold text-base mb-1 truncate">{post.content || "Media Post"}</p>
+                            <p className="text-xs text-muted-foreground mb-2">By: {post.authorname || 'Anonymous'}</p>
+                            <Button asChild size="sm" className="w-full">
+                                <Link href={`/posts/${post.id}`}>View Pulse</Link>
+                            </Button>
+                        </div>
+                    </Popup>
+                  </Marker>
+              );
+          })}
         </MarkerClusterGroup>
       </MapContainer>
     </div>
