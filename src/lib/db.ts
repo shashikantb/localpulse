@@ -1996,6 +1996,46 @@ export async function getNearbyBusinessesDb(options: {
   }
 }
 
+export async function searchNearbyPostsDb(options: {
+  latitude: number;
+  longitude: number;
+  query: string;
+  limit?: number;
+}): Promise<Post[]> {
+  await ensureDbInitialized();
+  const dbPool = getDbPool();
+  if (!dbPool) return [];
+
+  const client = await dbPool.connect();
+  try {
+    const { latitude, longitude, query, limit = 5 } = options;
+    const distanceCalc = `earth_distance(ll_to_earth(p.latitude, p.longitude), ll_to_earth($1, $2))`;
+
+    const sqlQuery = `
+      SELECT
+        p.content,
+        u.name as authorname,
+        ${distanceCalc} as distance
+      FROM posts p
+      LEFT JOIN users u ON p.authorid = u.id
+      WHERE
+        p.is_family_post = false
+        AND p.content ILIKE $3
+        AND ${distanceCalc} <= 20000 -- 20km radius
+        AND (p.expires_at IS NULL OR p.expires_at > NOW())
+        AND (p.max_viewers IS NULL OR p.viewcount < p.max_viewers)
+      ORDER BY p.createdat DESC
+      LIMIT $4;
+    `;
+
+    const result = await client.query(sqlQuery, [latitude, longitude, `%${query}%`, limit]);
+    return result.rows;
+  } finally {
+    client.release();
+  }
+}
+
+
 // --- Gorakshak Admin Functions ---
 export async function getGorakshaksSortedByDistanceDb(adminLat: number, adminLon: number): Promise<GorakshakReportUser[]> {
   await ensureDbInitialized();
