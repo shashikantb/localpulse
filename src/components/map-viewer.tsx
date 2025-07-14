@@ -18,6 +18,7 @@ import type { Post } from '@/lib/db-types';
 import { useToast } from '@/hooks/use-toast';
 import { differenceInHours } from 'date-fns';
 import { Button } from './ui/button';
+import MarkerClusterGroup from 'react-leaflet-cluster';
 
 // A simple debounce function to prevent excessive API calls
 function debounce<F extends (...args: any[]) => any>(func: F, wait: number): (...args: Parameters<F>) => void {
@@ -153,6 +154,7 @@ export default function MapViewer() {
           <Popup>You are here.</Popup>
         </Marker>
         
+        <MarkerClusterGroup>
         {posts.map(post => {
             const pulseClassName = getPulseClassName(post.createdat);
             const postIcon = new L.DivIcon({
@@ -176,6 +178,7 @@ export default function MapViewer() {
                 </Marker>
             );
         })}
+        </MarkerClusterGroup>
       </MapContainer>
     </div>
   );
