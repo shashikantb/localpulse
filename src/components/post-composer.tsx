@@ -1,9 +1,10 @@
 
+
 'use client';
 
 import type { FC } from 'react';
 import { useState, useEffect } from 'react';
-import type { NewPost, User } from '@/lib/db-types';
+import type { NewPost, User, NewPollData } from '@/lib/db-types';
 import { addPost } from '@/app/actions';
 import { PostForm } from '@/components/post-form';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -51,7 +52,7 @@ const PostComposer: FC<PostComposerProps> = ({ sessionUser, onPostSuccess }) => 
     }
   }, []);
 
-  const handleAddPost = async (content: string, hashtags: string[], isFamilyPost: boolean, hideLocation: boolean, mediaUrls?: string[], mediaType?: 'image' | 'video' | 'gallery', mentionedUserIds?: number[]) => {
+  const handleAddPost = async (content: string, hashtags: string[], isFamilyPost: boolean, hideLocation: boolean, mediaUrls?: string[], mediaType?: 'image' | 'video' | 'gallery', mentionedUserIds?: number[], pollData?: NewPollData | null) => {
     if (!location && !locationError) {
       toast({ variant: 'destructive', title: "Location Unavailable", description: "Your location is still being determined. Please wait a moment and try again." });
       return;
@@ -81,6 +82,7 @@ const PostComposer: FC<PostComposerProps> = ({ sessionUser, onPostSuccess }) => 
         hideLocation: hideLocation,
         authorId: sessionUser ? sessionUser.id : undefined,
         mentionedUserIds: mentionedUserIds || [],
+        pollData: pollData,
       };
       const result = await addPost(postData);
 

@@ -8,11 +8,11 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import type { Post, User } from '@/lib/db-types';
+import type { Post, User, Poll } from '@/lib/db-types';
 import { formatDistanceToNowStrict, formatDistance } from 'date-fns';
-import { MapPin, UserCircle, MessageCircle, Map, Share2, ThumbsUp, Tag, Eye, BellRing, AlertTriangle, RefreshCw, ChevronLeft, ChevronRight, Image as ImageIcon, MoreHorizontal, Trash2, Megaphone, Zap, Clock } from 'lucide-react';
+import { MapPin, UserCircle, MessageCircle, Map, Share2, ThumbsUp, Tag, Eye, BellRing, AlertTriangle, RefreshCw, ChevronLeft, ChevronRight, Image as ImageIcon, MoreHorizontal, Trash2, Megaphone, Zap, Clock, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { toggleLikePost, recordPostView, likePostAnonymously, deleteUserPost } from '@/app/actions';
+import { toggleLikePost, recordPostView, likePostAnonymously, deleteUserPost, castVote } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -31,7 +31,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import FollowButton from './follow-button';
-import { Tooltip, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from './ui/tooltip';
 
 const CommentSectionSkeleton = () => (
   <div className="px-5 pb-4 border-t border-border/30 pt-4 bg-muted/20 space-y-4">
@@ -127,6 +127,8 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
   const [currentOrigin, setCurrentOrigin] = useState('');
   const [mediaError, setMediaError] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [pollState, setPollState] = useState<Poll | null | undefined>(post.poll);
+  const [isVoting, setIsVoting] = useState(false);
 
   const cardRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -192,12 +194,13 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
   useEffect(() => {
     setDisplayLikeCount(post.likecount);
     setDisplayCommentCount(post.commentcount);
+    setPollState(post.poll);
     if (sessionUser) {
         setIsLikedByClient(post.isLikedByCurrentUser || false);
     } else {
         setIsLikedByClient(getAnonymousLikedPosts().includes(post.id));
     }
-  }, [post.isLikedByCurrentUser, post.likecount, post.commentcount, post.id, sessionUser]);
+  }, [post.isLikedByCurrentUser, post.likecount, post.commentcount, post.id, sessionUser, post.poll]);
 
 
   const handleLikeClick = async () => {
@@ -281,6 +284,18 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
       }
     }
   };
+
+    const handleVote = async (optionId: number) => {
+        if (!pollState || isVoting || pollState.user_voted_option_id) return;
+        setIsVoting(true);
+        const result = await castVote(pollState.id, optionId);
+        if (result.poll) {
+            setPollState(result.poll);
+        } else {
+            toast({ variant: 'destructive', title: 'Vote failed', description: result.error });
+        }
+        setIsVoting(false);
+    };
 
   const renderContentWithMentionsAndLinks = () => {
     let contentToRender = post.content;
@@ -603,6 +618,45 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
 
       <CardContent className={`px-5 ${hasVisibleMedia ? 'pt-4' : 'pt-2'} pb-3`}>
         {renderContentWithMentionsAndLinks()}
+        {pollState && (
+            <div className="mt-4 space-y-3 pt-4 border-t border-border/60">
+                <p className="font-semibold text-foreground">{pollState.question}</p>
+                <div className="space-y-2">
+                    {pollState.options.map(option => {
+                        const isVotedOption = pollState.user_voted_option_id === option.id;
+                        const percentage = pollState.total_votes > 0 ? (option.vote_count / pollState.total_votes) * 100 : 0;
+                        return (
+                            <button
+                                key={option.id}
+                                onClick={() => handleVote(option.id)}
+                                disabled={isVoting || !!pollState.user_voted_option_id}
+                                className={cn(
+                                    "w-full text-left p-2 rounded-md border transition-all duration-200",
+                                    !pollState.user_voted_option_id && "hover:border-primary hover:bg-primary/5 cursor-pointer",
+                                    pollState.user_voted_option_id && "cursor-default"
+                                )}
+                            >
+                                <div className="flex items-center justify-between text-sm">
+                                    <div className="flex items-center">
+                                        {isVotedOption && <Check className="w-4 h-4 mr-2 text-primary" />}
+                                        <span className={cn("font-medium", isVotedOption ? "text-primary" : "text-foreground")}>{option.option_text}</span>
+                                    </div>
+                                    {pollState.user_voted_option_id && (
+                                        <span className="font-semibold text-muted-foreground">{Math.round(percentage)}%</span>
+                                    )}
+                                </div>
+                                {pollState.user_voted_option_id && (
+                                    <div className="relative h-2 rounded-full bg-muted mt-1.5 overflow-hidden">
+                                        <div className="absolute h-full bg-primary/80 rounded-full" style={{ width: `${percentage}%` }}></div>
+                                    </div>
+                                )}
+                            </button>
+                        );
+                    })}
+                </div>
+                <p className="text-xs text-muted-foreground text-right">{pollState.total_votes} votes</p>
+            </div>
+        )}
       </CardContent>
 
       {post.hashtags && post.hashtags.length > 0 && (

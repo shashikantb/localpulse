@@ -114,6 +114,24 @@ export type UpdateBusinessCategory = {
     business_other_category?: string;
 }
 
+// --- Poll Types ---
+export interface PollOption {
+  id: number;
+  poll_id: number;
+  option_text: string;
+  vote_count: number;
+}
+
+export interface Poll {
+  id: number;
+  post_id: number;
+  question: string;
+  total_votes: number;
+  options: PollOption[];
+  user_voted_option_id?: number | null; // The option ID the current user voted for
+}
+
+// --- Post Types ---
 
 // Define the structure of a Post, now with author details
 export interface Post {
@@ -142,6 +160,12 @@ export interface Post {
   // Pulse Radar fields
   expires_at?: string | null;
   max_viewers?: number | null;
+  poll?: Poll | null;
+}
+
+export interface NewPollData {
+  question: string;
+  options: string[];
 }
 
 // For creating a new post from the client
@@ -159,6 +183,7 @@ export type NewPost = {
   // Pulse Radar fields
   expires_at?: string | null;
   max_viewers?: number | null;
+  pollData?: NewPollData | null;
 };
 
 // For inserting a new post into the DB
@@ -177,6 +202,7 @@ export type DbNewPost = {
   // Pulse Radar fields
   expires_at?: string | null;
   max_viewers?: number | null;
+  pollData?: NewPollData | null;
 };
 
 

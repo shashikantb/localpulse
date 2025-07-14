@@ -3,7 +3,7 @@
 'use server';
 
 import * as db from '@/lib/db';
-import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus, FamilyMember, FamilyMemberLocation, PendingFamilyRequest, Conversation, Message, ConversationParticipant, SortOption, BusinessUser, GorakshakReportUser, PointTransaction, UserForNotification } from '@/lib/db-types';
+import type { Poll, Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus, FamilyMember, FamilyMemberLocation, PendingFamilyRequest, Conversation, Message, ConversationParticipant, SortOption, BusinessUser, GorakshakReportUser, PointTransaction, UserForNotification } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 import { getSession, encrypt } from '@/app/auth/actions';
 import { getGcsClient, getGcsBucketName } from '@/lib/gcs';
@@ -26,10 +26,14 @@ async function enrichPosts(posts: Post[], user: User | null): Promise<Post[]> {
         return [];
     }
     const postIds = posts.map(p => p.id);
-    const mentionsMap = await db.getMentionsForPostsDb(postIds);
+    const [mentionsMap, pollsMap] = await Promise.all([
+      db.getMentionsForPostsDb(postIds),
+      db.getPollsForPostsDb(postIds, user?.id)
+    ]);
 
     posts.forEach((post: any) => {
         post.mentions = mentionsMap.get(post.id) || [];
+        post.poll = pollsMap.get(post.id) || null;
         // The isLikedByCurrentUser and isAuthorFollowedByCurrentUser flags are now set directly by the DB query
         // but we need to ensure they are boolean values for client-side logic.
         post.isLikedByCurrentUser = !!post.isLikedByCurrentUser;
@@ -52,7 +56,7 @@ export async function getPosts(options?: { page: number; limit: number; latitude
     } : { limit: 10, offset: 0, sortBy: 'newest' as SortOption, currentUserId: user?.id };
 
     const posts = await db.getPostsDb(dbOptions);
-    // Enrich with mentions, which is a separate query.
+    // Enrich with mentions and polls, which are separate queries.
     // Like and Follow status are now handled in the main getPostsDb query.
     return enrichPosts(posts, user);
     
@@ -329,11 +333,12 @@ export async function addPost(newPostData: ClientNewPost): Promise<{ post?: Post
       mentionedUserIds: newPostData.mentionedUserIds || [],
       expires_at: newPostData.expires_at,
       max_viewers: newPostData.max_viewers,
+      pollData: newPostData.pollData,
     };
 
     const addedPostDb = await db.addPostDb(postDataForDb);
     
-    const finalPost = await db.getPostByIdDb(addedPostDb.id);
+    const finalPost = await db.getPostByIdDb(addedPostDb.id, user?.id);
 
     if (!finalPost) {
         return { error: 'Failed to retrieve post after creation.' };
@@ -650,7 +655,7 @@ export async function getPostById(postId: number): Promise<Post | null> {
     let post = await db.getPostByIdDb(postId, user?.id);
     if (!post) return null;
 
-    // enrichPosts only adds mentions now, the rest is in the query.
+    // enrichPosts now handles mentions and polls
     const enrichedPosts = await enrichPosts([post], user);
     return enrichedPosts[0];
 
@@ -747,6 +752,29 @@ export async function searchUsers(query: string): Promise<User[]> {
     return [];
   }
 }
+
+// --- Poll Actions ---
+export async function castVote(pollId: number, optionId: number): Promise<{ poll: Poll | null; error?: string }> {
+  const { user } = await getSession();
+  if (!user) {
+    return { poll: null, error: 'You must be logged in to vote.' };
+  }
+
+  try {
+    const updatedPoll = await db.castVoteDb(user.id, pollId, optionId);
+    if (updatedPoll) {
+      revalidatePath('/'); // Revalidate feed to show new vote counts
+      revalidatePath(`/posts/${updatedPoll.post_id}`);
+      return { poll: updatedPoll };
+    } else {
+      return { poll: null, error: "You have already voted in this poll." };
+    }
+  } catch (error: any) {
+    console.error('Error casting vote:', error);
+    return { poll: null, error: 'An unexpected server error occurred.' };
+  }
+}
+
 
 // --- Status (Story) Actions ---
 

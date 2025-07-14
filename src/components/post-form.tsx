@@ -4,7 +4,7 @@
 
 import type { FC } from 'react';
 import React from 'react';
-import { useForm, type SubmitHandler } from 'react-hook-form';
+import { useForm, type SubmitHandler, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Image from 'next/image';
@@ -31,12 +31,12 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
-import { Loader2, X, UploadCloud, Film, Image as ImageIcon, Tag, ChevronDown, Camera, User, Search, UserPlus, Video, XCircle, Users, MapPinOff, Zap, Clock, Eye } from 'lucide-react';
+import { Loader2, X, UploadCloud, Film, Image as ImageIcon, Tag, ChevronDown, Camera, User, Search, UserPlus, Video, XCircle, Users, MapPinOff, Zap, Clock, Eye, ListOrdered, PlusCircle, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 import { searchUsers, getSignedUploadUrl } from '@/app/actions';
-import type { User as UserType } from '@/lib/db-types';
+import type { User as UserType, NewPollData } from '@/lib/db-types';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from './ui/badge';
@@ -76,20 +76,35 @@ export const HASHTAG_CATEGORIES = [
   },
 ];
 
+const pollOptionSchema = z.object({ value: z.string().min(1, 'Option cannot be empty.').max(50, 'Option cannot exceed 50 characters.') });
+
 const formSchema = z.object({
-  content: z.string().min(1, "Post cannot be empty").max(1000, "Post cannot exceed 1000 characters"),
+  content: z.string().max(1000, "Post cannot exceed 1000 characters"),
   hashtags: z.array(z.string()),
   isFamilyPost: z.boolean().default(false),
   hideLocation: z.boolean().default(false),
   isRadarPost: z.boolean().default(false),
   radarExpiry: z.string().optional(),
   radarMaxViewers: z.number().optional(),
+  isPoll: z.boolean().default(false),
+  pollQuestion: z.string().optional(),
+  pollOptions: z.array(pollOptionSchema).optional(),
+}).superRefine((data, ctx) => {
+    if (data.isPoll) {
+        if (!data.pollQuestion || data.pollQuestion.trim().length < 1) {
+            ctx.addIssue({ code: 'custom', message: 'Poll question cannot be empty.', path: ['pollQuestion'] });
+        }
+        if (!data.pollOptions || data.pollOptions.length < 2) {
+            ctx.addIssue({ code: 'custom', message: 'A poll must have at least 2 options.', path: ['pollOptions'] });
+        }
+    }
 });
+
 
 type FormData = z.infer<typeof formSchema>;
 
 interface PostFormProps {
-  onSubmit: (content: string, hashtags: string[], isFamilyPost: boolean, hideLocation: boolean, mediaUrls?: string[], mediaType?: 'image' | 'video' | 'gallery', mentionedUserIds?: number[], expires_at?: string, max_viewers?: number) => Promise<void>;
+  onSubmit: (content: string, hashtags: string[], isFamilyPost: boolean, hideLocation: boolean, mediaUrls?: string[], mediaType?: 'image' | 'video' | 'gallery', mentionedUserIds?: number[], pollData?: NewPollData | null, expires_at?: string, max_viewers?: number) => Promise<void>;
   submitting: boolean;
   sessionUser: UserType | null;
 }
@@ -128,11 +143,20 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
       isFamilyPost: false,
       hideLocation: false,
       isRadarPost: false,
+      isPoll: false,
+      pollQuestion: '',
+      pollOptions: [{ value: '' }, { value: '' }],
     },
+  });
+
+  const { fields: pollOptionFields, append: appendPollOption, remove: removePollOption } = useFieldArray({
+    control: form.control,
+    name: "pollOptions",
   });
 
   const contentValue = form.watch('content');
   const isRadarPost = form.watch('isRadarPost');
+  const isPoll = form.watch('isPoll');
   
   React.useEffect(() => {
     const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/;
@@ -269,6 +293,15 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
         return;
       }
 
+      let pollData: NewPollData | null = null;
+      if (data.isPoll && data.pollQuestion && data.pollOptions) {
+          pollData = {
+              question: data.pollQuestion,
+              options: data.pollOptions.map(opt => opt.value).filter(Boolean)
+          };
+      }
+
+
       if (selectedFiles.length > 0) {
         setIsUploading(true);
         setUploadProgress(0);
@@ -300,7 +333,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
               else if (mediaType === 'image') finalMediaType = 'image';
           }
 
-          await onSubmit(data.content, hashtagsToSubmit, data.isFamilyPost, data.hideLocation, uploadedUrls, finalMediaType, mentionedUserIds, expiresAt, maxViewers);
+          await onSubmit(data.content, hashtagsToSubmit, data.isFamilyPost, data.hideLocation, uploadedUrls, finalMediaType, mentionedUserIds, pollData, expiresAt, maxViewers);
 
         } catch (error: any) {
           console.error("A critical error occurred during the upload process:", error);
@@ -310,7 +343,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
           setIsUploading(false);
         }
       } else {
-        await onSubmit(data.content, hashtagsToSubmit, data.isFamilyPost, data.hideLocation, undefined, undefined, mentionedUserIds, expiresAt, maxViewers);
+        await onSubmit(data.content, hashtagsToSubmit, data.isFamilyPost, data.hideLocation, undefined, undefined, mentionedUserIds, pollData, expiresAt, maxViewers);
       }
       
       form.reset();
@@ -565,6 +598,75 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
           </FormItem>
           
           <div className="space-y-4">
+            <FormField
+              control={form.control}
+              name="isPoll"
+              render={({ field }) => (
+                <FormItem className={cn("flex flex-col space-y-3 rounded-md border p-4 shadow-sm", isPoll ? 'bg-primary/5' : 'bg-muted/50')}>
+                  <div className="flex flex-row items-start space-x-3">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        disabled={isButtonDisabled}
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel className="flex items-center">
+                        <ListOrdered className="mr-2 h-4 w-4 text-primary" />
+                        Create a Poll
+                      </FormLabel>
+                      <p className="text-xs text-muted-foreground">
+                        Engage your community by adding a poll to your post.
+                      </p>
+                    </div>
+                  </div>
+                  {isPoll && (
+                    <div className="space-y-4 pl-8 pt-4 border-t border-primary/20">
+                      <FormField
+                        control={form.control}
+                        name="pollQuestion"
+                        render={({ field: pollField }) => (
+                          <FormItem>
+                            <FormLabel>Poll Question</FormLabel>
+                            <FormControl><Input placeholder="e.g., Best pizza place in town?" {...pollField} /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <div className="space-y-2">
+                        <FormLabel>Poll Options</FormLabel>
+                        {pollOptionFields.map((item, index) => (
+                          <FormField
+                            key={item.id}
+                            control={form.control}
+                            name={`pollOptions.${index}.value`}
+                            render={({ field: optionField }) => (
+                              <FormItem>
+                                <div className="flex items-center gap-2">
+                                  <FormControl><Input placeholder={`Option ${index + 1}`} {...optionField} /></FormControl>
+                                  {pollOptionFields.length > 2 && (
+                                    <Button type="button" variant="ghost" size="icon" onClick={() => removePollOption(index)} className="h-9 w-9 flex-shrink-0 text-destructive">
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                </div>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        ))}
+                      </div>
+                      {pollOptionFields.length < 4 && (
+                        <Button type="button" variant="outline" size="sm" onClick={() => appendPollOption({ value: '' })}>
+                          <PlusCircle className="mr-2 h-4 w-4" /> Add Option
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </FormItem>
+              )}
+            />
             {sessionUser && (
                 <FormField
                   control={form.control}
@@ -645,10 +747,10 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
                             <FormField
                                 control={form.control}
                                 name="radarExpiry"
-                                render={({ field }) => (
+                                render={({ field: expiryField }) => (
                                 <FormItem>
                                     <FormLabel className="flex items-center text-sm"><Clock className="mr-2 h-4 w-4" /> Expires In</FormLabel>
-                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                    <Select onValueChange={expiryField.onChange} defaultValue={expiryField.value}>
                                     <FormControl>
                                         <SelectTrigger>
                                         <SelectValue placeholder="Select expiry time (optional)" />
@@ -669,7 +771,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
                              <FormField
                                 control={form.control}
                                 name="radarMaxViewers"
-                                render={({ field }) => (
+                                render={({ field: viewersField }) => (
                                 <FormItem>
                                     <FormLabel className="flex items-center text-sm"><Eye className="mr-2 h-4 w-4" /> Max Viewers</FormLabel>
                                     <FormControl>
@@ -677,8 +779,8 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
                                             type="number"
                                             placeholder="e.g., 50 (optional)"
                                             min="1"
-                                            {...field}
-                                            onChange={event => field.onChange(+event.target.value)}
+                                            {...viewersField}
+                                            onChange={event => viewersField.onChange(+event.target.value)}
                                         />
                                     </FormControl>
                                 </FormItem>
@@ -694,7 +796,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
 
         <div className="flex-shrink-0 pt-4 border-t border-border/20">
             {isUploading && <Progress value={(uploadProgress / selectedFiles.length) * 100} className="w-full h-2 mb-4" />}
-            <Button type="submit" disabled={isButtonDisabled || !form.formState.isValid} className="w-full text-base py-3 shadow-md hover:shadow-lg transition-shadow bg-accent hover:bg-accent/90 text-accent-foreground rounded-lg">
+            <Button type="submit" disabled={isButtonDisabled} className="w-full text-base py-3 shadow-md hover:shadow-lg transition-shadow bg-accent hover:bg-accent/90 text-accent-foreground rounded-lg">
                 {(isUploading || submitting) && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
                 {buttonText}
             </Button>

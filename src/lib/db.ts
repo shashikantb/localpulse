@@ -1,7 +1,7 @@
 
 
 import { Pool, Client, type QueryResult } from 'pg';
-import type { UserForNotification, PointTransaction, PointTransactionReason, User as DbUser, Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest, FamilyMember, FamilyMemberLocation, SortOption, UpdateBusinessCategory, BusinessUser, GorakshakReportUser } from '@/lib/db-types';
+import type { Poll, PollOption, UserForNotification, PointTransaction, PointTransactionReason, User as DbUser, Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest, FamilyMember, FamilyMemberLocation, SortOption, UpdateBusinessCategory, BusinessUser, GorakshakReportUser } from '@/lib/db-types';
 import bcrypt from 'bcryptjs';
 import { customAlphabet } from 'nanoid';
 
@@ -129,6 +129,31 @@ async function initializeDbSchema(): Promise<void> {
          await initClient.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;`);
          await initClient.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS max_viewers INTEGER;`);
         
+        // Poll Tables
+        await initClient.query(`
+            CREATE TABLE IF NOT EXISTS polls (
+                id SERIAL PRIMARY KEY,
+                post_id INTEGER UNIQUE NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+                question TEXT NOT NULL
+            );
+        `);
+        await initClient.query(`
+            CREATE TABLE IF NOT EXISTS poll_options (
+                id SERIAL PRIMARY KEY,
+                poll_id INTEGER NOT NULL REFERENCES polls(id) ON DELETE CASCADE,
+                option_text TEXT NOT NULL,
+                vote_count INTEGER DEFAULT 0 NOT NULL
+            );
+        `);
+        await initClient.query(`
+            CREATE TABLE IF NOT EXISTS poll_votes (
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                poll_id INTEGER NOT NULL REFERENCES polls(id) ON DELETE CASCADE,
+                option_id INTEGER NOT NULL REFERENCES poll_options(id) ON DELETE CASCADE,
+                PRIMARY KEY (user_id, poll_id)
+            );
+        `);
+
         // Post Likes Table
         await initClient.query(`CREATE TABLE IF NOT EXISTS post_likes ( id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE, createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, post_id));`);
         // Comments Table
@@ -532,6 +557,17 @@ export async function addPostDb(newPost: DbNewPost): Promise<Post> {
     const postValues = [newPost.content, newPost.latitude, newPost.longitude, newPost.mediaurls, newPost.mediatype, newPost.hashtags, newPost.city, newPost.authorid, newPost.is_family_post, newPost.hide_location, newPost.expires_at, newPost.max_viewers];
     const postResult: QueryResult<Post> = await client.query(postQuery, postValues);
     const addedPost = postResult.rows[0];
+
+    // Handle Poll Data
+    if (newPost.pollData) {
+      const pollQuery = `INSERT INTO polls(post_id, question) VALUES($1, $2) RETURNING id;`;
+      const pollResult = await client.query(pollQuery, [addedPost.id, newPost.pollData.question]);
+      const pollId = pollResult.rows[0].id;
+      
+      const optionValues = newPost.pollData.options.map(option => `(${pollId}, '${option.replace(/'/g, "''")}')`).join(',');
+      const optionQuery = `INSERT INTO poll_options(poll_id, option_text) VALUES ${optionValues};`;
+      await client.query(optionQuery);
+    }
 
     // Award points for posting
     if (newPost.authorid) {
@@ -1390,6 +1426,93 @@ export async function getMentionsForPostsDb(postIds: number[]): Promise<Map<numb
     client.release();
   }
 }
+
+// --- Poll Functions ---
+
+export async function getPollsForPostsDb(postIds: number[], currentUserId?: number | null): Promise<Map<number, Poll>> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool || postIds.length === 0) return new Map();
+
+    const client = await dbPool.connect();
+    try {
+        const query = `
+            SELECT 
+                p.id, p.post_id, p.question,
+                po.id as option_id, po.option_text, po.vote_count,
+                (SELECT SUM(vote_count) FROM poll_options WHERE poll_id = p.id) as total_votes,
+                (SELECT option_id FROM poll_votes WHERE poll_id = p.id AND user_id = $2::int) as user_voted_option_id
+            FROM polls p
+            JOIN poll_options po ON p.id = po.poll_id
+            WHERE p.post_id = ANY($1::int[])
+            ORDER BY p.id, po.id;
+        `;
+        const result = await client.query(query, [postIds, currentUserId]);
+
+        const pollsMap = new Map<number, Poll>();
+        for (const row of result.rows) {
+            const { post_id, id, question, total_votes, user_voted_option_id } = row;
+            if (!pollsMap.has(post_id)) {
+                pollsMap.set(post_id, {
+                    id,
+                    post_id,
+                    question,
+                    total_votes: parseInt(total_votes, 10) || 0,
+                    user_voted_option_id,
+                    options: [],
+                });
+            }
+            pollsMap.get(post_id)!.options.push({
+                id: row.option_id,
+                poll_id: id,
+                option_text: row.option_text,
+                vote_count: row.vote_count,
+            });
+        }
+        return pollsMap;
+    } finally {
+        client.release();
+    }
+}
+
+export async function castVoteDb(userId: number, pollId: number, optionId: number): Promise<Poll | null> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return null;
+
+    const client = await dbPool.connect();
+    try {
+        await client.query('BEGIN');
+        
+        // Check if user has already voted
+        const existingVote = await client.query('SELECT option_id FROM poll_votes WHERE user_id = $1 AND poll_id = $2', [userId, pollId]);
+        if (existingVote.rowCount > 0) {
+            await client.query('ROLLBACK');
+            return null; // Or throw an error
+        }
+
+        // Record the new vote
+        await client.query('INSERT INTO poll_votes (user_id, poll_id, option_id) VALUES ($1, $2, $3)', [userId, pollId, optionId]);
+        
+        // Increment the vote count for the option
+        await client.query('UPDATE poll_options SET vote_count = vote_count + 1 WHERE id = $1', [optionId]);
+
+        // Fetch the updated poll data to return
+        const updatedPollResult = await getPollsForPostsDb([ (await client.query('SELECT post_id from polls where id=$1',[pollId])).rows[0].post_id ], userId);
+        
+        await client.query('COMMIT');
+        
+        return Array.from(updatedPollResult.values())[0] || null;
+
+    } catch(e) {
+        await client.query('ROLLBACK');
+        console.error("Error casting vote:", e);
+        throw e;
+    } finally {
+        client.release();
+    }
+}
+
 
 // --- Status (Story) Functions ---
 
