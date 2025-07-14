@@ -29,6 +29,8 @@ const findNearbyBusinessesTool = ai.defineTool(
     description:
       'Finds nearby businesses based on the user\'s location and an optional category. Use this to answer questions about local services, shops, or restaurants.',
     inputSchema: z.object({
+      latitude: z.number().describe("The user's current latitude."),
+      longitude: z.number().describe("The user's current longitude."),
       category: z
         .string()
         .optional()
@@ -44,16 +46,12 @@ const findNearbyBusinessesTool = ai.defineTool(
       })
     ),
   },
-  async (input, context) => {
-    // In the new Genkit version, context is available and should hold the flow's input
-    const flowInput = context?.flow?.input as LocalHelperInput;
-    if (!flowInput?.latitude || !flowInput?.longitude) {
-       throw new Error("Latitude and longitude must be provided in the flow's context.");
-    }
-
+  async (input) => {
+    // The latitude and longitude are now directly part of the tool's input,
+    // making it more reliable and removing the dependency on flow context.
     const businesses = await getNearbyBusinessesDb({
-      latitude: flowInput.latitude,
-      longitude: flowInput.longitude,
+      latitude: input.latitude,
+      longitude: input.longitude,
       category: input.category,
       limit: 5, // Limit to top 5 results for concise answers
       offset: 0,
@@ -80,6 +78,7 @@ const localHelperFlow = ai.defineFlow(
                Your goal is to answer the user's question based on the data provided by the available tools.
                Be concise and helpful. If you find businesses, present them clearly, perhaps as a list.
                If you can't find anything, say so politely.
+               The user is at latitude ${input.latitude} and longitude ${input.longitude}.
                User's Question: ${input.query}`,
       tools: [findNearbyBusinessesTool],
       model: 'googleai/gemini-2.0-flash', // Use a powerful model for tool use
