@@ -85,14 +85,14 @@ export default function HelperPage() {
       setMessages((prev) => [...prev, assistantMessage]);
 
     } catch (error: any) {
-      console.error('Error calling local search:', error);
-      const errorMessage = "Sorry, the local helper ran into an unexpected problem. Please try again in a moment.";
-      setMessages((prev) => [...prev, { role: 'assistant', content: errorMessage }]);
-       toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'The local helper is currently unavailable.',
-      });
+        console.error('Error calling local search:', error);
+        const errorMessage = "Sorry, the local helper ran into an unexpected problem. Please try again in a moment.";
+        setMessages((prev) => [...prev, { role: 'assistant', content: errorMessage }]);
+        toast({
+            variant: 'destructive',
+            title: 'Error',
+            description: error.message || 'The local helper is currently unavailable.',
+        });
     } finally {
       setIsLoading(false);
     }
@@ -110,6 +110,37 @@ export default function HelperPage() {
             Ask me to find businesses or check for the latest local posts.
           </CardDescription>
         </CardHeader>
+        
+        {/* Input Form Area */}
+        <div className="p-4 border-b">
+            <form onSubmit={handleSubmit} className="flex gap-3">
+            <Textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Ask a question..."
+                className="flex-1 resize-none"
+                rows={1}
+                disabled={isLoading || !!locationError}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSubmit(e);
+                    }
+                }}
+            />
+            <Button type="submit" size="icon" disabled={isLoading || !input.trim() || !!locationError}>
+                {isLoading ? <Loader2 className="animate-spin" /> : <Send />}
+                <span className="sr-only">Send</span>
+            </Button>
+            </form>
+            {locationError && (
+                <div className="mt-3 p-2 text-center bg-destructive/10 border border-destructive/30 text-destructive text-xs rounded-lg flex items-center justify-center gap-2">
+                    <AlertTriangle className="h-4 w-4" /> {locationError}
+                </div>
+            )}
+        </div>
+
+        {/* Message List Area */}
         <CardContent className="flex-grow p-0 overflow-hidden flex flex-col">
           <ScrollArea className="flex-grow p-4" ref={scrollAreaRef}>
             <div className="space-y-6">
@@ -149,33 +180,6 @@ export default function HelperPage() {
               )}
             </div>
           </ScrollArea>
-          {locationError && (
-              <div className="m-4 p-2 text-center bg-destructive/10 border border-destructive/30 text-destructive text-xs rounded-lg flex items-center justify-center gap-2">
-                 <AlertTriangle className="h-4 w-4" /> {locationError}
-              </div>
-          )}
-          <div className="p-4 border-t">
-            <form onSubmit={handleSubmit} className="flex gap-3">
-              <Textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask a question..."
-                className="flex-1 resize-none"
-                rows={1}
-                disabled={isLoading || !!locationError}
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSubmit(e);
-                    }
-                }}
-              />
-              <Button type="submit" size="icon" disabled={isLoading || !input.trim() || !!locationError}>
-                {isLoading ? <Loader2 className="animate-spin" /> : <Send />}
-                <span className="sr-only">Send</span>
-              </Button>
-            </form>
-          </div>
         </CardContent>
       </Card>
     </div>
