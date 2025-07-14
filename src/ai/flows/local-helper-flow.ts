@@ -45,11 +45,15 @@ const findNearbyBusinessesTool = ai.defineTool(
     ),
   },
   async (input, context) => {
-    const { latitude, longitude } = context.flow.input as LocalHelperInput;
+    // In the new Genkit version, context is available and should hold the flow's input
+    const flowInput = context?.flow?.input as LocalHelperInput;
+    if (!flowInput?.latitude || !flowInput?.longitude) {
+       throw new Error("Latitude and longitude must be provided in the flow's context.");
+    }
 
     const businesses = await getNearbyBusinessesDb({
-      latitude,
-      longitude,
+      latitude: flowInput.latitude,
+      longitude: flowInput.longitude,
       category: input.category,
       limit: 5, // Limit to top 5 results for concise answers
       offset: 0,
@@ -71,7 +75,7 @@ const localHelperFlow = ai.defineFlow(
     outputSchema: z.string(),
   },
   async (input) => {
-    const llmResponse = await ai.generate({
+    const { text } = await ai.generate({
       prompt: `You are a friendly and helpful local guide for the LocalPulse app.
                Your goal is to answer the user's question based on the data provided by the available tools.
                Be concise and helpful. If you find businesses, present them clearly, perhaps as a list.
@@ -81,7 +85,7 @@ const localHelperFlow = ai.defineFlow(
       model: 'googleai/gemini-2.0-flash', // Use a powerful model for tool use
     });
 
-    return llmResponse.text;
+    return text;
   }
 );
 
