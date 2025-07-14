@@ -1997,8 +1997,9 @@ export async function getNearbyBusinessesDb(options: {
 }
 
 export async function searchNearbyPostsDb(options: {
-  latitude: number;
-  longitude: number;
+  latitude?: number;
+  longitude?: number;
+  city?: string;
   query: string;
   limit?: number;
 }): Promise<Post[]> {
@@ -2008,8 +2009,33 @@ export async function searchNearbyPostsDb(options: {
 
   const client = await dbPool.connect();
   try {
-    const { latitude, longitude, query, limit = 5 } = options;
-    const distanceCalc = `earth_distance(ll_to_earth(p.latitude, p.longitude), ll_to_earth($1, $2))`;
+    const { latitude, longitude, city, query, limit = 5 } = options;
+    
+    let whereClause = `
+      p.is_family_post = false
+      AND p.content ILIKE $1
+      AND (p.expires_at IS NULL OR p.expires_at > NOW())
+      AND (p.max_viewers IS NULL OR p.viewcount < p.max_viewers)
+    `;
+    const queryParams: any[] = [`%${query}%`];
+    
+    let distanceCalc = 'NULL';
+
+    if (city) {
+      whereClause += ` AND p.city ILIKE $${queryParams.length + 1}`;
+      queryParams.push(`%${city}%`);
+    } else if (latitude !== undefined && longitude !== undefined) {
+      distanceCalc = `earth_distance(ll_to_earth(p.latitude, p.longitude), ll_to_earth($${queryParams.length + 1}, $${queryParams.length + 2}))`;
+      whereClause += ` AND ${distanceCalc} <= 20000`; // 20km radius
+      queryParams.push(latitude, longitude);
+    } else {
+      // If neither city nor lat/lon is provided, we can't perform a location-based search.
+      // This will return no results, which is correct behavior.
+      return [];
+    }
+
+    queryParams.push(limit);
+    const limitParamIndex = queryParams.length;
 
     const sqlQuery = `
       SELECT
@@ -2018,17 +2044,12 @@ export async function searchNearbyPostsDb(options: {
         ${distanceCalc} as distance
       FROM posts p
       LEFT JOIN users u ON p.authorid = u.id
-      WHERE
-        p.is_family_post = false
-        AND p.content ILIKE $3
-        AND ${distanceCalc} <= 20000 -- 20km radius
-        AND (p.expires_at IS NULL OR p.expires_at > NOW())
-        AND (p.max_viewers IS NULL OR p.viewcount < p.max_viewers)
+      WHERE ${whereClause}
       ORDER BY p.createdat DESC
-      LIMIT $4;
+      LIMIT $${limitParamIndex};
     `;
 
-    const result = await client.query(sqlQuery, [latitude, longitude, `%${query}%`, limit]);
+    const result = await client.query(sqlQuery, queryParams);
     return result.rows;
   } finally {
     client.release();
