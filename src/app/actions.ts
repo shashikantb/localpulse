@@ -3,7 +3,7 @@
 'use server';
 
 import * as db from '@/lib/db';
-import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus, FamilyMember, FamilyMemberLocation, PendingFamilyRequest, Conversation, Message, ConversationParticipant, SortOption, BusinessUser, GorakshakReportUser, PointTransaction } from '@/lib/db-types';
+import type { Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus, FamilyMember, FamilyMemberLocation, PendingFamilyRequest, Conversation, Message, ConversationParticipant, SortOption, BusinessUser, GorakshakReportUser, PointTransaction, UserForNotification } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 import { getSession, encrypt } from '@/app/auth/actions';
 import { getGcsClient, getGcsBucketName } from '@/lib/gcs';
@@ -1128,44 +1128,4 @@ export async function getPointHistory(userId: number): Promise<PointTransaction[
     console.error(`Error fetching point history for user ${userId}:`, error);
     return [];
   }
-}
-
-// --- Admin Notification Functions ---
-export async function getAllUsersWithDeviceTokensDb(): Promise<UserForNotification[]> {
-    await db.ensureDbInitialized();
-    const dbPool = db.getDbPool();
-    if (!dbPool) return [];
-
-    const client = await dbPool.connect();
-    try {
-        const query = `
-            SELECT
-                u.id,
-                u.lp_points as total_points,
-                COALESCE(yp.points_yesterday, 0) as yesterday_points,
-                dt.token,
-                dt.user_auth_token
-            FROM
-                users u
-            JOIN
-                device_tokens dt ON u.id = dt.user_id
-            LEFT JOIN (
-                SELECT
-                    user_id,
-                    SUM(points) as points_yesterday
-                FROM
-                    lp_point_transactions
-                WHERE
-                    created_at >= NOW() - INTERVAL '1 day'
-                GROUP BY
-                    user_id
-            ) yp ON u.id = yp.user_id
-            WHERE
-                u.status = 'approved' AND dt.token IS NOT NULL;
-        `;
-        const result = await client.query(query);
-        return result.rows;
-    } finally {
-        client.release();
-    }
 }
