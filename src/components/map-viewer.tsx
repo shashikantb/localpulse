@@ -5,7 +5,8 @@
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css';
 import 'leaflet-defaulticon-compatibility';
-import 'react-leaflet-cluster/lib/styles.scss';
+import 'react-leaflet-cluster/dist/MarkerCluster.css';
+import 'react-leaflet-cluster/dist/MarkerCluster.Default.css';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
@@ -51,7 +52,7 @@ export default function MapViewer() {
 
   const userIcon = new L.Icon({
     iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+    shadowUrl: 'https://cdnjs.cloudflare.com/libs/leaflet/0.7.7/images/marker-shadow.png',
     iconSize: [25, 41],
     iconAnchor: [12, 41],
     popupAnchor: [1, -34],
@@ -143,7 +144,7 @@ export default function MapViewer() {
         zoom={13}
         scrollWheelZoom={true}
         className="h-full w-full z-0"
-        ref={mapRef}
+        whenCreated={mapInstance => { mapRef.current = mapInstance; }}
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
