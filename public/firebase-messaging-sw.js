@@ -1,70 +1,114 @@
+// This file MUST be in the public folder
 
-// This service worker script must be located at the top-level directory of your site.
-// It will be served from `/firebase-messaging-sw.js`
-// See https://firebase.google.com/docs/cloud-messaging/js/client#retrieve-the-current-registration-token
+// Give the service worker access to Firebase Messaging.
+// Note that you can only use Firebase Messaging here, other Firebase services
+// are not available in the service worker.
+importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js');
 
-// Scripts for Firebase products are imported using the window.importScripts method.
-// These scripts are available at the following URLs:
-// https://firebase.google.com/docs/web/setup#available-libraries
-
-importScripts('https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/9.15.0/firebase-messaging-compat.js');
-
-// Note: This configuration will be dynamically replaced by your actual Firebase config
-// when the client-side code loads. This is just a placeholder.
+// --- START: CONFIGURATION ---
+// Initialize the Firebase app in the service worker by passing in
+// your app's Firebase project configuration.
+// This configuration is PUBLIC and does not contain any secrets.
+// It's the same config you use to initialize Firebase on the client-side.
 const firebaseConfig = {
-  apiKey: "REPLACE_WITH_YOUR_API_KEY",
-  authDomain: "REPLACE_WITH_YOUR_AUTH_DOMAIN",
-  projectId: "REPLACE_WITH_YOUR_PROJECT_ID",
-  storageBucket: "REPLACE_WITH_YOUR_STORAGE_BUCKET",
-  messagingSenderId: "REPLACE_WITH_YOUR_MESSAGING_SENDER_ID",
-  appId: "REPLACE_WITH_YOUR_APP_ID",
+    apiKey: "__REPLACE_WITH_YOUR_FIREBASE_API_KEY__",
+    authDomain: "__REPLACE_WITH_YOUR_FIREBASE_AUTH_DOMAIN__",
+    projectId: "__REPLACE_WITH_YOUR_FIREBASE_PROJECT_ID__",
+    storageBucket: "__REPLACE_WITH_YOUR_FIREBASE_STORAGE_BUCKET__",
+    messagingSenderId: "__REPLACE_WITH_YOUR_FIREBASE_MESSAGING_SENDER_ID__",
+    appId: "__REPLACE_WITH_YOUR_FIREBASE_APP_ID__"
 };
+// --- END: CONFIGURATION ---
 
-firebase.initializeApp(firebaseConfig);
 
-const messaging = firebase.messaging();
+// Initialize Firebase
+try {
+  if (!firebase.apps.length) {
+    const app = firebase.initializeApp(firebaseConfig);
+    const messaging = firebase.messaging(app);
 
-// This handler will be called when a notification is clicked and the app is in the background or closed.
-messaging.onBackgroundMessage((payload) => {
-  console.log('[firebase-messaging-sw.js] Received background message ', payload);
-  // Nothing to do here for clicks, as that's handled by the 'notificationclick' event listener.
-});
+    // --- Background Message Handler ---
+    // This function is triggered when the app is in the background or closed,
+    // and a push notification with a `notification` payload is received.
+    messaging.onBackgroundMessage((payload) => {
+      console.log(
+        '[firebase-messaging-sw.js] Received background message ',
+        payload
+      );
 
-// Event listener for when a user clicks on a notification.
-self.addEventListener('notificationclick', function(event) {
-  event.notification.close();
-  
-  const notificationData = event.notification.data;
-  console.log('[firebase-messaging-sw.js] Notification click received.', notificationData);
+      // --- Handle Location Update Request ---
+      if (payload.data && payload.data.type === 'REQUEST_LOCATION_UPDATE') {
+        console.log('Location update requested by', payload.data.requesterName);
 
-  // Check for a URL in the notification payload.
-  // The server actions (`sendNotificationsForNewPost`, `sendChatNotification`) are configured
-  // to add this data.
-  let openUrl = '/';
-  if (notificationData.postId) {
-      openUrl = `/posts/${notificationData.postId}`;
-  } else if (notificationData.conversationId) {
-      openUrl = `/chat/${notificationData.conversationId}`;
-  }
+        // This is a special return to keep the service worker alive
+        // while we perform the async geolocation task.
+        return new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(
+            async (position) => {
+              const { latitude, longitude } = position.coords;
+              console.log('Got background location:', { latitude, longitude });
 
-  // This function tells the browser to open a new window or focus an existing one.
-  event.waitUntil(
-      clients.matchAll({
-          type: "window"
-      }).then(function(clientList) {
-          // Check if there's already a window open for this site.
-          for (var i = 0; i < clientList.length; i++) {
-              var client = clientList[i];
-              if (client.url === '/' && 'focus' in client) {
-                  // If we find an open window, focus it and navigate to the correct URL.
-                  return client.focus().then(client => client.navigate(openUrl));
+              try {
+                const token = await messaging.getToken();
+                if (token) {
+                  // Use the existing registerDeviceToken server action to update the location
+                  // We're essentially "re-registering" with fresh coordinates.
+                  await fetch('/api/actions/register-token-from-sw', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token, latitude, longitude }),
+                  });
+                  console.log('Successfully sent updated location to server.');
+                  resolve();
+                } else {
+                    console.error('Could not get FCM token in service worker to update location.');
+                    reject('No FCM token available');
+                }
+              } catch (error) {
+                console.error('Error sending location to server:', error);
+                reject(error);
               }
-          }
-          // If no window is open, open a new one.
-          if (clients.openWindow) {
-              return clients.openWindow(openUrl);
-          }
-      })
+            },
+            (error) => {
+              console.error('Error getting geolocation in background:', error);
+              reject(error);
+            },
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+          );
+        });
+      }
+
+      // --- Handle Standard Visible Notifications ---
+      const notificationTitle = payload.notification.title;
+      const notificationOptions = {
+        body: payload.notification.body,
+        icon: '/icons/icon-192x192.png', // Default icon for notifications
+        data: {
+          user_auth_token: payload.data ? payload.data.user_auth_token : undefined,
+        },
+      };
+
+      self.registration.showNotification(notificationTitle, notificationOptions);
+    });
+  }
+} catch (e) {
+  console.error('Error initializing Firebase in Service Worker', e);
+}
+
+
+// --- Notification Click Handler ---
+// This function is triggered when a user clicks on a notification.
+self.addEventListener('notificationclick', (event) => {
+  console.log('[firebase-messaging-sw.js] Notification click Received.', event);
+  event.notification.close();
+
+  const authToken = event.notification.data.user_auth_token;
+
+  // This will open the app and focus it if it's already open.
+  // We append the auth token so the app can auto-login the user.
+  const promiseChain = clients.openWindow(
+    `/?auth_token=${authToken || ''}`
   );
+  event.waitUntil(promiseChain);
 });

@@ -1129,3 +1129,51 @@ export async function getPointHistory(userId: number): Promise<PointTransaction[
     return [];
   }
 }
+
+// --- Location Request Action ---
+export async function requestLocationUpdate(targetUserId: number): Promise<{ success: boolean; error?: string }> {
+  const { user: requester } = await getSession();
+  if (!requester) {
+    return { success: false, error: 'Authentication required.' };
+  }
+  if (!firebaseAdmin) {
+    return { success: false, error: 'Notification service not configured on server.' };
+  }
+
+  try {
+    const tokens = await db.getDeviceTokensForUsersDb([targetUserId]);
+    if (tokens.length === 0) {
+      return { success: false, error: 'User is not available or has notifications disabled.' };
+    }
+
+    const message = {
+      data: {
+        type: 'REQUEST_LOCATION_UPDATE',
+        requesterName: requester.name,
+      },
+      tokens: tokens.map(t => t.token),
+      android: {
+        priority: 'high' as const,
+      },
+      apns: {
+        payload: {
+          aps: {
+            'content-available': 1,
+          },
+        },
+      },
+    };
+
+    const response = await firebaseAdmin.messaging().sendEachForMulticast(message as any);
+
+    if (response.successCount > 0) {
+      return { success: true };
+    } else {
+      console.error('Failed to send location request notification:', response.responses);
+      return { success: false, error: 'Could not send location request. User may be offline.' };
+    }
+  } catch (error: any) {
+    console.error('Error sending location request notification:', error);
+    return { success: false, error: 'An unexpected server error occurred.' };
+  }
+}

@@ -6,11 +6,11 @@ import type { FC } from 'react';
 import React, { useState, useEffect, useTransition } from 'react';
 import Link from 'next/link';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { MapPin, ExternalLink, RefreshCw, Loader2 } from 'lucide-react';
+import { MapPin, ExternalLink, RefreshCw, Loader2, Send } from 'lucide-react';
 import type { FamilyMember } from '@/lib/db-types';
 import LocationSharingToggle from './location-sharing-toggle';
 import { formatDistanceToNowStrict } from 'date-fns';
-import { getFamilyMembers } from '@/app/actions';
+import { getFamilyMembers, requestLocationUpdate } from '@/app/actions';
 import { Skeleton } from './ui/skeleton';
 import { Button } from './ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -23,6 +23,7 @@ const FamilyMembersCard: FC<FamilyMembersCardProps> = ({ userId }) => {
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, startRefreshTransition] = useTransition();
+  const [isRequestingLocation, setIsRequestingLocation] = useState<number | null>(null);
   const { toast } = useToast();
 
   const fetchFamilyMembers = React.useCallback(async () => {
@@ -41,11 +42,23 @@ const FamilyMembersCard: FC<FamilyMembersCardProps> = ({ userId }) => {
     fetchFamilyMembers();
   }, [fetchFamilyMembers]);
 
-  const handleRefresh = () => {
+  const handleManualRefresh = () => {
     startRefreshTransition(async () => {
       await fetchFamilyMembers();
-      toast({ title: 'Refreshed', description: 'Family member locations have been updated.' });
+      toast({ title: 'Refreshed', description: 'Family member list and locations have been updated.' });
     });
+  };
+
+  const handleRequestLiveLocation = async (targetUserId: number) => {
+    setIsRequestingLocation(targetUserId);
+    const result = await requestLocationUpdate(targetUserId);
+    if (result.success) {
+      toast({ title: 'Request Sent', description: 'A request for an updated location has been sent. Please refresh in a moment.' });
+    } else {
+      toast({ variant: 'destructive', title: 'Request Failed', description: result.error });
+    }
+    // Keep loader for a few seconds to give time for the update to come through
+    setTimeout(() => setIsRequestingLocation(null), 5000);
   };
 
   if (isLoading) {
@@ -72,9 +85,9 @@ const FamilyMembersCard: FC<FamilyMembersCardProps> = ({ userId }) => {
   return (
     <div className="space-y-4">
       <div className="text-right">
-          <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={isRefreshing}>
+          <Button variant="ghost" size="sm" onClick={handleManualRefresh} disabled={isRefreshing}>
               {isRefreshing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-              Refresh Locations
+              Refresh List
           </Button>
       </div>
       {familyMembers.map((member) => (
@@ -115,6 +128,18 @@ const FamilyMembersCard: FC<FamilyMembersCardProps> = ({ userId }) => {
                 </div>
             </Link>
             <div className="flex items-center gap-2 flex-shrink-0 self-end sm:self-center">
+                 {member.they_are_sharing_with_me && (
+                    <Button
+                        size="icon"
+                        variant="outline"
+                        className="h-8 w-8"
+                        onClick={() => handleRequestLiveLocation(member.id)}
+                        disabled={isRequestingLocation === member.id}
+                        title="Request live location update"
+                    >
+                        {isRequestingLocation === member.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    </Button>
+                 )}
                 <span className="text-sm text-muted-foreground">Share My Location</span>
                 <LocationSharingToggle
                     targetUserId={member.id}
