@@ -2,7 +2,7 @@
 'use server';
 
 import { getPendingUsersDb, updateUserStatusDb } from '@/lib/db';
-import type { User, UserStatus } from '@/lib/db-types';
+import type { User } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 
 export async function getPendingUsers(): Promise<User[]> {
@@ -14,10 +14,9 @@ export async function getPendingUsers(): Promise<User[]> {
   }
 }
 
-export async function approveUser(userId: number, asVerified: boolean = false): Promise<{ success: boolean; error?: string }> {
-  const status: UserStatus = asVerified ? 'verified' : 'approved';
+export async function approveUser(userId: number): Promise<{ success: boolean; error?: string }> {
   try {
-    const updatedUser = await updateUserStatusDb(userId, status);
+    const updatedUser = await updateUserStatusDb(userId, 'approved');
     if (updatedUser) {
       revalidatePath('/admin/approvals');
       revalidatePath('/admin/users');

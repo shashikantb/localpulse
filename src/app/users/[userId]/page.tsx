@@ -31,6 +31,7 @@ import UpdateUserDetailsModal from '@/components/update-user-details-modal';
 import Link from 'next/link';
 import ReferralSharer from '@/components/referral-sharer';
 import LpPointsHistoryDialog from '@/components/lp-points-history-dialog';
+import RequestVerificationButton from '@/components/request-verification-button';
 
 interface UserProfilePageProps {
   params: {
@@ -61,7 +62,7 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
     getFamilyRelationshipStatus(sessionUser, userId)
   ]);
 
-  if (!profileUser || (profileUser.status !== 'approved' && profileUser.status !== 'verified')) {
+  if (!profileUser || (profileUser.status === 'pending' || profileUser.status === 'rejected')) {
     notFound();
   }
 
@@ -210,6 +211,10 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
             </div>
           </CardHeader>
         </Card>
+        
+        {isOwnProfile && isBusiness && profileUser.status === 'approved' && (
+          <RequestVerificationButton />
+        )}
 
         {isOwnProfile && profileUser.referral_code && <ReferralSharer code={profileUser.referral_code} />}
 

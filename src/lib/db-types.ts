@@ -43,7 +43,7 @@ export const BUSINESS_CATEGORIES = {
   ],
 };
 
-export type UserStatus = 'pending' | 'approved' | 'rejected' | 'verified';
+export type UserStatus = 'pending' | 'approved' | 'rejected' | 'verified' | 'pending_verification';
 
 // Define the structure of a User for client-side use (omitting password)
 export interface User {
@@ -347,7 +347,6 @@ export interface PointTransaction {
   description: string;
   created_at: string;
 }
-
 
 // --- Admin Notification Types ---
 export interface UserForNotification {

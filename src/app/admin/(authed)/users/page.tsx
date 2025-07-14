@@ -19,6 +19,7 @@ const AdminManageUsersPage: FC = async () => {
     switch (status) {
         case 'verified': return 'success';
         case 'approved': return 'default';
+        case 'pending_verification': return 'secondary';
         case 'pending': return 'secondary';
         case 'rejected': return 'destructive';
         default: return 'secondary';
@@ -29,6 +30,7 @@ const AdminManageUsersPage: FC = async () => {
     switch (status) {
         case 'verified': return <BadgeCheck className="w-3 h-3 mr-1 text-green-500" />;
         case 'approved': return <CheckCircle className="w-3 h-3 mr-1 text-primary-foreground" />;
+        case 'pending_verification': return <Clock className="w-3 h-3 mr-1 text-yellow-500" />;
         case 'pending': return <Clock className="w-3 h-3 mr-1 text-yellow-500" />;
         case 'rejected': return <XCircle className="w-3 h-3 mr-1 text-red-500" />;
         default: return null;
@@ -86,7 +88,7 @@ const AdminManageUsersPage: FC = async () => {
                     <td className="p-3">
                         <Badge variant={getStatusVariant(user.status)} className="capitalize">
                             {getStatusIcon(user.status)}
-                            {user.status}
+                            {user.status.replace('_', ' ')}
                         </Badge>
                     </td>
                     <td className="p-3 text-muted-foreground">{new Date(user.createdat).toLocaleDateString()}</td>

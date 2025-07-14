@@ -61,7 +61,8 @@ export async function signUp(newUser: NewUser): Promise<{ success: boolean; erro
       return { success: false, error: 'An account with this email already exists.' };
     }
 
-    const status: UserStatus = 'pending';
+    // Business users can log in immediately, others must be approved.
+    const status: UserStatus = newUser.role === 'Business' ? 'approved' : 'pending';
 
     const user = await createUserDb({ ...newUser, email: emailLower }, status);
     if (user) {
@@ -87,6 +88,7 @@ export async function login(email: string, password: string): Promise<{ success:
     if (user.status !== 'approved' && user.status !== 'verified') {
         if(user.status === 'pending') return { success: false, error: 'Your account is pending approval by an administrator.' };
         if(user.status === 'rejected') return { success: false, error: 'Your account has been rejected.' };
+        if(user.status === 'pending_verification') return { success: false, error: 'Your business account is pending verification by an administrator.' };
         return { success: false, error: 'This account is not active.' };
     }
 

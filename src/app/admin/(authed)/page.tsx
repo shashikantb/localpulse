@@ -4,13 +4,15 @@ import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { BarChart, Users, FileText, Activity } from 'lucide-react';
+import { getAdminDashboardStats } from './actions';
 
-const AdminDashboardPage: FC = () => {
-  // In a real app, these would come from data fetching
+const AdminDashboardPage: FC = async () => {
+  const { totalPosts, totalUsers, dailyActiveUsers } = await getAdminDashboardStats();
+  
   const stats = [
-    { title: 'Total Posts', value: '1,234', icon: FileText, color: 'text-blue-500' },
-    { title: 'Active Users', value: '567', icon: Users, color: 'text-green-500' },
-    { title: 'Daily Activity', value: 'High', icon: Activity, color: 'text-yellow-500' },
+    { title: 'Total Posts', value: totalPosts.toLocaleString(), icon: FileText, color: 'text-blue-500' },
+    { title: 'Total Users', value: totalUsers.toLocaleString(), icon: Users, color: 'text-green-500' },
+    { title: 'Users Active Today', value: dailyActiveUsers.toLocaleString(), icon: Activity, color: 'text-yellow-500' },
   ];
 
   return (
@@ -31,7 +33,6 @@ const AdminDashboardPage: FC = () => {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-foreground">{stat.value}</div>
-              {/* <p className="text-xs text-muted-foreground">+20.1% from last month</p> */}
             </CardContent>
           </Card>
         ))}

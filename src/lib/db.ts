@@ -1,7 +1,7 @@
 
 
 import { Pool, Client, type QueryResult } from 'pg';
-import type { Poll, PollOption, UserForNotification, PointTransaction, PointTransactionReason, User as DbUser, Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest, FamilyMember, FamilyMemberLocation, SortOption, UpdateBusinessCategory, BusinessUser, GorakshakReportUser, UserStatus } from '@/lib/db-types';
+import type { PointTransaction, UserForNotification, PointTransactionReason, User as DbUser, Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest, FamilyMember, FamilyMemberLocation, SortOption, UpdateBusinessCategory, BusinessUser, GorakshakReportUser, UserStatus, Poll } from '@/lib/db-types';
 import bcrypt from 'bcryptjs';
 import { customAlphabet } from 'nanoid';
 
@@ -76,7 +76,7 @@ async function initializeDbSchema(): Promise<void> {
             email VARCHAR(255) UNIQUE NOT NULL,
             passwordhash VARCHAR(255) NOT NULL,
             role VARCHAR(50) NOT NULL CHECK (role IN ('Business', 'Gorakshak', 'Gorakshak Admin', 'Admin', 'Public(जनता)')),
-            status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'verified')),
+            status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'verified', 'pending_verification')),
             createdat TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
             profilepictureurl TEXT,
             mobilenumber VARCHAR(20),
@@ -86,7 +86,8 @@ async function initializeDbSchema(): Promise<void> {
             longitude REAL,
             lp_points INTEGER DEFAULT 0 NOT NULL,
             referral_code VARCHAR(10) UNIQUE,
-            referred_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL
+            referred_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            last_active TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
         `);
         
@@ -98,10 +99,11 @@ async function initializeDbSchema(): Promise<void> {
         await initClient.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS lp_points INTEGER DEFAULT 0 NOT NULL;`);
         await initClient.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code VARCHAR(10) UNIQUE;`);
         await initClient.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL;`);
+        await initClient.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;`);
         
         // Add a check constraint to the user status
         await initClient.query(`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_status_check;`);
-        await initClient.query(`ALTER TABLE users ADD CONSTRAINT users_status_check CHECK (status IN ('pending', 'approved', 'rejected', 'verified'));`);
+        await initClient.query(`ALTER TABLE users ADD CONSTRAINT users_status_check CHECK (status IN ('pending', 'approved', 'rejected', 'verified', 'pending_verification'));`);
 
         // Posts Table
         await initClient.query(`
@@ -260,6 +262,7 @@ async function initializeDbSchema(): Promise<void> {
         await initClient.query('CREATE INDEX IF NOT EXISTS users_gorakshak_geo_idx ON users USING gist (ll_to_earth(latitude, longitude)) WHERE role = \'Gorakshak\' OR role = \'Gorakshak Admin\'');
         await initClient.query('CREATE UNIQUE INDEX IF NOT EXISTS users_referral_code_unique_idx ON users (referral_code) WHERE referral_code IS NOT NULL;');
         await initClient.query('CREATE INDEX IF NOT EXISTS lp_point_transactions_user_id ON lp_point_transactions(user_id);');
+        await initClient.query('CREATE INDEX IF NOT EXISTS idx_users_last_active ON users (last_active DESC);');
 
 
         await initClient.query('COMMIT');
@@ -767,6 +770,7 @@ export async function addOrUpdateDeviceTokenDb(token: string, latitude?: number,
 
   const client = await dbPool.connect();
   try {
+      await client.query('BEGIN');
       const query = `
       INSERT INTO device_tokens (token, latitude, longitude, user_id, last_updated, user_auth_token)
       VALUES ($1, $2, $3, $4, NOW(), $5)
@@ -779,10 +783,15 @@ export async function addOrUpdateDeviceTokenDb(token: string, latitude?: number,
     `;
     await client.query(query, [token, latitude, longitude, userId, userAuthToken]);
 
-    // Also update the user's last known location if they are a business
-    if (userId && latitude && longitude) {
-        await client.query(`UPDATE users SET latitude = $1, longitude = $2 WHERE id = $3`, [latitude, longitude, userId]);
+    if (userId) {
+        // Also update the user's main location and last_active timestamp
+        await client.query(`UPDATE users SET latitude = $1, longitude = $2, last_active = NOW() WHERE id = $3`, [latitude, longitude, userId]);
     }
+    await client.query('COMMIT');
+
+  } catch(e) {
+    await client.query('ROLLBACK');
+    throw e;
   } finally {
     client.release();
   }
@@ -794,16 +803,21 @@ export async function updateUserLocationDb(userId: number, latitude: number, lon
   if (!dbPool) return;
   const client = await dbPool.connect();
   try {
-    // This query updates all tokens for a user. If they have none, it does nothing.
+    await client.query('BEGIN');
     const query = `
       UPDATE device_tokens 
       SET latitude = $1, longitude = $2, last_updated = NOW()
       WHERE user_id = $3;
     `;
     await client.query(query, [latitude, longitude, userId]);
-     if (latitude && longitude) {
-        await client.query(`UPDATE users SET latitude = $1, longitude = $2 WHERE id = $3`, [latitude, longitude, userId]);
+    
+    if (latitude && longitude) {
+        await client.query(`UPDATE users SET latitude = $1, longitude = $2, last_active = NOW() WHERE id = $3`, [latitude, longitude, userId]);
     }
+    await client.query('COMMIT');
+  } catch(e) {
+    await client.query('ROLLBACK');
+    throw e;
   } finally {
     client.release();
   }
@@ -992,7 +1006,7 @@ export async function getLikedPostIdsForUserDb(userId: number, postIds: number[]
   }
 }
 
-export async function createUserDb(newUser: NewUser, status: 'pending' | 'approved' = 'pending'): Promise<User> {
+export async function createUserDb(newUser: NewUser, status: UserStatus): Promise<User> {
     await ensureDbInitialized();
     const dbPool = getDbPool();
     if (!dbPool) throw new Error("Database not configured. Cannot create user.");
@@ -1084,6 +1098,7 @@ export async function getUserByIdDb(id: number): Promise<User | null> {
 
     const client = await dbPool.connect();
     try {
+      await client.query('UPDATE users SET last_active = NOW() WHERE id = $1', [id]);
       const query = `SELECT ${USER_COLUMNS_SANITIZED} FROM users WHERE id = $1`;
       const result: QueryResult<User> = await client.query(query, [id]);
       
@@ -1390,7 +1405,7 @@ export async function searchUsersDb(query: string, currentUserId?: number): Prom
       SELECT ${USER_COLUMNS_SANITIZED}
       FROM users 
       WHERE name ILIKE $1 
-        AND status = 'approved'
+        AND status IN ('approved', 'verified')
         AND id != (${officialUserSubquery})
         AND ($2::int IS NULL OR id != $2::int)
       LIMIT 10;
@@ -2131,7 +2146,7 @@ export async function getNearbyBusinessesDb(options: {
         SELECT ${USER_COLUMNS_SANITIZED}, ${distanceCalc} as distance
         FROM users
         WHERE role = 'Business'
-          AND status = 'approved'
+          AND status IN ('approved', 'verified')
           AND latitude IS NOT NULL AND longitude IS NOT NULL
           AND ${distanceCalc} <= $3
           ${categoryFilter}
@@ -2158,7 +2173,7 @@ export async function getBusinessesInBoundsDb(bounds: { ne: { lat: number, lng: 
       SELECT ${USER_COLUMNS_SANITIZED}, latitude, longitude
       FROM users
       WHERE role = 'Business'
-        AND status = 'approved'
+        AND status IN ('approved', 'verified')
         AND latitude < $1 AND latitude > $2
         AND longitude < $3 AND longitude > $4
       LIMIT 200;
@@ -2286,7 +2301,7 @@ export async function getPointHistoryForUserDb(userId: number): Promise<PointTra
     }
 }
 
-// --- Admin Notification Functions ---
+// --- Admin Dashboard & Notification Functions ---
 export async function getAllUsersWithDeviceTokensDb(): Promise<UserForNotification[]> {
     await ensureDbInitialized();
     const dbPool = getDbPool();
@@ -2324,4 +2339,31 @@ export async function getAllUsersWithDeviceTokensDb(): Promise<UserForNotificati
     } finally {
         client.release();
     }
+}
+
+export async function getAdminDashboardStatsDb(): Promise<{ totalUsers: number; totalPosts: number; dailyActiveUsers: number }> {
+  await ensureDbInitialized();
+  const dbPool = getDbPool();
+  if (!dbPool) return { totalUsers: 0, totalPosts: 0, dailyActiveUsers: 0 };
+
+  const client = await dbPool.connect();
+  try {
+    const totalUsersQuery = "SELECT COUNT(*) FROM users";
+    const totalPostsQuery = "SELECT COUNT(*) FROM posts";
+    const dailyActiveUsersQuery = "SELECT COUNT(*) FROM users WHERE last_active >= NOW() - INTERVAL '24 hours'";
+
+    const [totalUsersResult, totalPostsResult, dailyActiveUsersResult] = await Promise.all([
+      client.query(totalUsersQuery),
+      client.query(totalPostsQuery),
+      client.query(dailyActiveUsersQuery),
+    ]);
+
+    return {
+      totalUsers: parseInt(totalUsersResult.rows[0].count, 10),
+      totalPosts: parseInt(totalPostsResult.rows[0].count, 10),
+      dailyActiveUsers: parseInt(dailyActiveUsersResult.rows[0].count, 10),
+    };
+  } finally {
+    client.release();
+  }
 }

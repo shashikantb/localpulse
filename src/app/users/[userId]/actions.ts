@@ -3,7 +3,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { getSession } from '@/app/auth/actions';
-import { updateUserMobileDb, updateUserBusinessCategoryDb } from '@/lib/db';
+import { updateUserMobileDb, updateUserBusinessCategoryDb, updateUserStatusDb } from '@/lib/db';
 import { z } from 'zod';
 import type { UpdateBusinessCategory } from '@/lib/db-types';
 
@@ -43,5 +43,23 @@ export async function updateUserBusinessCategory(data: UpdateBusinessCategory) {
     return { success: true };
   } catch (error: any) {
     return { success: false, error: 'Failed to update business category.' };
+  }
+}
+
+export async function requestBusinessVerification(): Promise<{ success: boolean; error?: string }> {
+  const { user } = await getSession();
+  if (!user || user.role !== 'Business') {
+    return { success: false, error: 'Only business users can request verification.' };
+  }
+
+  try {
+    const updatedUser = await updateUserStatusDb(user.id, 'pending_verification');
+    if (updatedUser) {
+      revalidatePath(`/users/${user.id}`);
+      return { success: true };
+    }
+    return { success: false, error: 'Failed to update status.' };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }

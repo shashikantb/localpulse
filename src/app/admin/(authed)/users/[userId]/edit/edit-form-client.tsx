@@ -23,7 +23,7 @@ const userUpdateSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters.'),
   email: z.string().email('Please enter a valid email address.'),
   role: z.enum(['Business', 'Gorakshak', 'Public(जनता)', 'Admin', 'Gorakshak Admin']),
-  status: z.enum(['pending', 'approved', 'rejected', 'verified']),
+  status: z.enum(['pending', 'approved', 'rejected', 'verified', 'pending_verification']),
 });
 
 type UserUpdateFormInputs = z.infer<typeof userUpdateSchema>;
@@ -135,6 +135,7 @@ const UserEditForm: FC<UserEditFormProps> = ({ user }) => {
                 </FormControl>
                 <SelectContent>
                   <SelectItem value="pending">Pending</SelectItem>
+                  {isBusinessUser && <SelectItem value="pending_verification">Pending Verification</SelectItem>}
                   <SelectItem value="approved">Approved</SelectItem>
                   {isBusinessUser && <SelectItem value="verified">Verified</SelectItem>}
                   <SelectItem value="rejected">Rejected</SelectItem>
