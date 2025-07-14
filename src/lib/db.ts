@@ -1212,6 +1212,27 @@ export async function getPendingUsersDb(): Promise<User[]> {
     }
 }
 
+export async function getPendingVerificationDb(): Promise<User[]> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return [];
+
+    const client = await dbPool.connect();
+    try {
+      const query = `
+          SELECT ${USER_COLUMNS_SANITIZED}
+          FROM users 
+          WHERE status = 'pending_verification'
+          ORDER BY createdat ASC;
+      `;
+      const result: QueryResult<User> = await client.query(query);
+      return result.rows;
+    } finally {
+      client.release();
+    }
+}
+
+
 export async function getAllUsersDb(): Promise<User[]> {
     await ensureDbInitialized();
     const dbPool = getDbPool();
