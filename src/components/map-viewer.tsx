@@ -9,7 +9,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import type { LatLngExpression, Map as LeafletMap } from 'leaflet';
 import L from 'leaflet';
-import 'leaflet.heat'; // Import leaflet.heat
 import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { getPostsForMap } from '@/app/actions';
@@ -43,21 +42,24 @@ const HeatmapComponent = ({ posts }: { posts: Post[] }) => {
     const heatmapLayerRef = useRef<L.HeatLayer | null>(null);
 
     useEffect(() => {
-        if (!map) return;
+        // Dynamically import leaflet.heat only on the client side
+        import('leaflet.heat').then(() => {
+            if (!map) return;
 
-        // Create or update heatmap layer
-        if (heatmapLayerRef.current) {
-            map.removeLayer(heatmapLayerRef.current);
-        }
+            // Create or update heatmap layer
+            if (heatmapLayerRef.current) {
+                map.removeLayer(heatmapLayerRef.current);
+            }
 
-        if (posts.length > 0) {
-            const points = posts.map(p => [p.latitude, p.longitude, 1] as L.HeatLatLngTuple);
-            heatmapLayerRef.current = (L as any).heatLayer(points, { 
-                radius: 20, 
-                blur: 15,
-                max: 1.0
-            }).addTo(map);
-        }
+            if (posts.length > 0) {
+                const points = posts.map(p => [p.latitude, p.longitude, 1] as L.HeatLatLngTuple);
+                heatmapLayerRef.current = (L as any).heatLayer(points, { 
+                    radius: 20, 
+                    blur: 15,
+                    max: 1.0
+                }).addTo(map);
+            }
+        });
         
     }, [posts, map]);
 
@@ -167,7 +169,7 @@ export default function MapViewer() {
         zoom={13}
         scrollWheelZoom={true}
         className="h-full w-full z-0"
-        ref={mapRef}
+        whenCreated={instance => { mapRef.current = instance; }}
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
