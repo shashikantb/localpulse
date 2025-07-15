@@ -50,7 +50,7 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
   const [showComments, setShowComments] = useState(false);
   const [currentOrigin, setCurrentOrigin] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [isInternallyMuted, setIsInternallyMuted] = useState(true); // Default to muted for better autoplay
+  const [isInternallyMuted, setIsInternallyMuted] = useState(true);
   const [mediaError, setMediaError] = useState(false);
 
   useEffect(() => {
@@ -59,7 +59,6 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
     }
   }, []);
   
-  // This effect resets the state of the component when the post prop changes.
   useEffect(() => {
     setDisplayLikeCount(post.likecount);
     setDisplayCommentCount(post.commentcount);
@@ -68,7 +67,6 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
     } else {
         setIsLikedByClient(getAnonymousLikedPosts().includes(post.id));
     }
-    // Reset interaction states for the new reel
     setShowComments(false);
     setIsInternallyMuted(true);
     setMediaError(false);
@@ -78,13 +76,11 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
 
   useEffect(() => {
     const videoElement = videoRef.current;
-    // Do not control video if it's an iframe or not the active reel
     if (!videoElement || post.mediatype !== 'video' || post.mediaurls?.[0]?.includes('youtube.com/embed')) {
       return;
     }
 
     if (isActive) {
-      // This reel is active, so we try to play it.
       videoElement.muted = isInternallyMuted;
       const playPromise = videoElement.play();
       if (playPromise !== undefined) {
@@ -100,13 +96,12 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
         });
       }
     } else {
-      // This reel is not active, just pause it.
       videoElement.pause();
     }
   }, [isActive, post.mediatype, post.mediaurls, isInternallyMuted]);
   
   const handleRetryVideo = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent the main video tap handler from firing
+    e.stopPropagation();
     if (videoRef.current) {
         setMediaError(false);
         videoRef.current.load();
@@ -121,7 +116,6 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
     const originalLikeState = isLikedByClient;
     const originalLikeCount = displayLikeCount;
 
-    // Optimistic UI update
     setIsLikedByClient(!originalLikeState);
     setDisplayLikeCount(prev => originalLikeState ? prev - 1 : prev + 1);
 
@@ -132,22 +126,18 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
 
         if (result.error || !result.post) {
             console.error("Failed to toggle like:", result.error);
-            // Revert UI on failure
             setIsLikedByClient(originalLikeState);
             setDisplayLikeCount(originalLikeCount);
         } else {
-             // If anonymous, update local storage
             if (!sessionUser) {
                 const currentLikes = getAnonymousLikedPosts();
                 window.localStorage.setItem('localpulse-anonymous-likes', JSON.stringify([...currentLikes, post.id]));
             }
-            // Sync with server state just in case
             setDisplayLikeCount(result.post.likecount);
             setIsLikedByClient(result.post.isLikedByCurrentUser || !sessionUser);
         }
     } catch (error) {
         console.error("An unexpected server error occurred during like action:", error);
-        // Revert UI on unexpected error
         setIsLikedByClient(originalLikeState);
         setDisplayLikeCount(originalLikeCount);
     } finally {
@@ -231,7 +221,7 @@ export const ReelItem: FC<ReelItemProps> = ({ post, isActive, sessionUser }) => 
                   ref={videoRef}
                   src={post.mediaurls[0]}
                   loop
-                  playsInline // Important for iOS
+                  playsInline
                   preload="auto"
                   onError={() => setMediaError(true)}
                   className={cn("w-full h-full object-contain", mediaError && "invisible")}

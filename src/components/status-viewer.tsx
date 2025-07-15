@@ -26,7 +26,7 @@ const StatusViewer: React.FC<StatusViewerProps> = ({ users, initialUserIndex, on
   const [isPaused, setIsPaused] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const timerRef = useRef<NodeJS.Timeout>();
-  const progressTimerRef = useRef<NodeJS.Timeout>();
+  const progressTimerRef = useRef<NodeJS.Timer>();
 
   const currentUser = users[currentUserIndex];
   const currentStatus = currentUser?.statuses[currentStatusIndex];
@@ -49,7 +49,7 @@ const StatusViewer: React.FC<StatusViewerProps> = ({ users, initialUserIndex, on
       setCurrentUserIndex(currentUserIndex + 1);
       setCurrentStatusIndex(0);
     } else {
-      onClose(); // Close if it's the last user
+      onClose();
     }
   }, [currentUserIndex, users.length, onClose]);
   
@@ -63,7 +63,6 @@ const StatusViewer: React.FC<StatusViewerProps> = ({ users, initialUserIndex, on
 
   useEffect(() => {
     setProgress(0);
-    // Don't reset isPaused here, allow it to persist across status changes
     clearTimeout(timerRef.current);
     clearInterval(progressTimerRef.current);
 
@@ -140,7 +139,6 @@ const StatusViewer: React.FC<StatusViewerProps> = ({ users, initialUserIndex, on
           if(videoRef.current) {
               newIsPaused ? videoRef.current.pause() : videoRef.current.play();
           }
-          // The useEffect will handle restarting timers when un-paused
           return newIsPaused;
       });
   };
@@ -148,13 +146,12 @@ const StatusViewer: React.FC<StatusViewerProps> = ({ users, initialUserIndex, on
   return (
     <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center animate-in fade-in-0" onClick={onClose}>
       
-      {/* Preloader for the next status */}
       {nextStatusToPreload && nextStatusToPreload.media_type === 'image' && (
         <div style={{ display: 'none' }}>
             <Image
                 src={nextStatusToPreload.media_url}
-                alt="" // Alt text is empty as it's not visible
-                width={1024} // Preload a reasonable size for quality
+                alt=""
+                width={1024}
                 height={1024}
                 priority={false}
                 data-ai-hint="user status"
@@ -166,7 +163,6 @@ const StatusViewer: React.FC<StatusViewerProps> = ({ users, initialUserIndex, on
       )}
       
       <div className="relative w-full h-full max-w-md max-h-[95vh] sm:max-h-screen sm:rounded-lg overflow-hidden flex flex-col items-center justify-center" onClick={(e) => e.stopPropagation()}>
-          {/* Main content area */}
           <div className="absolute inset-0 w-full h-full" onClick={handleTap}>
             {currentStatus.media_type === 'image' && (
               <Image src={currentStatus.media_url} alt="Status" fill style={{ objectFit: 'contain' }} priority data-ai-hint="user status" />
@@ -176,7 +172,6 @@ const StatusViewer: React.FC<StatusViewerProps> = ({ users, initialUserIndex, on
             )}
           </div>
           
-          {/* Top overlay */}
           <div className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/60 to-transparent z-10">
               <div className="flex items-center gap-2 mb-2">
                   {currentUser.statuses.map((_, index) => (
@@ -200,7 +195,6 @@ const StatusViewer: React.FC<StatusViewerProps> = ({ users, initialUserIndex, on
               </div>
           </div>
 
-          {/* Navigation Arrows */}
           <button onClick={(e) => { e.stopPropagation(); goToPrevUser(); }} disabled={currentUserIndex === 0} className="absolute left-2 top-1/2 -translate-y-1/2 z-20 text-white bg-black/30 p-2 rounded-full hover:bg-black/60 disabled:opacity-30 hidden sm:block">
             <ChevronLeft className="h-6 w-6" />
           </button>

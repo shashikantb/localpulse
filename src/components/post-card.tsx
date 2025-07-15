@@ -1,5 +1,4 @@
 
-
 'use client';
 import type { FC } from 'react';
 import React, { useState, useEffect, useRef } from 'react';
@@ -153,7 +152,6 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
   };
 
   useEffect(() => {
-    // Only run view tracking if it's not the author's own post.
     if (sessionUser && sessionUser.id === post.authorid) {
         return;
     }
@@ -163,11 +161,11 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
         const entry = entries[0];
         if (entry.isIntersecting && !wasViewed) {
           recordPostView(post.id);
-          setWasViewed(true); // Ensure it's only called once per page load
-          observer.disconnect(); // We're done with this observer for this card
+          setWasViewed(true);
+          observer.disconnect();
         }
       },
-      { threshold: 0.6 } // Trigger when 60% of the card is visible
+      { threshold: 0.6 }
     );
 
     const currentCardRef = cardRef.current;
@@ -182,6 +180,29 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
       observer.disconnect();
     };
   }, [post.id, wasViewed, sessionUser, post.authorid]);
+  
+  useEffect(() => {
+      const videoElement = videoRef.current;
+      if (!videoElement || isYouTubeVideo) return;
+
+      const observer = new IntersectionObserver(
+          (entries) => {
+              const entry = entries[0];
+              if (entry.isIntersecting) {
+                  videoElement.play().catch(e => console.warn("Video autoplay was prevented.", e));
+              } else {
+                  videoElement.pause();
+              }
+          },
+          { threshold: 0.5 } // Play when 50% of the video is visible
+      );
+
+      observer.observe(videoElement);
+
+      return () => {
+          observer.unobserve(videoElement);
+      };
+  }, [post.id, isYouTubeVideo]);
 
 
   useEffect(() => {
@@ -190,7 +211,6 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
     }
   }, []);
   
-  // Sync state if post prop changes (e.g., from feed refresh)
   useEffect(() => {
     setDisplayLikeCount(post.likecount);
     setDisplayCommentCount(post.commentcount);
@@ -210,7 +230,6 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
     const originalLikeState = isLikedByClient;
     const originalLikeCount = displayLikeCount;
 
-    // Optimistic UI update
     setIsLikedByClient(!originalLikeState);
     setDisplayLikeCount(prev => originalLikeState ? prev - 1 : prev + 1);
 
@@ -220,21 +239,17 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
             : await likePostAnonymously(post.id);
 
         if (result.error || !result.post) {
-            // Revert UI on failure
             setIsLikedByClient(originalLikeState);
             setDisplayLikeCount(originalLikeCount);
         } else {
-            // If anonymous, update local storage
             if (!sessionUser) {
                 const currentLikes = getAnonymousLikedPosts();
                 window.localStorage.setItem('localpulse-anonymous-likes', JSON.stringify([...currentLikes, post.id]));
             }
-            // Sync with server state just in case
             setDisplayLikeCount(result.post.likecount);
             setIsLikedByClient(result.post.isLikedByCurrentUser || !sessionUser);
         }
     } catch (error) {
-        // Revert UI on unexpected error
         setIsLikedByClient(originalLikeState);
         setDisplayLikeCount(originalLikeCount);
     } finally {
@@ -249,7 +264,6 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
         title: 'Post Deleted',
         description: 'Your post has been successfully removed.',
       });
-      // The revalidatePath in the action will handle the refresh.
     } else {
       toast({
         variant: 'destructive',
@@ -271,11 +285,9 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
       try {
         await navigator.share(shareData);
       } catch (error) {
-        // This error is often triggered by the user canceling the share dialog, so it's best to ignore it.
         console.log('Share canceled or failed:', error);
       }
     } else {
-      // Fallback for desktop or browsers that don't support the Web Share API
       try {
         await navigator.clipboard.writeText(postUrl);
         toast({ title: 'Link Copied!', description: 'The link to this pulse has been copied to your clipboard.' });
@@ -300,7 +312,6 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
   const renderContentWithMentionsAndLinks = () => {
     let contentToRender = post.content;
     
-    // If we're displaying an embedded YouTube video, remove the link from the text to avoid duplication.
     if (isYouTubeVideo && contentToRender) {
       const ytRegex = /(?:https?:\/\/)?(?:www\.)?(?:m\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=|embed\/|v\/|shorts\/)?([a-zA-Z0-9_-]{11})(?:\S+)?/;
       contentToRender = contentToRender.replace(ytRegex, '').trim();
@@ -564,7 +575,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
                       </>
                   ) : post.mediatype === 'video' ? (
                     <>
-                      <video ref={videoRef} controls src={post.mediaurls[0]} className={cn("w-full h-full object-contain pointer-events-none", mediaError && "hidden")} onError={() => setMediaError(true)} />
+                      <video ref={videoRef} loop muted playsInline src={post.mediaurls[0]} className={cn("w-full h-full object-contain", mediaError && "hidden")} onError={() => setMediaError(true)} />
                       {mediaError && (
                           <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center text-white p-4">
                               <AlertTriangle className="w-8 h-8 mb-2 text-yellow-400" />
