@@ -15,7 +15,10 @@ import dynamic from 'next/dynamic';
 
 const FirebaseMessagingClient = dynamic(
   () => import('@/components/firebase-messaging-client'),
-  { ssr: false }
+  { 
+    ssr: false,
+    loading: () => null // Add a null loading component
+  }
 );
 
 
