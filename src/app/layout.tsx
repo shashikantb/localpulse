@@ -28,6 +28,7 @@ const FirebaseMessagingClient = dynamic(
 export const metadata: Metadata = {
   title: 'LocalPulse',
   description: 'Share and discover what\'s happening around you',
+  manifest: '/manifest.json', // PWA Manifest
 };
 
 export default async function RootLayout({
@@ -42,7 +43,10 @@ export default async function RootLayout({
     <html lang="en" className="h-full" suppressHydrationWarning>
       <head>
         <meta charSet="UTF-8" />
-        {/* Next.js will populate this head based on metadata and other conventions */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="LocalPulse" />
+        <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
       </head>
       <body className={`${GeistSans.variable} antialiased bg-background text-foreground flex flex-col min-h-svh`}>
         <Providers>
