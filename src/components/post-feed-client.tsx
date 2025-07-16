@@ -1,10 +1,11 @@
 
+
 'use client';
 
 import React, { type FC } from 'react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Post, User, SortOption, BusinessUser } from '@/lib/db-types';
-import { getPosts, getFamilyPosts, getNearbyBusinesses, registerDeviceToken, updateUserLocation } from '@/app/actions';
+import { getPosts, getFamilyPosts, getNearbyBusinesses, registerDeviceToken, updateUserLocation, getUnreadFamilyPostCount, markFamilyFeedAsRead } from '@/app/actions';
 import { PostCard } from '@/components/post-card';
 import { PostFeedSkeleton } from '@/components/post-feed-skeleton';
 import { Card, CardContent } from '@/components/ui/card';
@@ -35,6 +36,7 @@ import {
 import { BUSINESS_CATEGORIES } from '@/lib/db-types';
 import BusinessCard from './business-card';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { cn } from '@/lib/utils';
 
 interface AndroidInterface {
   getFCMToken?: () => string | null;
@@ -149,7 +151,21 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser, initialPosts }) 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [notificationPermissionStatus, setNotificationPermissionStatus] = useState<'default' | 'loading' | 'granted' | 'denied'>('default');
   const [showTroubleshootingDialog, setShowTroubleshootingDialog] = useState(false);
+  const [unreadFamilyPostCount, setUnreadFamilyPostCount] = useState(0);
+
   
+  // Fetch unread family post count on initial load and periodically
+  useEffect(() => {
+    if (!sessionUser) return;
+    const fetchCount = () => {
+      getUnreadFamilyPostCount().then(setUnreadFamilyPostCount);
+    };
+    fetchCount(); // Initial fetch
+    const intervalId = setInterval(fetchCount, 30000); // Poll every 30 seconds
+    return () => clearInterval(intervalId);
+  }, [sessionUser]);
+
+
   const fetchPosts = useCallback(async (feed: 'nearby' | 'family', page: number, sort: SortOption, currentLoc: { latitude: number; longitude: number } | null) => {
     setFeeds(prev => ({ ...prev, [feed]: { ...prev[feed], isLoading: true } }));
 
@@ -231,13 +247,21 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser, initialPosts }) 
     const newTab = value as FeedType;
     setActiveTab(newTab);
     
-    if (newTab === 'business') {
+    if (newTab === 'family') {
+      if (unreadFamilyPostCount > 0) {
+        markFamilyFeedAsRead();
+        setUnreadFamilyPostCount(0);
+      }
+      if (feeds.family.posts.length === 0 && !feeds.family.isLoading) {
+        fetchPosts('family', 1, sortBy, location);
+      }
+    } else if (newTab === 'business') {
         if (businessFeed.businesses.length === 0 && !businessFeed.isLoading) {
             fetchBusinesses(1, businessFeed.category);
         }
-    } else {
-        if (feeds[newTab].posts.length === 0 && !feeds[newTab].isLoading) {
-            fetchPosts(newTab, 1, sortBy, location);
+    } else { // nearby
+        if (feeds.nearby.posts.length === 0 && !feeds.nearby.isLoading) {
+            fetchPosts('nearby', 1, sortBy, location);
         }
     }
   };
@@ -309,6 +333,10 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser, initialPosts }) 
     if(activeTab === 'business') {
         await fetchBusinesses(1, businessFeed.category);
     } else {
+        if (activeTab === 'family') {
+            setUnreadFamilyPostCount(0);
+            markFamilyFeedAsRead();
+        }
         await fetchPosts(activeTab, 1, sortBy, location);
     }
     setIsRefreshing(false);
@@ -445,7 +473,16 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser, initialPosts }) 
         <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
             <TabsList>
                 <TabsTrigger value="nearby" className="flex items-center gap-2"><Rss className="w-4 h-4"/> Nearby</TabsTrigger>
-                {sessionUser && <TabsTrigger value="family" className="flex items-center gap-2"><Users className="w-4 h-4"/> Family</TabsTrigger>}
+                {sessionUser && (
+                  <TabsTrigger value="family" className="flex items-center gap-2 relative">
+                    <Users className="w-4 h-4"/> Family
+                    {unreadFamilyPostCount > 0 && (
+                        <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-accent text-accent-foreground text-[10px] font-bold ring-2 ring-background">
+                            {unreadFamilyPostCount > 9 ? '9+' : unreadFamilyPostCount}
+                        </span>
+                    )}
+                  </TabsTrigger>
+                )}
                 {sessionUser && <TabsTrigger value="business" className="flex items-center gap-2"><Briefcase className="w-4 h-4"/> Business</TabsTrigger>}
             </TabsList>
             <div className="flex items-center gap-2">

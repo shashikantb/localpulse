@@ -1376,4 +1376,25 @@ export async function getSignedUploadUrl(
   }
 }
 
+export async function getUnreadFamilyPostCount(): Promise<number> {
+    const { user } = await getSession();
+    if (!user) return 0;
+    try {
+        return await db.getUnreadFamilyPostCountDb(user.id);
+    } catch (error) {
+        console.error("Server action error fetching unread family post count:", error);
+        return 0;
+    }
+}
+
+export async function markFamilyFeedAsRead(): Promise<void> {
+    const { user } = await getSession();
+    if (!user) return;
+    try {
+        await db.markFamilyFeedAsReadDb(user.id);
+        revalidatePath('/'); // Revalidate to ensure updated state is fetched
+    } catch (error) {
+        console.error("Server action error marking family feed as read:", error);
+    }
+}
     

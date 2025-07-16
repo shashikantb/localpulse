@@ -61,6 +61,7 @@ export interface User {
   longitude?: number | null;
   lp_points: number;
   referral_code: string;
+  last_family_feed_view_at?: string | null;
 }
 
 export interface BusinessUser extends User {

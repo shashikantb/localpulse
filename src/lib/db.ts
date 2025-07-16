@@ -79,7 +79,7 @@ const POST_COLUMNS_WITH_JOINS = `
 const USER_COLUMNS_SANITIZED = `
   id, email, name, role, status, createdat, profilepictureurl, mobilenumber, 
   business_category, business_other_category, latitude, longitude,
-  lp_points, referral_code
+  lp_points, referral_code, last_family_feed_view_at
 `;
 
 export async function getPostsDb(
@@ -709,7 +709,7 @@ export async function updateNotifiedCountDb(postId: number, count: number): Prom
     if (!dbPool) return;
     const client = await dbPool.connect();
     try {
-      await client.query('UPDATE posts SET notifiedcount = $1 WHERE id = $2', [count, postId]);
+      await client.query('UPDATE posts SET notifiedcount = notifiedcount + $1 WHERE id = $2', [count, postId]);
     } finally {
       client.release();
     }
@@ -1903,7 +1903,7 @@ export async function getFamilyMembersForUserDb(userId: number): Promise<FamilyM
     try {
         const query = `
             SELECT
-                u.id, u.name, u.role, u.status, u.createdat, u.profilepictureurl, u.mobilenumber, u.business_category, u.business_other_category, u.lp_points, u.referral_code,
+                u.id, u.name, u.role, u.status, u.createdat, u.profilepictureurl, u.mobilenumber, u.business_category, u.business_other_category, u.lp_points, u.referral_code, u.last_family_feed_view_at,
                 CASE
                     WHEN fr.user_id_1 = $1 THEN fr.share_location_from_1_to_2
                     ELSE fr.share_location_from_2_to_1
@@ -2479,4 +2479,50 @@ export async function updateGroupAvatarDb(conversationId: number, imageUrl: stri
     }
 }
 
+export async function markFamilyFeedAsReadDb(userId: number): Promise<void> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return;
+
+    const client = await dbPool.connect();
+    try {
+      const query = `UPDATE users SET last_family_feed_view_at = NOW() WHERE id = $1;`;
+      await client.query(query, [userId]);
+    } finally {
+      client.release();
+    }
+}
+
+export async function getUnreadFamilyPostCountDb(userId: number): Promise<number> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return 0;
+
+    const client = await dbPool.connect();
+    try {
+        const userQuery = 'SELECT last_family_feed_view_at FROM users WHERE id = $1';
+        const userResult = await client.query(userQuery, [userId]);
+        const lastViewed = userResult.rows[0]?.last_family_feed_view_at;
+
+        const countQuery = `
+            SELECT COUNT(p.id)
+            FROM posts p
+            WHERE p.is_family_post = TRUE
+              AND p.authorid != $1
+              AND (
+                p.authorid IN (
+                    SELECT user_id_2 FROM family_relationships WHERE user_id_1 = $1 AND status = 'approved'
+                    UNION
+                    SELECT user_id_1 FROM family_relationships WHERE user_id_2 = $1 AND status = 'approved'
+                )
+              )
+              AND ($2::timestamp IS NULL OR p.createdat > $2::timestamp)
+        `;
+        
+        const countResult = await client.query(countQuery, [userId, lastViewed]);
+        return parseInt(countResult.rows[0].count, 10);
+    } finally {
+        client.release();
+    }
+}
     
