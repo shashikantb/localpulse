@@ -17,6 +17,134 @@ const OFFICIAL_USER_EMAIL = 'official@localpulse.in';
 
 // --- Database Connection and Initialization ---
 
+async function initializeDatabase(client: Pool | Client) {
+  // Use a single client for all initialization queries
+  const initClient = 'query' in client ? client : await client.connect();
+  try {
+    console.log("Starting database schema initialization...");
+
+    await initClient.query('CREATE EXTENSION IF NOT EXISTS earthdistance CASCADE');
+    await initClient.query('CREATE EXTENSION IF NOT EXISTS cube CASCADE');
+
+    const createUsersTableQuery = `
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        passwordhash VARCHAR(255) NOT NULL,
+        role VARCHAR(50) NOT NULL,
+        status VARCHAR(50) NOT NULL DEFAULT 'pending',
+        createdat TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        profilepictureurl TEXT,
+        mobilenumber VARCHAR(20),
+        business_category VARCHAR(255),
+        business_other_category VARCHAR(255),
+        latitude DOUBLE PRECISION,
+        longitude DOUBLE PRECISION,
+        lp_points INTEGER DEFAULT 0,
+        referral_code VARCHAR(10) UNIQUE,
+        referred_by_id INTEGER REFERENCES users(id),
+        last_active TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        last_family_feed_view_at TIMESTAMPTZ
+      );
+    `;
+    await initClient.query(createUsersTableQuery);
+    console.log("Table 'users' checked/created.");
+
+    const createPostsTableQuery = `
+        CREATE TABLE IF NOT EXISTS posts (
+            id SERIAL PRIMARY KEY,
+            content TEXT NOT NULL,
+            authorid INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            latitude DOUBLE PRECISION NOT NULL,
+            longitude DOUBLE PRECISION NOT NULL,
+            createdat TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            mediaurls TEXT[],
+            mediatype VARCHAR(50),
+            likecount INTEGER DEFAULT 0,
+            commentcount INTEGER DEFAULT 0,
+            viewcount INTEGER DEFAULT 0,
+            notifiedcount INTEGER DEFAULT 0,
+            city VARCHAR(255),
+            hashtags TEXT[],
+            is_family_post BOOLEAN DEFAULT FALSE,
+            hide_location BOOLEAN DEFAULT FALSE,
+            expires_at TIMESTAMPTZ,
+            max_viewers INTEGER,
+            lp_bonus_awarded BOOLEAN DEFAULT FALSE
+        );
+    `;
+    await initClient.query(createPostsTableQuery);
+    console.log("Table 'posts' checked/created.");
+
+    const createCommentsTableQuery = `
+      CREATE TABLE IF NOT EXISTS comments (
+        id SERIAL PRIMARY KEY,
+        postid INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+        author VARCHAR(255) NOT NULL,
+        content TEXT NOT NULL,
+        createdat TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+    await initClient.query(createCommentsTableQuery);
+    console.log("Table 'comments' checked/created.");
+    
+    // Create other tables... (likes, followers, etc.)
+    await initClient.query(`CREATE TABLE IF NOT EXISTS post_likes (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE, PRIMARY KEY (user_id, post_id));`);
+    await initClient.query(`CREATE TABLE IF NOT EXISTS user_followers (follower_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, following_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, PRIMARY KEY (follower_id, following_id));`);
+    await initClient.query(`CREATE TABLE IF NOT EXISTS post_mentions (post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE, mentioned_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, PRIMARY KEY (post_id, mentioned_user_id));`);
+    await initClient.query(`CREATE TABLE IF NOT EXISTS visitor_stats (stat_key VARCHAR(255) PRIMARY KEY, value BIGINT);`);
+    await initClient.query(`CREATE TABLE IF NOT EXISTS device_tokens (id SERIAL PRIMARY KEY, token TEXT UNIQUE NOT NULL, latitude DOUBLE PRECISION, longitude DOUBLE PRECISION, user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, last_updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, user_auth_token TEXT);`);
+    await initClient.query(`CREATE TABLE IF NOT EXISTS statuses (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, media_url TEXT NOT NULL, media_type VARCHAR(10) NOT NULL, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);`);
+    await initClient.query(`CREATE TABLE IF NOT EXISTS family_relationships (id SERIAL PRIMARY KEY, user_id_1 INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, user_id_2 INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, requester_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, status VARCHAR(20) NOT NULL, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, share_location_from_1_to_2 BOOLEAN DEFAULT false, share_location_from_2_to_1 BOOLEAN DEFAULT false, UNIQUE(user_id_1, user_id_2));`);
+    await initClient.query(`CREATE TABLE IF NOT EXISTS conversations (id SERIAL PRIMARY KEY, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, last_message_at TIMESTAMPTZ, is_group BOOLEAN DEFAULT FALSE, group_name VARCHAR(255), group_avatar_url TEXT, created_by INTEGER REFERENCES users(id) ON DELETE SET NULL);`);
+    await initClient.query(`CREATE TABLE IF NOT EXISTS conversation_participants (conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, is_admin BOOLEAN DEFAULT FALSE, unread_count INTEGER DEFAULT 0, PRIMARY KEY (conversation_id, user_id));`);
+    await initClient.query(`CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, content TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);`);
+    await initClient.query(`CREATE TABLE IF NOT EXISTS lp_point_transactions (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, points INTEGER NOT NULL, reason VARCHAR(50) NOT NULL, description TEXT, related_entity_id INTEGER, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);`);
+    await initClient.query(`CREATE TABLE IF NOT EXISTS polls (id SERIAL PRIMARY KEY, post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE, question TEXT NOT NULL);`);
+    await initClient.query(`CREATE TABLE IF NOT EXISTS poll_options (id SERIAL PRIMARY KEY, poll_id INTEGER NOT NULL REFERENCES polls(id) ON DELETE CASCADE, option_text TEXT NOT NULL, vote_count INTEGER DEFAULT 0);`);
+    await initClient.query(`CREATE TABLE IF NOT EXISTS poll_votes (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, poll_id INTEGER NOT NULL REFERENCES polls(id) ON DELETE CASCADE, option_id INTEGER NOT NULL REFERENCES poll_options(id) ON DELETE CASCADE, PRIMARY KEY (user_id, poll_id));`);
+    
+    console.log("All tables checked/created.");
+
+    // Create indexes for performance
+    await initClient.query(`CREATE INDEX IF NOT EXISTS posts_authorid_idx ON posts (authorid);`);
+    await initClient.query(`CREATE INDEX IF NOT EXISTS posts_createdat_idx ON posts (createdat DESC);`);
+    await initClient.query(`CREATE INDEX IF NOT EXISTS posts_location_idx ON posts USING gist (ll_to_earth(latitude, longitude));`);
+    await initClient.query(`CREATE INDEX IF NOT EXISTS device_tokens_user_id_idx ON device_tokens (user_id);`);
+
+    console.log("Indexes checked/created.");
+
+    // Seed initial data if it doesn't exist
+    const statsCheck = await initClient.query("SELECT 1 FROM visitor_stats WHERE stat_key = 'total_visits'");
+    if (statsCheck.rowCount === 0) {
+      await initClient.query("INSERT INTO visitor_stats (stat_key, value) VALUES ('total_visits', 0), ('daily_visits_count', 0), ('daily_visits_date', 0)");
+      console.log("Visitor stats seeded.");
+    }
+    
+    // Check for and create the official user if it doesn't exist
+    const officialUserCheck = await initClient.query("SELECT 1 FROM users WHERE email = $1", [OFFICIAL_USER_EMAIL]);
+    if (officialUserCheck.rowCount === 0 && process.env.OFFICIAL_USER_PASSWORD) {
+        const salt = await bcrypt.genSalt(10);
+        const passwordhash = await bcrypt.hash(process.env.OFFICIAL_USER_PASSWORD, salt);
+        await initClient.query(
+            `INSERT INTO users(name, email, passwordhash, role, status) VALUES($1, $2, $3, 'Admin', 'approved')`,
+            ['LocalPulse Official', OFFICIAL_USER_EMAIL, passwordhash]
+        );
+        console.log("Official user account created.");
+    }
+
+  } catch (err) {
+    console.error("Database initialization failed:", err);
+    throw err; // re-throw the error to be caught by the caller
+  } finally {
+    // If we used the pool to get a client, release it.
+    if ('release' in initClient) {
+      initClient.release();
+    }
+  }
+}
+
 function getDbPool(): Pool | null {
   if (pool) return pool;
 
@@ -46,22 +174,19 @@ function getDbPool(): Pool | null {
     console.error('Unexpected error on idle client', err);
   });
   
+  initializationPromise = initializeDatabase(pool);
+  
   return pool;
 }
 
 // This function ensures that initialization is only attempted once.
-function ensureDbInitialized() {
-    if (!initializationPromise) {
-        // Ensure the pool is created before we attempt initialization.
-        const dbPool = getDbPool();
-        if(!dbPool) {
-            initializationPromise = Promise.resolve();
-        } else {
-            console.log("Database not initialized, starting initialization...");
-            initializationPromise = Promise.resolve(); // Mark as initialized to prevent re-entry
-        }
+async function ensureDbInitialized() {
+    // This will trigger the pool creation and initialization if it hasn't happened yet.
+    getDbPool(); 
+    // This waits for the initialization promise to resolve before proceeding.
+    if (initializationPromise) {
+        await initializationPromise;
     }
-    return initializationPromise;
 }
 
 
@@ -2526,4 +2651,5 @@ export async function getUnreadFamilyPostCountDb(userId: number): Promise<number
     }
 }
     
+
 
