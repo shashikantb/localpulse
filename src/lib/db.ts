@@ -2478,3 +2478,5 @@ export async function updateGroupAvatarDb(conversationId: number, imageUrl: stri
         client.release();
     }
 }
+
+    
