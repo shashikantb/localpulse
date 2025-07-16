@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import * as db from '@/lib/db';
@@ -960,6 +959,33 @@ export async function getFamilyLocations(): Promise<FamilyMemberLocation[]> {
 
 // --- Chat Actions ---
 
+async function sendReactionNotification(reactor: User, message: Message, reaction: string) {
+    if (!firebaseAdmin || reactor.id === message.sender_id) return;
+    try {
+        const recipientId = message.sender_id;
+        const deviceTokens = await db.getDeviceTokensForUsersDb([recipientId]);
+        if (deviceTokens.length === 0) return;
+        
+        const notificationTitle = `${reactor.name} reacted to your message`;
+        const notificationBody = `${reaction} "${message.content.substring(0, 50)}..."`;
+
+        const messages = await Promise.all(deviceTokens.map(async ({ token, user_id }) => {
+            const freshToken = await encrypt({ userId: user_id });
+            return {
+                token: token,
+                notification: { title: notificationTitle, body: notificationBody },
+                data: { user_auth_token: freshToken },
+                android: { priority: 'high' as const },
+                apns: { payload: { aps: { 'content-available': 1 } } }
+            }
+        }));
+
+        await firebaseAdmin.messaging().sendEach(messages as any);
+    } catch (error) {
+        console.error('Error sending chat reaction notification:', error);
+    }
+}
+
 export async function startChatAndRedirect(formData: FormData): Promise<void> {
   const { user } = await getSession();
   if (!user) {
@@ -1051,19 +1077,24 @@ export async function deleteMessage(messageId: number): Promise<{ success: boole
 }
 
 export async function toggleMessageReaction(messageId: number, reaction: string): Promise<{ success: boolean; error?: string }> {
-  const { user } = await getSession();
-  if (!user) {
-    return { success: false, error: 'You must be logged in to react.' };
-  }
-  
-  try {
-    await db.toggleMessageReactionDb(messageId, user.id, reaction);
-    revalidatePath('/chat/[conversationId]', 'page'); // Revalidate the page content
-    return { success: true };
-  } catch (error: any) {
-    console.error("Error toggling message reaction:", error);
-    return { success: false, error: 'Failed to toggle reaction.' };
-  }
+    const { user } = await getSession();
+    if (!user) {
+        return { success: false, error: 'You must be logged in to react.' };
+    }
+
+    try {
+        const { wasAdded, message } = await db.toggleMessageReactionDb(messageId, user.id, reaction);
+        if (wasAdded && message) {
+            sendReactionNotification(user, message, reaction).catch(err => {
+                console.error("Background task to send reaction notification failed:", err);
+            });
+        }
+        revalidatePath('/chat/[conversationId]', 'page');
+        return { success: true };
+    } catch (error: any) {
+        console.error("Error toggling message reaction:", error);
+        return { success: false, error: 'Failed to toggle reaction.' };
+    }
 }
 
 
@@ -1414,5 +1445,3 @@ export async function markFamilyFeedAsRead(): Promise<void> {
     }
 }
     
-
-

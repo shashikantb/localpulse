@@ -11,12 +11,12 @@ export const dynamic = 'force-dynamic';
 const ChatClientSkeleton = () => (
     <div className="flex flex-col h-full">
         <div className="p-3 border-b"><Skeleton className="h-12 w-3/4"/></div>
-        <div className="p-4 border-b"><Skeleton className="h-10 w-full"/></div>
         <div className="flex-grow p-4 space-y-4">
             <div className="flex justify-start"><Skeleton className="h-16 w-1/2 rounded-lg"/></div>
             <div className="flex justify-end"><Skeleton className="h-20 w-3/5 rounded-lg"/></div>
             <div className="flex justify-start"><Skeleton className="h-12 w-2/5 rounded-lg"/></div>
         </div>
+        <div className="p-4 border-t"><Skeleton className="h-10 w-full"/></div>
     </div>
 )
 

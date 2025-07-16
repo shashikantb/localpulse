@@ -1781,7 +1781,7 @@ export async function getMessagesForConversationDb(conversationId: number, userI
             ) as reactions
           FROM messages m
           WHERE m.conversation_id = $1
-          ORDER BY m.created_at DESC;
+          ORDER BY m.created_at ASC;
       `;
       const messagesResult: QueryResult<Message> = await client.query(messagesQuery, [conversationId]);
       return messagesResult.rows;
@@ -1845,7 +1845,7 @@ export async function getConversationsForUserDb(userId: number): Promise<Convers
   }
 }
 
-export async function toggleMessageReactionDb(messageId: number, userId: number, reaction: string): Promise<void> {
+export async function toggleMessageReactionDb(messageId: number, userId: number, reaction: string): Promise<{ wasAdded: boolean; message: Message | null }> {
     await ensureDbInitialized();
     const dbPool = getDbPool();
     if (!dbPool) throw new Error("Database not configured.");
@@ -1854,30 +1854,32 @@ export async function toggleMessageReactionDb(messageId: number, userId: number,
     try {
         await client.query('BEGIN');
         
+        let wasAdded = false;
         const existingReactionRes = await client.query(
             'SELECT id, reaction FROM message_reactions WHERE message_id = $1 AND user_id = $2',
             [messageId, userId]
         );
         
         if (existingReactionRes.rowCount > 0) {
-            // Reaction from this user already exists
             const existingReaction = existingReactionRes.rows[0];
             if (existingReaction.reaction === reaction) {
-                // User is toggling off the same reaction
                 await client.query('DELETE FROM message_reactions WHERE id = $1', [existingReaction.id]);
             } else {
-                // User is changing their reaction
                 await client.query('UPDATE message_reactions SET reaction = $1 WHERE id = $2', [reaction, existingReaction.id]);
             }
         } else {
-            // New reaction from this user
             await client.query(
                 'INSERT INTO message_reactions (message_id, user_id, reaction) VALUES ($1, $2, $3)',
                 [messageId, userId, reaction]
             );
+            wasAdded = true;
         }
 
+        const messageRes = await client.query('SELECT * FROM messages WHERE id = $1', [messageId]);
+        const message = messageRes.rows[0] || null;
+
         await client.query('COMMIT');
+        return { wasAdded, message };
     } catch(e) {
         await client.query('ROLLBACK');
         console.error("Error in toggleMessageReactionDb:", e);

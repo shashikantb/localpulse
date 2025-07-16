@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -35,6 +34,7 @@ import ChatInfoSidebar from './chat-info-sidebar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import EmojiPicker, { Theme as EmojiTheme } from 'emoji-picker-react';
 import { useTheme } from 'next-themes';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface ChatClientProps {
   initialMessages: Message[];
@@ -111,7 +111,18 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
 
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+
   const partner = !conversationDetails.is_group ? conversationDetails.participants?.find(p => p.id !== sessionUser.id) : null;
+
+  useEffect(() => {
+    if (scrollAreaRef.current) {
+        const viewport = scrollAreaRef.current.querySelector('div[data-radix-scroll-area-viewport]');
+        if (viewport) {
+            viewport.scrollTo({ top: viewport.scrollHeight });
+        }
+    }
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -153,8 +164,7 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
         description: result.error || 'Could not send the message. Please try again.',
       });
     } else {
-      // Optimistically add the new message to the top of the list
-      setMessages(prev => [result.message!, ...prev]);
+      setMessages(prev => [...prev, result.message!]);
       setNewMessage('');
     }
     
@@ -162,7 +172,6 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
   };
   
   const handleDeleteMessage = async (messageId: number) => {
-    // Optimistically remove the message from the UI
     setMessages(prev => prev.filter(m => m.id !== messageId));
 
     const result = await deleteMessage(messageId);
@@ -172,7 +181,6 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
         title: 'Delete Failed',
         description: result.error || 'Message could not be deleted. It may have already been removed.',
       });
-      // Re-fetch messages to get the correct state
       getMessages(conversationId).then(setMessages);
     }
   };
@@ -187,16 +195,12 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
         let newReactions = [...(msg.reactions || [])];
 
         if (existingReactionIndex !== -1) {
-            // User already reacted
             if (newReactions[existingReactionIndex].reaction === emoji) {
-                // Same reaction, remove it
                 newReactions.splice(existingReactionIndex, 1);
             } else {
-                // Different reaction, update it
                 newReactions[existingReactionIndex] = { ...newReactions[existingReactionIndex], reaction: emoji };
             }
         } else {
-            // New reaction
             newReactions.push({ id: -1, message_id: messageId, user_id: sessionUser.id, reaction: emoji, user_name: sessionUser.name });
         }
         
@@ -206,7 +210,6 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
     const { success, error } = await toggleMessageReaction(messageId, emoji);
     if (!success) {
         toast({ variant: 'destructive', title: 'Reaction failed', description: error });
-        // On failure, refetch to revert optimistic update
         getMessages(conversationId).then(setMessages);
     }
   }
@@ -229,7 +232,6 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
 
   return (
     <div className="flex flex-col bg-background h-full overflow-hidden">
-        {/* Header */}
         <header className="flex-shrink-0 flex items-center p-3 border-b bg-card">
             {conversationDetails.is_group ? (
                 <Sheet>
@@ -247,32 +249,7 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
             )}
         </header>
 
-        {/* Message Input Form (Now at the top) */}
-        <div className="flex-shrink-0 p-4 border-b bg-card">
-            <form onSubmit={handleSendMessage} className="flex items-center gap-3">
-            <Textarea
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Type a message..."
-                className="flex-1 resize-none"
-                rows={1}
-                disabled={isSending}
-                onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendMessage(e);
-                }
-                }}
-            />
-            <Button type="submit" size="icon" disabled={!newMessage.trim() || isSending}>
-                {isSending ? <Loader2 className="animate-spin" /> : <Send />}
-                <span className="sr-only">Send</span>
-            </Button>
-            </form>
-        </div>
-
-        {/* Message List (Fills remaining space) */}
-        <div className="flex-grow overflow-y-auto p-4">
+        <ScrollArea className="flex-grow p-4" ref={scrollAreaRef}>
             {messages.map((message) => {
                 const isSender = message.sender_id === sessionUser.id;
                 const senderDetails = conversationDetails.participants.find(p => p.id === message.sender_id);
@@ -292,24 +269,22 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
                     </Avatar>
                     )}
                     <div className="flex flex-col" style={{ alignItems: isSender ? 'flex-end' : 'flex-start' }}>
-                        <div className={cn('relative', isSender ? 'order-2' : 'order-1')}>
-                            <div
-                                className={cn(
-                                    'max-w-xs md:max-w-md lg:max-w-lg p-3 rounded-2xl flex flex-col',
-                                    isSender
-                                    ? 'bg-primary text-primary-foreground rounded-br-none'
-                                    : 'bg-muted text-foreground rounded-bl-none'
-                                )}
-                            >
-                                {!isSender && conversationDetails.is_group && (
-                                <p className="text-xs font-semibold text-accent mb-1">{senderDetails?.name}</p>
-                                )}
-                                <p className="text-sm whitespace-pre-wrap break-words">{renderChatMessageContent(message.content)}</p>
-                                <span className={cn('text-xs mt-1.5 opacity-70', isSender ? 'self-end' : 'self-start')}>
-                                    {format(new Date(message.created_at), 'p')}
-                                </span>
-                            </div>
-                            <div className={cn("absolute bottom-[-8px] z-10 opacity-0 group-hover:opacity-100 transition-opacity", isSender ? 'left-[-12px]' : 'right-[-12px]')}>
+                        <div
+                            className={cn(
+                                'relative max-w-xs md:max-w-md lg:max-w-lg p-3 rounded-2xl flex flex-col',
+                                isSender
+                                ? 'bg-primary text-primary-foreground rounded-br-none'
+                                : 'bg-muted text-foreground rounded-bl-none'
+                            )}
+                        >
+                            {!isSender && conversationDetails.is_group && (
+                            <p className="text-xs font-semibold text-accent mb-1">{senderDetails?.name}</p>
+                            )}
+                            <p className="text-sm whitespace-pre-wrap break-words">{renderChatMessageContent(message.content)}</p>
+                            <span className={cn('text-xs mt-1.5 opacity-70', isSender ? 'self-end' : 'self-start')}>
+                                {format(new Date(message.created_at), 'p')}
+                            </span>
+                             <div className={cn("absolute bottom-[-8px] z-10 opacity-0 group-hover:opacity-100 transition-opacity", isSender ? 'left-[-12px]' : 'right-[-12px]')}>
                                 <Popover>
                                     <PopoverTrigger asChild>
                                         <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full bg-background border shadow-sm">
@@ -363,6 +338,29 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
                 </div>
                 );
             })}
+        </ScrollArea>
+        
+        <div className="flex-shrink-0 p-4 border-t bg-card">
+            <form onSubmit={handleSendMessage} className="flex items-center gap-3">
+            <Textarea
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                placeholder="Type a message..."
+                className="flex-1 resize-none"
+                rows={1}
+                disabled={isSending}
+                onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage(e);
+                }
+                }}
+            />
+            <Button type="submit" size="icon" disabled={!newMessage.trim() || isSending}>
+                {isSending ? <Loader2 className="animate-spin" /> : <Send />}
+                <span className="sr-only">Send</span>
+            </Button>
+            </form>
         </div>
     </div>
   );
