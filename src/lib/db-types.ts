@@ -269,6 +269,14 @@ export type NewStatus = {
 
 // --- Chat Types ---
 
+export interface MessageReaction {
+  id: number;
+  message_id: number;
+  user_id: number;
+  reaction: string;
+  user_name: string; // Joined from users table
+}
+
 export interface Conversation {
   id: number;
   created_at: string;
@@ -292,6 +300,7 @@ export interface Message {
   sender_id: number;
   content: string;
   created_at: string;
+  reactions?: MessageReaction[] | null;
 }
 
 export interface NewMessage {
@@ -306,6 +315,17 @@ export interface ConversationParticipant {
     profilepictureurl?: string | null;
     is_admin?: boolean;
 }
+
+export interface ConversationDetails {
+    id: number;
+    is_group: boolean;
+    group_name: string | null;
+    group_avatar_url: string | null;
+    display_name: string;
+    display_avatar_url: string | null;
+    participants: ConversationParticipant[];
+}
+
 
 // --- Family Relationship Types ---
 export type FamilyRelationshipStatus = 'none' | 'pending_from_me' | 'pending_from_them' | 'approved';

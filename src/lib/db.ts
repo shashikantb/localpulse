@@ -1,7 +1,7 @@
 
 
 import { Pool, Client, type QueryResult } from 'pg';
-import type { ConversationDetails, PointTransaction, UserForNotification, PointTransactionReason, User as DbUser, Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest, FamilyMember, FamilyMemberLocation, SortOption, UpdateBusinessCategory, BusinessUser, GorakshakReportUser, UserStatus, Poll } from '@/lib/db-types';
+import type { ConversationDetails, PointTransaction, UserForNotification, PointTransactionReason, User as DbUser, Post, DbNewPost, Comment, NewComment, VisitorCounts, DeviceToken, User, UserWithPassword, NewUser, UserRole, UpdatableUserFields, UserFollowStats, FollowUser, NewStatus, UserWithStatuses, Conversation, Message, NewMessage, ConversationParticipant, FamilyRelationship, PendingFamilyRequest, FamilyMember, FamilyMemberLocation, SortOption, UpdateBusinessCategory, BusinessUser, GorakshakReportUser, UserStatus, Poll, MessageReaction } from '@/lib/db-types';
 import bcrypt from 'bcryptjs';
 import { customAlphabet } from 'nanoid';
 
@@ -44,8 +44,7 @@ async function initializeDatabase(client: Pool | Client) {
         lp_points INTEGER DEFAULT 0,
         referral_code VARCHAR(10) UNIQUE,
         referred_by_id INTEGER REFERENCES users(id),
-        last_active TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-        last_family_feed_view_at TIMESTAMPTZ
+        last_active TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
     `;
     await initClient.query(createUsersTableQuery);
@@ -117,6 +116,7 @@ async function initializeDatabase(client: Pool | Client) {
     await initClient.query(`CREATE TABLE IF NOT EXISTS conversations (id SERIAL PRIMARY KEY, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, last_message_at TIMESTAMPTZ, is_group BOOLEAN DEFAULT FALSE, group_name VARCHAR(255), group_avatar_url TEXT, created_by INTEGER REFERENCES users(id) ON DELETE SET NULL);`);
     await initClient.query(`CREATE TABLE IF NOT EXISTS conversation_participants (conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, is_admin BOOLEAN DEFAULT FALSE, unread_count INTEGER DEFAULT 0, PRIMARY KEY (conversation_id, user_id));`);
     await initClient.query(`CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, content TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);`);
+    await initClient.query(`CREATE TABLE IF NOT EXISTS message_reactions (id SERIAL PRIMARY KEY, message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, reaction TEXT NOT NULL, UNIQUE (message_id, user_id));`);
     await initClient.query(`CREATE TABLE IF NOT EXISTS lp_point_transactions (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, points INTEGER NOT NULL, reason VARCHAR(50) NOT NULL, description TEXT, related_entity_id INTEGER, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);`);
     await initClient.query(`CREATE TABLE IF NOT EXISTS polls (id SERIAL PRIMARY KEY, post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE, question TEXT NOT NULL);`);
     await initClient.query(`CREATE TABLE IF NOT EXISTS poll_options (id SERIAL PRIMARY KEY, poll_id INTEGER NOT NULL REFERENCES polls(id) ON DELETE CASCADE, option_text TEXT NOT NULL, vote_count INTEGER DEFAULT 0);`);
@@ -1763,7 +1763,25 @@ export async function getMessagesForConversationDb(conversationId: number, userI
       }
       
       const messagesQuery = `
-          SELECT * FROM messages WHERE conversation_id = $1 ORDER BY created_at DESC;
+          SELECT 
+            m.*,
+            (
+                SELECT COALESCE(json_agg(
+                    json_build_object(
+                        'id', mr.id,
+                        'message_id', mr.message_id,
+                        'user_id', mr.user_id,
+                        'reaction', mr.reaction,
+                        'user_name', u.name
+                    ) ORDER BY mr.id
+                ), '[]'::json)
+                FROM message_reactions mr
+                JOIN users u ON mr.user_id = u.id
+                WHERE mr.message_id = m.id
+            ) as reactions
+          FROM messages m
+          WHERE m.conversation_id = $1
+          ORDER BY m.created_at DESC;
       `;
       const messagesResult: QueryResult<Message> = await client.query(messagesQuery, [conversationId]);
       return messagesResult.rows;
@@ -1825,6 +1843,48 @@ export async function getConversationsForUserDb(userId: number): Promise<Convers
   } finally {
     client.release();
   }
+}
+
+export async function toggleMessageReactionDb(messageId: number, userId: number, reaction: string): Promise<void> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) throw new Error("Database not configured.");
+
+    const client = await dbPool.connect();
+    try {
+        await client.query('BEGIN');
+        
+        const existingReactionRes = await client.query(
+            'SELECT id, reaction FROM message_reactions WHERE message_id = $1 AND user_id = $2',
+            [messageId, userId]
+        );
+        
+        if (existingReactionRes.rowCount > 0) {
+            // Reaction from this user already exists
+            const existingReaction = existingReactionRes.rows[0];
+            if (existingReaction.reaction === reaction) {
+                // User is toggling off the same reaction
+                await client.query('DELETE FROM message_reactions WHERE id = $1', [existingReaction.id]);
+            } else {
+                // User is changing their reaction
+                await client.query('UPDATE message_reactions SET reaction = $1 WHERE id = $2', [reaction, existingReaction.id]);
+            }
+        } else {
+            // New reaction from this user
+            await client.query(
+                'INSERT INTO message_reactions (message_id, user_id, reaction) VALUES ($1, $2, $3)',
+                [messageId, userId, reaction]
+            );
+        }
+
+        await client.query('COMMIT');
+    } catch(e) {
+        await client.query('ROLLBACK');
+        console.error("Error in toggleMessageReactionDb:", e);
+        throw e;
+    } finally {
+        client.release();
+    }
 }
 
 
@@ -2668,6 +2728,7 @@ export async function getUnreadFamilyPostCountDb(userId: number): Promise<number
     }
 }
     
+
 
 
 

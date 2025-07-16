@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { FC, PropsWithChildren } from 'react';
@@ -7,8 +8,8 @@ export const Providers: FC<PropsWithChildren> = ({ children }) => {
   return (
     <ThemeProvider
       attribute="class"
-      defaultTheme="system"
-      enableSystem
+      defaultTheme="light"
+      enableSystem={false}
       themes={['light', 'dark', 'colorful']}
     >
       {children}

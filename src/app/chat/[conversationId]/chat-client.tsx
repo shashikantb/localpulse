@@ -1,13 +1,14 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import type { Message, User, ConversationDetails } from '@/lib/db-types';
-import { getMessages, sendMessage, deleteMessage } from '@/app/actions';
+import type { Message, User, ConversationDetails, MessageReaction } from '@/lib/db-types';
+import { getMessages, sendMessage, deleteMessage, toggleMessageReaction } from '@/app/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Send, Loader2, Users, MoreHorizontal, Trash2 } from 'lucide-react';
+import { Send, Loader2, Users, MoreHorizontal, Trash2, Smile } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -31,6 +32,9 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import ChatInfoSidebar from './chat-info-sidebar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import EmojiPicker, { Theme as EmojiTheme } from 'emoji-picker-react';
+import { useTheme } from 'next-themes';
 
 interface ChatClientProps {
   initialMessages: Message[];
@@ -69,12 +73,37 @@ const renderChatMessageContent = (content: string) => {
   });
 };
 
+const ReactionsDisplay = ({ reactions, onReactionClick }: { reactions: MessageReaction[]; onReactionClick: (reaction: string) => void }) => {
+    if (!reactions || reactions.length === 0) return null;
+
+    const groupedReactions = reactions.reduce((acc, reaction) => {
+        acc[reaction.reaction] = (acc[reaction.reaction] || 0) + 1;
+        return acc;
+    }, {} as Record<string, number>);
+
+    return (
+        <div className="flex gap-1.5 mt-1.5 flex-wrap">
+            {Object.entries(groupedReactions).map(([emoji, count]) => (
+                <button
+                    key={emoji}
+                    onClick={() => onReactionClick(emoji)}
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-muted text-foreground text-xs border border-transparent hover:border-primary transition-colors"
+                >
+                    <span>{emoji}</span>
+                    <span className="font-medium">{count}</span>
+                </button>
+            ))}
+        </div>
+    );
+};
+
 
 export default function ChatClient({ initialMessages, conversationDetails, sessionUser, conversationId }: ChatClientProps) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [newMessage, setNewMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const { toast } = useToast();
+  const { theme } = useTheme();
   
   const isSendingRef = useRef(isSending);
   isSendingRef.current = isSending;
@@ -147,6 +176,41 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
       getMessages(conversationId).then(setMessages);
     }
   };
+
+  const handleReaction = async (messageId: number, emoji: string) => {
+    // Optimistic update
+    setMessages(prevMessages => prevMessages.map(msg => {
+        if (msg.id !== messageId) return msg;
+
+        const existingReactionIndex = msg.reactions?.findIndex(r => r.user_id === sessionUser.id);
+        
+        let newReactions = [...(msg.reactions || [])];
+
+        if (existingReactionIndex !== -1) {
+            // User already reacted
+            if (newReactions[existingReactionIndex].reaction === emoji) {
+                // Same reaction, remove it
+                newReactions.splice(existingReactionIndex, 1);
+            } else {
+                // Different reaction, update it
+                newReactions[existingReactionIndex] = { ...newReactions[existingReactionIndex], reaction: emoji };
+            }
+        } else {
+            // New reaction
+            newReactions.push({ id: -1, message_id: messageId, user_id: sessionUser.id, reaction: emoji, user_name: sessionUser.name });
+        }
+        
+        return { ...msg, reactions: newReactions };
+    }));
+    
+    const { success, error } = await toggleMessageReaction(messageId, emoji);
+    if (!success) {
+        toast({ variant: 'destructive', title: 'Reaction failed', description: error });
+        // On failure, refetch to revert optimistic update
+        getMessages(conversationId).then(setMessages);
+    }
+  }
+
 
   const headerContent = (
       <div className="flex items-center gap-3 hover:bg-muted p-2 rounded-md">
@@ -221,11 +285,54 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
                         isSender ? 'justify-end' : 'justify-start'
                     )}
                 >
+                    {!isSender && (
+                    <Avatar className="h-8 w-8 self-start">
+                        <AvatarImage src={senderDetails?.profilepictureurl || undefined} />
+                        <AvatarFallback>{senderDetails?.name.charAt(0)}</AvatarFallback>
+                    </Avatar>
+                    )}
+                    <div className="flex flex-col" style={{ alignItems: isSender ? 'flex-end' : 'flex-start' }}>
+                        <div className={cn('relative', isSender ? 'order-2' : 'order-1')}>
+                            <div
+                                className={cn(
+                                    'max-w-xs md:max-w-md lg:max-w-lg p-3 rounded-2xl flex flex-col',
+                                    isSender
+                                    ? 'bg-primary text-primary-foreground rounded-br-none'
+                                    : 'bg-muted text-foreground rounded-bl-none'
+                                )}
+                            >
+                                {!isSender && conversationDetails.is_group && (
+                                <p className="text-xs font-semibold text-accent mb-1">{senderDetails?.name}</p>
+                                )}
+                                <p className="text-sm whitespace-pre-wrap break-words">{renderChatMessageContent(message.content)}</p>
+                                <span className={cn('text-xs mt-1.5 opacity-70', isSender ? 'self-end' : 'self-start')}>
+                                    {format(new Date(message.created_at), 'p')}
+                                </span>
+                            </div>
+                            <div className={cn("absolute bottom-[-8px] z-10 opacity-0 group-hover:opacity-100 transition-opacity", isSender ? 'left-[-12px]' : 'right-[-12px]')}>
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full bg-background border shadow-sm">
+                                            <Smile className="h-4 w-4 text-muted-foreground" />
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="p-0 border-0">
+                                        <EmojiPicker
+                                            onEmojiClick={(emojiData) => handleReaction(message.id, emojiData.emoji)}
+                                            theme={theme === 'dark' ? EmojiTheme.DARK : EmojiTheme.LIGHT}
+                                        />
+                                    </PopoverContent>
+                                </Popover>
+                            </div>
+                        </div>
+                        <ReactionsDisplay reactions={message.reactions || []} onReactionClick={(emoji) => handleReaction(message.id, emoji)} />
+                    </div>
+
                     {isSender && (
                         <DropdownMenu>
                             <AlertDialog>
                                 <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity self-center">
                                         <MoreHorizontal className="h-4 w-4" />
                                     </Button>
                                 </DropdownMenuTrigger>
@@ -253,28 +360,6 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
                             </AlertDialog>
                         </DropdownMenu>
                     )}
-                    {!isSender && (
-                    <Avatar className="h-8 w-8 self-start">
-                        <AvatarImage src={senderDetails?.profilepictureurl || undefined} />
-                        <AvatarFallback>{senderDetails?.name.charAt(0)}</AvatarFallback>
-                    </Avatar>
-                    )}
-                    <div
-                    className={cn(
-                        'max-w-xs md:max-w-md lg:max-w-lg p-3 rounded-2xl flex flex-col',
-                        isSender
-                        ? 'bg-primary text-primary-foreground rounded-br-none'
-                        : 'bg-muted text-foreground rounded-bl-none'
-                    )}
-                    >
-                    {!isSender && conversationDetails.is_group && (
-                      <p className="text-xs font-semibold text-accent mb-1">{senderDetails?.name}</p>
-                    )}
-                    <p className="text-sm whitespace-pre-wrap break-words">{renderChatMessageContent(message.content)}</p>
-                    <span className={cn('text-xs mt-1.5 opacity-70', isSender ? 'self-end' : 'self-start')}>
-                        {format(new Date(message.created_at), 'p')}
-                    </span>
-                    </div>
                 </div>
                 );
             })}

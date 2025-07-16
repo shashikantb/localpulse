@@ -3,7 +3,7 @@
 'use server';
 
 import * as db from '@/lib/db';
-import type { ConversationDetails, Poll, Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus, FamilyMember, FamilyMemberLocation, PendingFamilyRequest, Conversation, Message, ConversationParticipant, SortOption, BusinessUser, GorakshakReportUser, PointTransaction, UserForNotification } from '@/lib/db-types';
+import type { ConversationDetails, Poll, Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus, FamilyMember, FamilyMemberLocation, PendingFamilyRequest, Conversation, Message, ConversationParticipant, SortOption, BusinessUser, GorakshakReportUser, PointTransaction, UserForNotification, MessageReaction } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 import { getSession, encrypt } from '@/app/auth/actions';
 import { redirect } from 'next/navigation';
@@ -1050,6 +1050,22 @@ export async function deleteMessage(messageId: number): Promise<{ success: boole
   }
 }
 
+export async function toggleMessageReaction(messageId: number, reaction: string): Promise<{ success: boolean; error?: string }> {
+  const { user } = await getSession();
+  if (!user) {
+    return { success: false, error: 'You must be logged in to react.' };
+  }
+  
+  try {
+    await db.toggleMessageReactionDb(messageId, user.id, reaction);
+    revalidatePath('/chat/[conversationId]', 'page'); // Revalidate the page content
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error toggling message reaction:", error);
+    return { success: false, error: 'Failed to toggle reaction.' };
+  }
+}
+
 
 export async function sendSosMessage(latitude: number, longitude: number): Promise<{ success: boolean; error?: string; message?: string }> {
   const { user } = await getSession();
@@ -1398,4 +1414,5 @@ export async function markFamilyFeedAsRead(): Promise<void> {
     }
 }
     
+
 
