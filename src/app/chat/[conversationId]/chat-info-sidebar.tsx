@@ -10,7 +10,8 @@ import {
   addMembersToGroup,
   leaveGroup,
   updateGroupAvatar,
-  getSignedUploadUrl
+  getSignedUploadUrl,
+  makeUserGroupAdmin
 } from '@/app/actions';
 import { getSession } from '@/app/auth/actions';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -25,6 +26,7 @@ import {
   Shield,
   Loader2,
   Camera,
+  ShieldPlus,
 } from 'lucide-react';
 import {
   Dialog,
@@ -49,6 +51,13 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { MoreVertical } from 'lucide-react';
 
 export const ChatInfoSidebarSkeleton = () => (
   <div className="p-4 space-y-4 h-full flex flex-col">
@@ -170,6 +179,16 @@ export default function ChatInfoSidebar({ conversationId }: { conversationId: nu
     }
   };
 
+  const handleMakeAdmin = async (userId: number) => {
+    const result = await makeUserGroupAdmin(conversationId, userId);
+    if(result.success) {
+        toast({ title: "Admin Added" });
+        fetchDetails();
+    } else {
+        toast({ variant: "destructive", title: "Error", description: result.error });
+    }
+  };
+
   const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (!file) return;
@@ -234,7 +253,7 @@ export default function ChatInfoSidebar({ conversationId }: { conversationId: nu
         <ScrollArea className="h-60">
           <div className="space-y-2 pr-2">
             {details.participants.map(p => (
-              <div key={p.id} className="flex items-center justify-between p-2 rounded-md hover:bg-muted">
+              <div key={p.id} className="flex items-center justify-between p-2 rounded-md hover:bg-muted group">
                 <div className="flex items-center gap-3">
                   <Avatar className="h-8 w-8"><AvatarImage src={p.profilepictureurl || undefined} /><AvatarFallback>{p.name.charAt(0)}</AvatarFallback></Avatar>
                   <div>
@@ -243,7 +262,23 @@ export default function ChatInfoSidebar({ conversationId }: { conversationId: nu
                   </div>
                 </div>
                 {isSessionUserAdmin && p.id !== sessionUserId && (
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleRemoveMember(p.id)}><UserX className="h-4 w-4" /></Button>
+                   <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {!p.is_admin && (
+                           <DropdownMenuItem onSelect={() => handleMakeAdmin(p.id)}>
+                            <ShieldPlus className="mr-2 h-4 w-4" /> Make Admin
+                          </DropdownMenuItem>
+                        )}
+                         <DropdownMenuItem onSelect={() => handleRemoveMember(p.id)} className="text-destructive">
+                           <UserX className="mr-2 h-4 w-4" /> Remove
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                   </DropdownMenu>
                 )}
               </div>
             ))}

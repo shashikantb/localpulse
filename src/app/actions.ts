@@ -6,7 +6,6 @@ import * as db from '@/lib/db';
 import type { ConversationDetails, Poll, Post, NewPost as ClientNewPost, Comment, NewComment, DbNewPost, VisitorCounts, User, UserFollowStats, FollowUser, UserWithStatuses, NewStatus, FamilyMember, FamilyMemberLocation, PendingFamilyRequest, Conversation, Message, ConversationParticipant, SortOption, BusinessUser, GorakshakReportUser, PointTransaction, UserForNotification } from '@/lib/db-types';
 import { revalidatePath } from 'next/cache';
 import { getSession, encrypt } from '@/app/auth/actions';
-import { getGcsClient, getGcsBucketName } from '@/lib/gcs';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { admin as firebaseAdmin } from '@/lib/firebase-admin';
@@ -440,85 +439,6 @@ export async function deleteUserPost(postId: number): Promise<{ success: boolean
   }
 }
 
-export async function getSignedUploadUrl(fileName: string, fileType: string): Promise<{ success: boolean; error?: string; uploadUrl?: string; publicUrl?: string }> {
-  const storage = getGcsClient();
-  const bucketName = getGcsBucketName();
-
-  if (!storage || !bucketName) {
-    return { success: false, error: 'Google Cloud Storage is not configured on the server.' };
-  }
-  
-  // Make filename unique to avoid collisions, using built-in methods
-  const randomString = Math.random().toString(36).substring(2, 11);
-  const uniqueFileName = `${Date.now()}-${randomString}-${fileName.replace(/\s/g, '_')}`;
-
-
-  const file = storage.bucket(bucketName).file(uniqueFileName);
-
-  const options = {
-    version: 'v4' as const,
-    action: 'write' as const,
-    expires: Date.now() + 15 * 60 * 1000, // 15 minutes
-    contentType: fileType,
-  };
-
-  try {
-    const [uploadUrl] = await file.getSignedUrl(options);
-    const publicUrl = `https://storage.googleapis.com/${bucketName}/${uniqueFileName}`;
-    
-    return { success: true, uploadUrl, publicUrl };
-  } catch (error: any) {
-    console.error('Error getting signed URL:', error);
-    return { success: false, error: 'Could not get a file upload URL.' };
-  }
-}
-
-export async function uploadGeneratedImage(dataUrl: string, fileName: string): Promise<{ success: boolean; url?: string; error?: string }> {
-  const { user } = await getSession();
-  if (!user) {
-    return { success: false, error: 'Authentication required.' };
-  }
-
-  const storage = getGcsClient();
-  const bucketName = getGcsBucketName();
-
-  if (!storage || !bucketName) {
-    return { success: false, error: 'Google Cloud Storage is not configured on the server.' };
-  }
-
-  try {
-    const matches = dataUrl.match(/^data:(.+);base64,(.+)$/);
-    if (!matches || matches.length !== 3) {
-      return { success: false, error: 'Invalid data URL format.' };
-    }
-
-    const mimeType = matches[1];
-    const base64Data = matches[2];
-    const buffer = Buffer.from(base64Data, 'base64');
-    
-    const uniqueFileName = `${user.id}-${Date.now()}-${fileName}`;
-    const file = storage.bucket(bucketName).file(uniqueFileName);
-
-    await file.save(buffer, {
-      metadata: {
-        contentType: mimeType,
-      },
-      // No 'public: true' - this respects uniform bucket-level access
-    });
-    
-    const [signedUrl] = await file.getSignedUrl({
-        action: 'read',
-        expires: Date.now() + 5 * 60 * 1000, // URL is valid for 5 minutes
-        version: 'v4',
-    });
-
-    return { success: true, url: signedUrl };
-  } catch (error: any) {
-    console.error('Error uploading generated image to GCS:', error);
-    return { success: false, error: 'Failed to upload image due to a server error.' };
-  }
-}
-
 export async function toggleLikePost(postId: number): Promise<{ post?: Post; error?: string }> {
   try {
     const { user } = await getSession();
@@ -810,7 +730,7 @@ export async function getPotentialGroupMembers(): Promise<FollowUser[]> {
 
 
 // --- Mention Actions ---
-export async function searchUsers(query: string): Promise<User[]> {
+export async function searchUsers(query: string, currentUserId?: number): Promise<User[]> {
   const { user } = await getSession();
   if (!query) return [];
   try {
@@ -1257,6 +1177,22 @@ export async function removeMemberFromGroup(conversationId: number, userIdToRemo
     } catch (e: any) {
         return { success: false, error: e.message };
     }
+}
+
+export async function makeUserGroupAdmin(conversationId: number, userIdToPromote: number): Promise<{ success: boolean; error?: string }> {
+  const { user: sessionUser } = await getSession();
+  if (!sessionUser) return { success: false, error: "Authentication required." };
+
+  const isSessionUserAdmin = await db.isUserGroupAdminDb(conversationId, sessionUser.id);
+  if (!isSessionUserAdmin) return { success: false, error: "Only admins can promote other members." };
+
+  try {
+    await db.makeUserGroupAdminDb(conversationId, userIdToPromote);
+    revalidatePath(`/chat/${conversationId}`);
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
 }
 
 export async function addMembersToGroup(conversationId: number, userIdsToAdd: number[]): Promise<{ success: boolean; error?: string }> {

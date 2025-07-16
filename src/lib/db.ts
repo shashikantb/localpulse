@@ -2453,6 +2453,19 @@ export async function removeParticipantFromGroupDb(conversationId: number, userI
     }
 }
 
+export async function makeUserGroupAdminDb(conversationId: number, userId: number): Promise<void> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) throw new Error("Database not configured.");
+    const client = await dbPool.connect();
+    try {
+        const query = 'UPDATE conversation_participants SET is_admin = true WHERE conversation_id = $1 AND user_id = $2';
+        await client.query(query, [conversationId, userId]);
+    } finally {
+        client.release();
+    }
+}
+
 export async function updateGroupAvatarDb(conversationId: number, imageUrl: string): Promise<void> {
     await ensureDbInitialized();
     const dbPool = getDbPool();

@@ -32,6 +32,7 @@ import Link from 'next/link';
 import ReferralSharer from '@/components/referral-sharer';
 import LpPointsHistoryDialog from '@/components/lp-points-history-dialog';
 import RequestVerificationButton from '@/components/request-verification-button';
+import AddFamilyMemberSearch from '@/components/add-family-member-search';
 
 interface UserProfilePageProps {
   params: {
@@ -231,11 +232,13 @@ const UserProfilePage: FC<UserProfilePageProps> = async ({ params }) => {
                         <Users className="w-6 h-6 mr-3 text-primary" />
                         <div className="text-left">
                             <h2 className="text-lg font-semibold leading-none tracking-tight">Family Members</h2>
-                            <p className="text-sm text-muted-foreground pt-1">Manage location sharing with your family.</p>
+                            <p className="text-sm text-muted-foreground pt-1">Manage location sharing and add new members.</p>
                         </div>
                     </div>
                 </AccordionTrigger>
-                <AccordionContent className="px-6 pb-6 pt-0">
+                <AccordionContent className="px-6 pb-6 pt-0 space-y-6">
+                  <AddFamilyMemberSearch sessionUser={sessionUser} />
+                  <Separator />
                   <FamilyMembersCard userId={userId} />
                 </AccordionContent>
               </AccordionItem>
