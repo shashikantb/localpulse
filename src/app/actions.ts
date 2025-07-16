@@ -9,6 +9,7 @@ import { getSession, encrypt } from '@/app/auth/actions';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { admin as firebaseAdmin } from '@/lib/firebase-admin';
+import { getGcsBucketName, getGcsClient } from '@/lib/gcs';
 
 
 async function geocodeCoordinates(latitude: number, longitude: number): Promise<string | null> {
@@ -1328,5 +1329,46 @@ export async function requestLocationUpdate(targetUserId: number): Promise<{ suc
   } catch (error: any) {
     console.error('Error sending location request notification:', error);
     return { success: false, error: 'An unexpected server error occurred.' };
+  }
+}
+
+// --- File Upload Action ---
+export async function getSignedUploadUrl(
+  fileName: string,
+  fileType: string
+): Promise<{ success: boolean; error?: string; uploadUrl?: string; publicUrl?: string; }> {
+  const { user } = await getSession();
+  if (!user) {
+    return { success: false, error: 'You must be logged in to upload files.' };
+  }
+
+  const gcsClient = getGcsClient();
+  const bucketName = getGcsBucketName();
+
+  if (!gcsClient || !bucketName) {
+    return { success: false, error: 'File upload service is not configured on the server.' };
+  }
+
+  const extension = fileName.split('.').pop();
+  // Create a more robust file path to avoid name collisions
+  const cleanFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+  const path = `uploads/${user.id}/${Date.now()}-${cleanFileName}`;
+  const file = gcsClient.bucket(bucketName).file(path);
+
+  try {
+    const options = {
+      version: 'v4' as const,
+      action: 'write' as const,
+      expires: Date.now() + 15 * 60 * 1000, // 15 minutes
+      contentType: fileType,
+    };
+
+    const [uploadUrl] = await file.getSignedUrl(options);
+    const publicUrl = `https://storage.googleapis.com/${bucketName}/${path}`;
+
+    return { success: true, uploadUrl, publicUrl };
+  } catch (error: any) {
+    console.error('Error getting signed URL:', error);
+    return { success: false, error: 'Could not get an upload URL.' };
   }
 }
