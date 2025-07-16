@@ -82,7 +82,7 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
 
-  const partner = !conversationDetails.is_group ? conversationDetails.participants?.[0] : null;
+  const partner = !conversationDetails.is_group ? conversationDetails.participants?.find(p => p.id !== sessionUser.id) : null;
 
   useEffect(() => {
     let isMounted = true;

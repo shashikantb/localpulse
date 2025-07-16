@@ -10,7 +10,6 @@ import {
   addMembersToGroup,
   leaveGroup,
   updateGroupAvatar,
-  getSignedUploadUrl,
   makeUserGroupAdmin
 } from '@/app/actions';
 import { getSession } from '@/app/auth/actions';
@@ -196,6 +195,7 @@ export default function ChatInfoSidebar({ conversationId }: { conversationId: nu
       setIsUploading(true);
       
       try {
+          const { getSignedUploadUrl } = await import('@/app/actions'); // Lazy import
           const signedUrlResult = await getSignedUploadUrl(file.name, file.type);
           if (!signedUrlResult.success || !signedUrlResult.uploadUrl || !signedUrlResult.publicUrl) {
               throw new Error(signedUrlResult.error);
