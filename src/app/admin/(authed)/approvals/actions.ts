@@ -18,7 +18,6 @@ export async function approveUser(userId: number): Promise<{ success: boolean; e
   try {
     const updatedUser = await updateUserStatusDb(userId, 'approved');
     if (updatedUser) {
-      revalidatePath('/admin/approvals');
       revalidatePath('/admin/users');
       return { success: true };
     }
@@ -32,7 +31,6 @@ export async function rejectUser(userId: number): Promise<{ success: boolean; er
   try {
     const updatedUser = await updateUserStatusDb(userId, 'rejected');
     if (updatedUser) {
-      revalidatePath('/admin/approvals');
       revalidatePath('/admin/users');
       return { success: true };
     }
