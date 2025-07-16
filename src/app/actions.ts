@@ -143,6 +143,10 @@ async function sendFamilyPostNotification(post: Post, author: User) {
         }));
 
         const response = await firebaseAdmin.messaging().sendEach(messages as any);
+        if (response.successCount > 0) {
+            await db.updateNotifiedCountDb(post.id, response.successCount);
+        }
+
         if (response.failureCount > 0) {
             console.error(`Failed to send family post notification to ${response.failureCount} tokens.`);
         }
@@ -1349,7 +1353,6 @@ export async function getSignedUploadUrl(
     return { success: false, error: 'File upload service is not configured on the server.' };
   }
 
-  const extension = fileName.split('.').pop();
   // Create a more robust file path to avoid name collisions
   const cleanFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
   const path = `uploads/${user.id}/${Date.now()}-${cleanFileName}`;
