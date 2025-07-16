@@ -50,6 +50,23 @@ async function initializeDatabase(client: Pool | Client) {
     `;
     await initClient.query(createUsersTableQuery);
     console.log("Table 'users' checked/created.");
+    
+    // --- Start Schema Migrations ---
+    // Add last_family_feed_view_at column to users table if it doesn't exist
+    const columnCheckRes = await initClient.query(`
+      SELECT 1 FROM information_schema.columns 
+      WHERE table_name='users' AND column_name='last_family_feed_view_at'
+    `);
+    if (columnCheckRes.rowCount === 0) {
+      console.log("Adding 'last_family_feed_view_at' column to 'users' table...");
+      // Set a default past date for existing users so they see all old family posts as "new" on first view.
+      await initClient.query(`
+        ALTER TABLE users 
+        ADD COLUMN last_family_feed_view_at TIMESTAMPTZ DEFAULT '2024-07-01 12:00:00+00'
+      `);
+      console.log("Column 'last_family_feed_view_at' added successfully.");
+    }
+    // --- End Schema Migrations ---
 
     const createPostsTableQuery = `
         CREATE TABLE IF NOT EXISTS posts (
@@ -2651,5 +2668,6 @@ export async function getUnreadFamilyPostCountDb(userId: number): Promise<number
     }
 }
     
+
 
 
