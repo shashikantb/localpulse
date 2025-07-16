@@ -3,7 +3,7 @@
 'use client';
 
 import type { FC } from 'react';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useForm, type SubmitHandler, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -94,6 +94,8 @@ const baseFormSchema = z.object({
 // Zod schema for a standard post (no poll)
 const standardPostSchema = baseFormSchema.extend({
     isPoll: z.literal(false),
+    pollQuestion: z.string().optional(),
+    pollOptions: z.array(pollOptionSchema).optional(),
 });
 
 // Zod schema for a post with a poll
@@ -318,7 +320,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
       }
 
       let pollData: NewPollData | null = null;
-      if (data.isPoll) {
+      if (data.isPoll && data.pollQuestion && data.pollOptions) {
           pollData = {
               question: data.pollQuestion,
               options: data.pollOptions.map(opt => opt.value).filter(Boolean)
