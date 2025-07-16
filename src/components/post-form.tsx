@@ -80,13 +80,15 @@ const pollOptionSchema = z.object({ value: z.string().min(1, 'Option cannot be e
 
 // Base schema for fields that are always present
 const baseFormSchema = z.object({
-  content: z.string().max(1000, "Post cannot exceed 1000 characters"),
+  content: z.string().max(1000, "Post cannot exceed 1000 characters").optional(),
   hashtags: z.array(z.string()),
   isFamilyPost: z.boolean().default(false),
   hideLocation: z.boolean().default(false),
   isRadarPost: z.boolean().default(false),
   radarExpiry: z.string().optional(),
   radarMaxViewers: z.number().optional(),
+  // A hidden field to track media files for validation
+  mediaFileCount: z.number().default(0),
 });
 
 // Zod schema for a standard post (no poll)
@@ -105,7 +107,16 @@ const pollPostSchema = baseFormSchema.extend({
 const formSchema = z.discriminatedUnion("isPoll", [
   standardPostSchema,
   pollPostSchema,
-]);
+]).superRefine((data, ctx) => {
+    // A post must have either text content or at least one media file
+    if (!data.content && data.mediaFileCount === 0) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['content'],
+            message: 'A post must have some text or media.',
+        });
+    }
+});
 
 
 type FormData = z.infer<typeof formSchema>;
@@ -151,7 +162,9 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
       hideLocation: false,
       isRadarPost: false,
       isPoll: false,
+      mediaFileCount: 0,
     },
+    mode: 'onChange', // Validate on change to enable/disable button
   });
 
   const { fields: pollOptionFields, append: appendPollOption, remove: removePollOption } = useFieldArray({
@@ -165,8 +178,14 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
   
   React.useEffect(() => {
     const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/;
-    setHasDetectedUrl(youtubeRegex.test(contentValue));
+    setHasDetectedUrl(youtubeRegex.test(contentValue || ''));
   }, [contentValue]);
+  
+  // Update mediaFileCount in form state when selectedFiles changes
+  useEffect(() => {
+    form.setValue('mediaFileCount', selectedFiles.length, { shouldValidate: true });
+  }, [selectedFiles, form]);
+
 
   const removeSelectedFile = (indexToRemove: number) => {
     setSelectedFiles(currentFiles => {
@@ -338,7 +357,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
               else if (mediaType === 'image') finalMediaType = 'image';
           }
 
-          await onSubmit(data.content, hashtagsToSubmit, data.isFamilyPost, data.hideLocation, uploadedUrls, finalMediaType, mentionedUserIds, pollData, expiresAt, maxViewers);
+          await onSubmit(data.content || '', hashtagsToSubmit, data.isFamilyPost, data.hideLocation, uploadedUrls, finalMediaType, mentionedUserIds, pollData, expiresAt, maxViewers);
 
         } catch (error: any) {
           console.error("A critical error occurred during the upload process:", error);
@@ -348,7 +367,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
           setIsUploading(false);
         }
       } else {
-        await onSubmit(data.content, hashtagsToSubmit, data.isFamilyPost, data.hideLocation, undefined, undefined, mentionedUserIds, pollData, expiresAt, maxViewers);
+        await onSubmit(data.content || '', hashtagsToSubmit, data.isFamilyPost, data.hideLocation, undefined, undefined, mentionedUserIds, pollData, expiresAt, maxViewers);
       }
       
       form.reset();
@@ -360,7 +379,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
       setTaggedUsers([]);
   };
 
-  const isButtonDisabled = submitting || isUploading;
+  const isButtonDisabled = submitting || isUploading || !form.formState.isValid;
   let buttonText = 'Share Your Pulse';
   if (isUploading) buttonText = `Uploading ${uploadProgress} / ${selectedFiles.length}...`;
   else if (submitting) buttonText = 'Pulsing...';
@@ -385,7 +404,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
                     className="resize-none min-h-[100px] text-base shadow-sm focus:ring-2 focus:ring-primary/50 rounded-lg"
                     rows={4}
                     {...field}
-                    disabled={isButtonDisabled}
+                    disabled={submitting || isUploading}
                   />
                 </FormControl>
                 <FormMessage />
@@ -431,7 +450,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
                     <FormControl>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="outline" className="w-full justify-between" disabled={isButtonDisabled}>
+                          <Button variant="outline" className="w-full justify-between" disabled={submitting || isUploading}>
                             <div className="flex items-center gap-2">
                               <Tag className="w-4 h-4 text-primary" />
                               <span>Hashtags ({field.value?.length || 0})</span>
@@ -456,7 +475,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
                                         );
                                     field.onChange(newTags);
                                   }}
-                                  disabled={isButtonDisabled}
+                                  disabled={submitting || isUploading}
                                 >
                                   {tag}
                                 </DropdownMenuCheckboxItem>
@@ -473,7 +492,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
               />
               <Dialog open={isTaggingDialogOpen} onOpenChange={setIsTaggingDialogOpen}>
                   <DialogTrigger asChild>
-                      <Button type="button" variant="outline" disabled={isButtonDisabled}>
+                      <Button type="button" variant="outline" disabled={submitting || isUploading}>
                           <UserPlus className="mr-2 h-4 w-4" />
                           Tag People ({taggedUsers.length})
                       </Button>
@@ -613,8 +632,9 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
                       <Checkbox
                         checked={field.value}
                         onCheckedChange={(checked) => {
-                            field.onChange(checked);
-                            if (checked) {
+                            const isChecked = !!checked;
+                            field.onChange(isChecked);
+                            if (isChecked) {
                                 // When switching to poll, reset poll fields to defaults
                                 form.setValue('pollQuestion', '');
                                 form.setValue('pollOptions', [{ value: '' }, { value: '' }]);
@@ -624,7 +644,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
                                 form.setValue('pollOptions', undefined);
                             }
                         }}
-                        disabled={isButtonDisabled}
+                        disabled={submitting || isUploading}
                       />
                     </FormControl>
                     <div className="space-y-1 leading-none">
@@ -693,7 +713,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
                         <Checkbox
                           checked={field.value}
                           onCheckedChange={field.onChange}
-                          disabled={isButtonDisabled}
+                          disabled={submitting || isUploading}
                         />
                       </FormControl>
                       <div className="space-y-1 leading-none">
@@ -719,7 +739,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
                     <Checkbox
                       checked={field.value}
                       onCheckedChange={field.onChange}
-                      disabled={isButtonDisabled}
+                      disabled={submitting || isUploading}
                     />
                   </FormControl>
                   <div className="space-y-1 leading-none">
@@ -745,7 +765,7 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
                             <Checkbox
                             checked={field.value}
                             onCheckedChange={field.onChange}
-                            disabled={isButtonDisabled}
+                            disabled={submitting || isUploading}
                             />
                         </FormControl>
                         <div className="space-y-1 leading-none">
