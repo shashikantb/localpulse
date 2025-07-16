@@ -122,7 +122,7 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
             viewport.scrollTo({ top: viewport.scrollHeight });
         }
     }
-  }, []);
+  }, [messages]);
 
   useEffect(() => {
     let isMounted = true;
