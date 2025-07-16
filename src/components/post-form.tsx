@@ -294,11 +294,13 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
       }
 
       let pollData: NewPollData | null = null;
-      if (data.isPoll && data.pollQuestion && data.pollOptions) {
-          pollData = {
-              question: data.pollQuestion,
-              options: data.pollOptions.map(opt => opt.value).filter(Boolean)
-          };
+      if (data.isPoll) {
+          if (data.pollQuestion && data.pollOptions) {
+              pollData = {
+                  question: data.pollQuestion,
+                  options: data.pollOptions.map(opt => opt.value).filter(Boolean)
+              };
+          }
       }
 
 
