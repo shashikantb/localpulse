@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -96,7 +95,10 @@ export default function CreateGroupDialog({ children }: { children: React.ReactN
             onChange={(e) => setGroupName(e.target.value)}
             disabled={isSubmitting}
           />
-          <h4 className="text-sm font-medium text-muted-foreground">Add Members</h4>
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium text-muted-foreground">Add Members</h4>
+            <p className="text-xs text-muted-foreground -mt-2">Only your followers and family members will appear in this list.</p>
+          </div>
           <ScrollArea className="h-48 border rounded-md">
             {isLoading ? (
               <div className="p-4 text-center text-sm text-muted-foreground">Loading potential members...</div>
