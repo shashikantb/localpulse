@@ -78,7 +78,8 @@ export const HASHTAG_CATEGORIES = [
 
 const pollOptionSchema = z.object({ value: z.string().min(1, 'Option cannot be empty.').max(50, 'Option cannot exceed 50 characters.') });
 
-const formSchema = z.object({
+// Base schema for fields that are always present
+const baseFormSchema = z.object({
   content: z.string().max(1000, "Post cannot exceed 1000 characters"),
   hashtags: z.array(z.string()),
   isFamilyPost: z.boolean().default(false),
@@ -86,19 +87,25 @@ const formSchema = z.object({
   isRadarPost: z.boolean().default(false),
   radarExpiry: z.string().optional(),
   radarMaxViewers: z.number().optional(),
-  isPoll: z.boolean().default(false),
-  pollQuestion: z.string().optional(),
-  pollOptions: z.array(pollOptionSchema).optional(),
-}).superRefine((data, ctx) => {
-    if (data.isPoll) {
-        if (!data.pollQuestion || data.pollQuestion.trim().length < 1) {
-            ctx.addIssue({ code: 'custom', message: 'Poll question cannot be empty.', path: ['pollQuestion'] });
-        }
-        if (!data.pollOptions || data.pollOptions.length < 2) {
-            ctx.addIssue({ code: 'custom', message: 'A poll must have at least 2 options.', path: ['pollOptions'] });
-        }
-    }
 });
+
+// Zod schema for a standard post (no poll)
+const standardPostSchema = baseFormSchema.extend({
+    isPoll: z.literal(false),
+});
+
+// Zod schema for a post with a poll
+const pollPostSchema = baseFormSchema.extend({
+    isPoll: z.literal(true),
+    pollQuestion: z.string().min(1, 'Poll question cannot be empty.'),
+    pollOptions: z.array(pollOptionSchema).min(2, 'A poll must have at least 2 options.'),
+});
+
+// Discriminated union to switch between schemas based on the 'isPoll' field
+const formSchema = z.discriminatedUnion("isPoll", [
+  standardPostSchema,
+  pollPostSchema,
+]);
 
 
 type FormData = z.infer<typeof formSchema>;
@@ -144,8 +151,6 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
       hideLocation: false,
       isRadarPost: false,
       isPoll: false,
-      pollQuestion: '',
-      pollOptions: [{ value: '' }, { value: '' }],
     },
   });
 
@@ -295,12 +300,10 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
 
       let pollData: NewPollData | null = null;
       if (data.isPoll) {
-          if (data.pollQuestion && data.pollOptions) {
-              pollData = {
-                  question: data.pollQuestion,
-                  options: data.pollOptions.map(opt => opt.value).filter(Boolean)
-              };
-          }
+          pollData = {
+              question: data.pollQuestion,
+              options: data.pollOptions.map(opt => opt.value).filter(Boolean)
+          };
       }
 
 
@@ -609,7 +612,18 @@ export const PostForm: FC<PostFormProps> = ({ onSubmit, submitting, sessionUser 
                     <FormControl>
                       <Checkbox
                         checked={field.value}
-                        onCheckedChange={field.onChange}
+                        onCheckedChange={(checked) => {
+                            field.onChange(checked);
+                            if (checked) {
+                                // When switching to poll, reset poll fields to defaults
+                                form.setValue('pollQuestion', '');
+                                form.setValue('pollOptions', [{ value: '' }, { value: '' }]);
+                            } else {
+                                // When switching off poll, clear values
+                                form.setValue('pollQuestion', undefined);
+                                form.setValue('pollOptions', undefined);
+                            }
+                        }}
                         disabled={isButtonDisabled}
                       />
                     </FormControl>
