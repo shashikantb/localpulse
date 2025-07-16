@@ -231,7 +231,7 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
   );
 
   return (
-    <div className="flex flex-col bg-background h-full overflow-hidden">
+    <div className="flex flex-col bg-background h-full">
         <header className="flex-shrink-0 flex items-center p-3 border-b bg-card">
             {conversationDetails.is_group ? (
                 <Sheet>
@@ -249,6 +249,31 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
             )}
         </header>
 
+        {/* Message Input Form */}
+        <div className="p-4 border-b">
+            <form onSubmit={handleSendMessage} className="flex items-center gap-3">
+            <Textarea
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                placeholder="Type a message..."
+                className="flex-1 resize-none"
+                rows={1}
+                disabled={isSending}
+                onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage(e);
+                }
+                }}
+            />
+            <Button type="submit" size="icon" disabled={!newMessage.trim() || isSending}>
+                {isSending ? <Loader2 className="animate-spin" /> : <Send />}
+                <span className="sr-only">Send</span>
+            </Button>
+            </form>
+        </div>
+        
+        {/* Message List Area */}
         <ScrollArea className="flex-grow p-4" ref={scrollAreaRef}>
             {messages.map((message) => {
                 const isSender = message.sender_id === sessionUser.id;
@@ -339,29 +364,7 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
                 );
             })}
         </ScrollArea>
-        
-        <div className="flex-shrink-0 p-4 border-t bg-card">
-            <form onSubmit={handleSendMessage} className="flex items-center gap-3">
-            <Textarea
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Type a message..."
-                className="flex-1 resize-none"
-                rows={1}
-                disabled={isSending}
-                onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendMessage(e);
-                }
-                }}
-            />
-            <Button type="submit" size="icon" disabled={!newMessage.trim() || isSending}>
-                {isSending ? <Loader2 className="animate-spin" /> : <Send />}
-                <span className="sr-only">Send</span>
-            </Button>
-            </form>
-        </div>
     </div>
   );
 }
+
