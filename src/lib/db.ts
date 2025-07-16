@@ -1781,7 +1781,7 @@ export async function getMessagesForConversationDb(conversationId: number, userI
             ) as reactions
           FROM messages m
           WHERE m.conversation_id = $1
-          ORDER BY m.created_at ASC;
+          ORDER BY m.created_at DESC;
       `;
       const messagesResult: QueryResult<Message> = await client.query(messagesQuery, [conversationId]);
       return messagesResult.rows;
@@ -2730,6 +2730,7 @@ export async function getUnreadFamilyPostCountDb(userId: number): Promise<number
     }
 }
     
+
 
 
 

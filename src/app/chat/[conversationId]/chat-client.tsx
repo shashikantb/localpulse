@@ -111,18 +111,7 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
 
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
-
   const partner = !conversationDetails.is_group ? conversationDetails.participants?.find(p => p.id !== sessionUser.id) : null;
-
-  useEffect(() => {
-    if (scrollAreaRef.current) {
-        const viewport = scrollAreaRef.current.querySelector('div[data-radix-scroll-area-viewport]');
-        if (viewport) {
-            viewport.scrollTo({ top: viewport.scrollHeight });
-        }
-    }
-  }, [messages]);
 
   useEffect(() => {
     let isMounted = true;
@@ -164,7 +153,7 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
         description: result.error || 'Could not send the message. Please try again.',
       });
     } else {
-      setMessages(prev => [...prev, result.message!]);
+      setMessages(prev => [result.message!, ...prev]);
       setNewMessage('');
     }
     
@@ -274,7 +263,7 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
         </div>
         
         {/* Message List Area */}
-        <ScrollArea className="flex-grow p-4" ref={scrollAreaRef}>
+        <ScrollArea className="flex-grow p-4">
             {messages.map((message) => {
                 const isSender = message.sender_id === sessionUser.id;
                 const senderDetails = conversationDetails.participants.find(p => p.id === message.sender_id);
@@ -367,4 +356,3 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
     </div>
   );
 }
-
