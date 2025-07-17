@@ -7,23 +7,26 @@ import { updateUserMobileDb, updateUserBusinessCategoryDb, updateUserStatusDb } 
 import { z } from 'zod';
 import type { UpdateBusinessCategory } from '@/lib/db-types';
 
-const mobileSchema = z.string().regex(/^\d{10}$/, 'Must be a valid 10-digit mobile number.');
+const mobileSchema = z.object({
+    countryCode: z.string().min(1, 'Country code is required.'),
+    mobilenumber: z.string().regex(/^\d{10}$/, 'Must be a valid 10-digit mobile number.'),
+});
 
-export async function updateUserMobile(formData: FormData) {
+export async function updateUserMobile(data: { countryCode: string; mobilenumber: string }) {
   const { user } = await getSession();
   if (!user) {
     return { success: false, error: 'Authentication required.' };
   }
 
-  const mobileNumber = formData.get('mobilenumber') as string;
-  const validation = mobileSchema.safeParse(mobileNumber);
+  const validation = mobileSchema.safeParse(data);
 
   if (!validation.success) {
     return { success: false, error: validation.error.errors[0].message };
   }
   
   try {
-    await updateUserMobileDb(user.id, validation.data);
+    const fullMobileNumber = `${validation.data.countryCode}${validation.data.mobilenumber}`;
+    await updateUserMobileDb(user.id, fullMobileNumber);
     revalidatePath(`/users/${user.id}`);
     return { success: true };
   } catch (error: any) {

@@ -13,8 +13,10 @@ import { Button } from '@/components/ui/button';
 import { Loader2, Phone, Save } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import type { UserRole } from '@/lib/db-types';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 const formSchema = z.object({
+  countryCode: z.string().min(1, 'Country code is required.'),
   mobilenumber: z.string().regex(/^\d{10}$/, {
     message: 'Please enter a valid 10-digit mobile number.',
   }),
@@ -35,6 +37,7 @@ export default function UpdateMobileForm({ onUpdate, userRole }: UpdateMobileFor
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
+      countryCode: '+91',
       mobilenumber: '',
     },
   });
@@ -43,10 +46,7 @@ export default function UpdateMobileForm({ onUpdate, userRole }: UpdateMobileFor
     setIsSubmitting(true);
     setServerError(null);
 
-    const formData = new FormData();
-    formData.append('mobilenumber', data.mobilenumber);
-    
-    const result = await updateUserMobile(formData);
+    const result = await updateUserMobile(data);
 
     if (result.success) {
       toast({
@@ -71,22 +71,42 @@ export default function UpdateMobileForm({ onUpdate, userRole }: UpdateMobileFor
                 <AlertDescription>{serverError}</AlertDescription>
             </Alert>
         )}
-        <FormField
-          control={form.control}
-          name="mobilenumber"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel htmlFor="mobilenumber">Your 10-Digit Mobile Number</FormLabel>
-              <div className="relative">
-                <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <FormControl>
-                  <Input id="mobilenumber" type="tel" placeholder="e.g., 9876543210" className="pl-10" {...field} disabled={isSubmitting} />
-                </FormControl>
-              </div>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        <FormItem>
+            <FormLabel>Your Mobile Number</FormLabel>
+            <div className="flex gap-2">
+                <FormField
+                    control={form.control}
+                    name="countryCode"
+                    render={({ field }) => (
+                        <FormItem className="w-1/3">
+                            <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}>
+                                <FormControl>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                    <SelectItem value="+91">IN +91</SelectItem>
+                                    <SelectItem value="+1">US +1</SelectItem>
+                                    <SelectItem value="+44">UK +44</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
+                <FormField
+                    control={form.control}
+                    name="mobilenumber"
+                    render={({ field }) => (
+                        <FormItem className="flex-1">
+                            <FormControl>
+                                <Input id="mobilenumber" type="tel" placeholder="10-digit number" {...field} disabled={isSubmitting} />
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
+            </div>
+        </FormItem>
         <Button type="submit" disabled={isSubmitting} className="w-full">
           {isSubmitting ? (
             <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</>
