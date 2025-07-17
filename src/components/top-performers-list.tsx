@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Award, Medal, Trophy } from 'lucide-react';
 import Link from 'next/link';
 import { Skeleton } from './ui/skeleton';
+import { ScrollArea } from './ui/scroll-area';
 
 async function TopPerformersContent() {
   const users = await getTopLpPointUsers();
@@ -31,29 +32,31 @@ async function TopPerformersContent() {
   };
 
   return (
-    <div className="space-y-4">
-      {users.map((user, index) => (
-        <Link href={`/users/${user.id}`} key={user.id} className="block p-3 rounded-lg hover:bg-muted transition-colors">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 w-8 text-lg font-bold">
-              {getRankIcon(index)}
-              <span className="text-muted-foreground">{index + 1}</span>
+    <ScrollArea className="h-72">
+      <div className="space-y-2 pr-4">
+        {users.map((user, index) => (
+          <Link href={`/users/${user.id}`} key={user.id} className="block p-3 rounded-lg hover:bg-muted transition-colors">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 w-8 text-base font-bold">
+                {getRankIcon(index)}
+                <span className="text-muted-foreground">{index + 1}</span>
+              </div>
+              <Avatar className="h-10 w-10 border-2 border-primary/20">
+                <AvatarImage src={user.profilepictureurl || undefined} alt={user.name} />
+                <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+              </Avatar>
+              <div className="flex-1">
+                <p className="font-semibold text-sm text-foreground truncate">{user.name}</p>
+              </div>
+              <div className="flex items-center gap-1.5 text-primary font-bold text-sm">
+                <Award className="h-4 w-4" />
+                <span>{user.lp_points}</span>
+              </div>
             </div>
-            <Avatar className="h-10 w-10 border-2 border-primary/20">
-              <AvatarImage src={user.profilepictureurl || undefined} alt={user.name} />
-              <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
-            </Avatar>
-            <div className="flex-1">
-              <p className="font-semibold text-foreground truncate">{user.name}</p>
-            </div>
-            <div className="flex items-center gap-1.5 text-primary font-bold">
-              <Award className="h-4 w-4" />
-              <span>{user.lp_points}</span>
-            </div>
-          </div>
-        </Link>
-      ))}
-    </div>
+          </Link>
+        ))}
+      </div>
+    </ScrollArea>
   );
 }
 
