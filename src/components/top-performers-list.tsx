@@ -45,7 +45,7 @@ async function TopPerformersContent() {
                 <AvatarImage src={user.profilepictureurl || undefined} alt={user.name} />
                 <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
               </Avatar>
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <p className="font-semibold text-sm text-foreground truncate">{user.name}</p>
               </div>
               <div className="flex items-center gap-1.5 text-primary font-bold text-sm">
