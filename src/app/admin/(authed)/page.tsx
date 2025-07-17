@@ -3,8 +3,10 @@ import type { FC } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { BarChart, Users, FileText, Activity } from 'lucide-react';
+import { BarChart, Users, FileText, Activity, Trophy } from 'lucide-react';
 import { getAdminDashboardStats } from './actions';
+import TopPerformersList from '@/components/top-performers-list';
+import { Suspense } from 'react';
 
 const AdminDashboardPage: FC = async () => {
   const { totalPosts, totalUsers, dailyActiveUsers } = await getAdminDashboardStats();
@@ -42,15 +44,15 @@ const AdminDashboardPage: FC = async () => {
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center">
-              <BarChart className="mr-2 h-6 w-6 text-primary" />
-              Recent Activity
+              <Trophy className="mr-2 h-6 w-6 text-yellow-500" />
+              Top LP Point Earners
             </CardTitle>
-            <CardDescription>Overview of recent platform engagement (Placeholder).</CardDescription>
+            <CardDescription>The top 10 performers on the platform.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-64 bg-muted rounded-md flex items-center justify-center">
-              <p className="text-muted-foreground">Chart data will be displayed here.</p>
-            </div>
+            <Suspense fallback={<TopPerformersList.Skeleton />}>
+              <TopPerformersList />
+            </Suspense>
           </CardContent>
         </Card>
 

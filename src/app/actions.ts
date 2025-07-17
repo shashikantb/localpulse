@@ -1335,6 +1335,15 @@ export async function getPointHistory(userId: number): Promise<PointTransaction[
   }
 }
 
+export async function getTopLpPointUsers(): Promise<Pick<User, 'id' | 'name' | 'profilepictureurl' | 'lp_points'>[]> {
+    try {
+        return await db.getTopLpPointUsersDb();
+    } catch (error) {
+        console.error("Server action error fetching top LP point users:", error);
+        return [];
+    }
+}
+
 // --- Location Request Action ---
 export async function requestLocationUpdate(targetUserId: number): Promise<{ success: boolean; error?: string }> {
   const { user: requester } = await getSession();
@@ -1444,4 +1453,3 @@ export async function markFamilyFeedAsRead(): Promise<void> {
         console.error("Server action error marking family feed as read:", error);
     }
 }
-    

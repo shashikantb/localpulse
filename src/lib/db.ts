@@ -2422,6 +2422,26 @@ export async function getPointHistoryForUserDb(userId: number): Promise<PointTra
     }
 }
 
+export async function getTopLpPointUsersDb(): Promise<Pick<User, 'id' | 'name' | 'profilepictureurl' | 'lp_points'>[]> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return [];
+
+    const client = await dbPool.connect();
+    try {
+        const query = `
+            SELECT id, name, profilepictureurl, lp_points
+            FROM users
+            ORDER BY lp_points DESC
+            LIMIT 10;
+        `;
+        const result = await client.query(query);
+        return result.rows;
+    } finally {
+        client.release();
+    }
+}
+
 // --- Admin Dashboard & Notification Functions ---
 export async function getAllUsersWithDeviceTokensDb(): Promise<UserForNotification[]> {
     await ensureDbInitialized();
@@ -2730,6 +2750,7 @@ export async function getUnreadFamilyPostCountDb(userId: number): Promise<number
     }
 }
     
+
 
 
 
