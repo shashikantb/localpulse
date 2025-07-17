@@ -37,18 +37,18 @@ async function TopPerformersContent() {
         {users.map((user, index) => (
           <Link href={`/users/${user.id}`} key={user.id} className="block p-3 rounded-lg hover:bg-muted transition-colors">
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 w-8 text-base font-bold">
+              <div className="flex items-center gap-2 w-8 text-base font-bold flex-shrink-0">
                 {getRankIcon(index)}
                 <span className="text-muted-foreground">{index + 1}</span>
               </div>
-              <Avatar className="h-10 w-10 border-2 border-primary/20">
+              <Avatar className="h-10 w-10 border-2 border-primary/20 flex-shrink-0">
                 <AvatarImage src={user.profilepictureurl || undefined} alt={user.name} />
                 <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-sm text-foreground truncate">{user.name}</p>
               </div>
-              <div className="flex items-center gap-1.5 text-primary font-bold text-sm">
+              <div className="flex items-center gap-1.5 text-primary font-bold text-sm flex-shrink-0">
                 <Award className="h-4 w-4" />
                 <span>{user.lp_points}</span>
               </div>
