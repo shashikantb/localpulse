@@ -140,7 +140,7 @@ async function initializeDatabase(client: Pool | Client) {
     }
     
     // Check for and create the official user if it doesn't exist
-    const officialUserCheck = await initClient.query("SELECT 1 FROM users WHERE email = $1", [OFFICIAL_USER_EMAIL]);
+    const officialUserCheck = await client.query("SELECT 1 FROM users WHERE email = $1", [OFFICIAL_USER_EMAIL]);
     if (officialUserCheck.rowCount === 0 && process.env.OFFICIAL_USER_PASSWORD) {
         const salt = await bcrypt.genSalt(10);
         const passwordhash = await bcrypt.hash(process.env.OFFICIAL_USER_PASSWORD, salt);
@@ -2751,10 +2751,3 @@ export async function getUnreadFamilyPostCountDb(userId: number): Promise<number
     }
 }
     
-
-
-
-
-
-
-
