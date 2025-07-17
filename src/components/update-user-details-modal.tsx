@@ -22,7 +22,8 @@ interface UpdateUserDetailsModalProps {
 const UpdateUserDetailsModal: React.FC<UpdateUserDetailsModalProps> = ({ user }) => {
   const [isOpen, setIsOpen] = useState(false);
 
-  const needsMobile = !user.mobilenumber;
+  // Corrected logic: Check if mobilenumber is missing OR doesn't start with '+'
+  const needsMobile = !user.mobilenumber || !user.mobilenumber.startsWith('+');
   const needsCategory = user.role === 'Business' && !user.business_category;
 
   useEffect(() => {
@@ -54,7 +55,7 @@ const UpdateUserDetailsModal: React.FC<UpdateUserDetailsModalProps> = ({ user })
                     <Info className="h-4 w-4" />
                     <AlertTitle>Mobile Number Required</AlertTitle>
                     <AlertDescription>
-                        Please enter your 10-digit mobile number.
+                        Please confirm your mobile number, including your country code, to continue.
                     </AlertDescription>
                 </Alert>
                 <UpdateMobileForm onUpdate={handleUpdate} userRole={user.role} />
