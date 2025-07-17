@@ -97,6 +97,7 @@ export type NewUser = {
   email: string;
   role: 'Business' | 'Gorakshak' | 'Public(जनता)';
   passwordplaintext: string;
+  countryCode: string;
   mobilenumber: string;
   business_category?: string;
   business_other_category?: string;

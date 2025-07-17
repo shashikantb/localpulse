@@ -927,6 +927,7 @@ export async function createUserDb(newUser: NewUser, status: UserStatus): Promis
 
       const salt = await bcrypt.genSalt(10);
       const passwordhash = await bcrypt.hash(newUser.passwordplaintext, salt);
+      const fullMobileNumber = `${newUser.countryCode}${newUser.mobilenumber}`;
       
       let referredById = null;
       let initialPoints = 0;
@@ -964,7 +965,7 @@ export async function createUserDb(newUser: NewUser, status: UserStatus): Promis
           RETURNING ${USER_COLUMNS_SANITIZED};
       `;
       
-      const values = [newUser.name, newUser.email.toLowerCase(), passwordhash, newUser.role, status, newUser.mobilenumber, newUser.business_category, newUser.business_other_category, referredById, initialPoints, referralCode];
+      const values = [newUser.name, newUser.email.toLowerCase(), passwordhash, newUser.role, status, fullMobileNumber, newUser.business_category, newUser.business_other_category, referredById, initialPoints, referralCode];
       const result: QueryResult<User> = await client.query(insertQuery, values);
       const createdUser = result.rows[0];
 
@@ -2750,6 +2751,7 @@ export async function getUnreadFamilyPostCountDb(userId: number): Promise<number
     }
 }
     
+
 
 
 
