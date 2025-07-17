@@ -22,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { BUSINESS_CATEGORIES } from '@/lib/db-types';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { COUNTRIES } from '@/lib/countries';
 
 const signupSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters.'),
@@ -211,15 +212,19 @@ const SignupPage: FC = () => {
                         control={form.control}
                         name="countryCode"
                         render={({ field }) => (
-                            <FormItem className="w-1/4">
+                            <FormItem className="w-1/3">
                                 <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}>
                                     <FormControl>
                                         <SelectTrigger><SelectValue /></SelectTrigger>
                                     </FormControl>
                                     <SelectContent>
-                                        <SelectItem value="+91">IN +91</SelectItem>
-                                        <SelectItem value="+1">US +1</SelectItem>
-                                        <SelectItem value="+44">UK +44</SelectItem>
+                                      <ScrollArea className="h-72">
+                                        {COUNTRIES.map(country => (
+                                          <SelectItem key={country.name} value={`+${country.code}`}>
+                                            {country.name} (+{country.code})
+                                          </SelectItem>
+                                        ))}
+                                      </ScrollArea>
                                     </SelectContent>
                                 </Select>
                                 <FormMessage />

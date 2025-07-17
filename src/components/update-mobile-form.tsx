@@ -14,6 +14,8 @@ import { Loader2, Phone, Save } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import type { UserRole } from '@/lib/db-types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { COUNTRIES } from '@/lib/countries';
+import { ScrollArea } from './ui/scroll-area';
 
 const formSchema = z.object({
   countryCode: z.string().min(1, 'Country code is required.'),
@@ -84,9 +86,13 @@ export default function UpdateMobileForm({ onUpdate, userRole }: UpdateMobileFor
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                    <SelectItem value="+91">IN +91</SelectItem>
-                                    <SelectItem value="+1">US +1</SelectItem>
-                                    <SelectItem value="+44">UK +44</SelectItem>
+                                  <ScrollArea className="h-72">
+                                    {COUNTRIES.map(country => (
+                                      <SelectItem key={country.name} value={`+${country.code}`}>
+                                        {country.name} (+{country.code})
+                                      </SelectItem>
+                                    ))}
+                                  </ScrollArea>
                                 </SelectContent>
                             </Select>
                             <FormMessage />
