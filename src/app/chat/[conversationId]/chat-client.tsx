@@ -51,7 +51,7 @@ const renderChatMessageContent = (content: string) => {
 
   // Regex to find URLs and @mentions
   const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
-  const mentionRegex = /@(\w+)/g;
+  const mentionRegex = /@(\w+(\s\w+)*)/g;
   const parts = content.split(new RegExp(`(${urlRegex.source}|${mentionRegex.source})`, 'g'));
 
   return parts.map((part, index) => {
@@ -226,7 +226,7 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
     const text = e.target.value;
     setNewMessage(text);
 
-    const mentionMatch = text.match(/@(\w*)$/);
+    const mentionMatch = text.match(/@([\w\s]*)$/);
     if (mentionMatch) {
       setShowMentionSuggestions(true);
       setMentionQuery(mentionMatch[1]);
@@ -236,7 +236,7 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
   };
 
   const handleSelectMention = (username: string) => {
-    setNewMessage(prev => prev.replace(/@\w*$/, `@${username} `));
+    setNewMessage(prev => prev.replace(/@[\w\s]*$/, `@${username} `));
     setShowMentionSuggestions(false);
     setMentionResults([]);
   };
@@ -299,7 +299,7 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
                 value={newMessage}
                 onChange={handleInputChange}
                 placeholder="Type a message... (use @ to mention)"
-                className="flex-1 resize-none bg-background border"
+                className="flex-1 resize-none bg-white dark:bg-zinc-800 border"
                 rows={1}
                 disabled={isSending}
                 onKeyDown={(e) => {
@@ -348,7 +348,7 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
                             {!isSender && conversationDetails.is_group && (
                             <p className="text-xs font-semibold text-accent mb-1">{senderDetails?.name}</p>
                             )}
-                            <p className="text-sm whitespace-pre-wrap break-words">{renderChatMessageContent(message.content)}</p>
+                            <div className="text-sm whitespace-pre-wrap break-words">{renderChatMessageContent(message.content)}</div>
                             <span className={cn('text-xs mt-1.5 opacity-70', isSender ? 'self-end' : 'self-start')}>
                                 {format(new Date(message.created_at), 'p')}
                             </span>
