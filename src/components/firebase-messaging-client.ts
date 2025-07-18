@@ -10,6 +10,11 @@ const FirebaseMessagingClient = () => {
   useEffect(() => {
     // This effect runs once on the client when the app loads.
     const setupFirebaseMessaging = async () => {
+      // Ensure this runs only on the client side and that service workers are supported.
+      if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+        return;
+      }
+
       // The service worker must be successfully registered before we can get a token.
       try {
         const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
@@ -46,16 +51,10 @@ const FirebaseMessagingClient = () => {
       }
     };
     
-    // Ensure this runs only on the client side
-    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-      window.addEventListener('load', setupFirebaseMessaging);
-    }
-    
-    return () => {
-        window.removeEventListener('load', setupFirebaseMessaging);
-    };
+    // Directly invoke the setup function.
+    setupFirebaseMessaging();
 
-  }, []);
+  }, []); // The empty dependency array ensures this runs only once on mount.
 
   return null; // This component does not render anything.
 };
