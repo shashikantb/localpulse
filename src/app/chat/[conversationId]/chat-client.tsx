@@ -338,7 +338,7 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
                 value={newMessage}
                 onChange={handleInputChange}
                 placeholder="Type a message... (use @ to mention)"
-                className="flex-1 resize-none bg-background border"
+                className="flex-1 resize-none bg-card border"
                 rows={1}
                 disabled={isSending}
                 onKeyDown={(e) => {
