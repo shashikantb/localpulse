@@ -93,44 +93,73 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
 
   const partner = !conversationDetails.is_group ? conversationDetails.participants?.find(p => p.id !== sessionUser.id) : null;
   
-  // Helper function to render message content with clickable links and mentions
   const renderChatMessageContent = (content: string) => {
-    if (!content) return content;
-    
-    // Create a regex that specifically looks for @ followed by a known participant's name
+    if (!content) return null;
+
     const participantNames = conversationDetails.participants.map(p => escapeRegExp(p.name));
     const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
-    const mentionRegex = new RegExp(`@(${participantNames.join('|')})\\b`, 'g');
+    const mentionRegex = participantNames.length > 0 ? new RegExp(`@(${participantNames.join('|')})\\b`, 'g') : null;
 
-    const parts = content.split(new RegExp(`(${urlRegex.source}|${mentionRegex.source})`, 'g'));
+    const allMatches: { type: 'url' | 'mention', text: string, index: number }[] = [];
 
-    return parts.map((part, index) => {
-      if (!part) return null;
+    // Find all URL matches
+    for (const match of content.matchAll(urlRegex)) {
+        allMatches.push({ type: 'url', text: match[0], index: match.index! });
+    }
+    // Find all mention matches
+    if (mentionRegex) {
+        for (const match of content.matchAll(mentionRegex)) {
+            allMatches.push({ type: 'mention', text: match[0], index: match.index! });
+        }
+    }
 
-      if (part.match(urlRegex)) {
-        const href = part.startsWith('www.') ? `https://www.${part}` : part;
-        return (
-          <a
-            key={`link-${index}`}
-            href={href}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-400 hover:underline font-medium"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {part}
-          </a>
-        );
-      }
-      if (part.match(mentionRegex)) {
-          return (
-              <span key={`mention-${index}`} className="text-accent font-semibold bg-accent/10 rounded px-1 py-0.5">
-                  {part}
-              </span>
-          );
-      }
-      return part;
+    // Sort matches by their index
+    allMatches.sort((a, b) => a.index - b.index);
+
+    if (allMatches.length === 0) {
+        return content;
+    }
+
+    const result: (string | JSX.Element)[] = [];
+    let lastIndex = 0;
+
+    allMatches.forEach(match => {
+        // Add text before the match
+        if (match.index > lastIndex) {
+            result.push(content.substring(lastIndex, match.index));
+        }
+
+        // Add the styled match
+        if (match.type === 'url') {
+            const href = match.text.startsWith('www.') ? `https://` + match.text : match.text;
+            result.push(
+                <a
+                    key={`link-${match.index}`}
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-400 hover:underline font-medium"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    {match.text}
+                </a>
+            );
+        } else if (match.type === 'mention') {
+            result.push(
+                <span key={`mention-${match.index}`} className="text-accent font-semibold bg-accent/10 rounded px-1 py-0.5">
+                    {match.text}
+                </span>
+            );
+        }
+        lastIndex = match.index + match.text.length;
     });
+
+    // Add any remaining text after the last match
+    if (lastIndex < content.length) {
+        result.push(content.substring(lastIndex));
+    }
+
+    return result.map((part, index) => <React.Fragment key={index}>{part}</React.Fragment>);
   };
 
 
