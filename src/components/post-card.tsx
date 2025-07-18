@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader } from '@/co
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import type { Post, User, Poll } from '@/lib/db-types';
 import { formatDistanceToNowStrict, formatDistance } from 'date-fns';
-import { MapPin, UserCircle, MessageCircle, Map, Share2, ThumbsUp, Tag, Eye, BellRing, AlertTriangle, RefreshCw, ChevronLeft, ChevronRight, Image as ImageIcon, MoreHorizontal, Trash2, Megaphone, Zap, Clock, Check } from 'lucide-react';
+import { MapPin, UserCircle, MessageCircle, Map, Share2, ThumbsUp, Tag, Eye, BellRing, AlertTriangle, RefreshCw, ChevronLeft, ChevronRight, Image as ImageIcon, MoreHorizontal, Trash2, Megaphone, Zap, Clock, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toggleLikePost, recordPostView, likePostAnonymously, deleteUserPost, castVote } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -596,9 +596,10 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
                   )}
                 </div>
               </DialogTrigger>
-              <DialogContent className="max-w-5xl w-[95vw] h-[90vh] p-2 bg-black/80 border-none flex items-center justify-center">
+              <DialogContent className="w-full h-full max-w-full max-h-full sm:max-w-5xl sm:max-h-[90vh] p-2 bg-black/80 border-none flex items-center justify-center">
+                <div className="relative w-full h-full">
                   {isYouTubeVideo ? (
-                    <iframe src={post.mediaurls[0]} title="YouTube video player" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen className="w-full h-full max-w-4xl aspect-video"></iframe>
+                    <iframe src={post.mediaurls[0]} title="YouTube video player" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen className="w-full h-full max-w-4xl aspect-video mx-auto"></iframe>
                   ) : post.mediatype === 'image' ? (
                     <Image src={post.mediaurls[0]} alt="Post image" fill style={{ objectFit: "contain" }} sizes="90vw" />
                   ) : post.mediatype === 'gallery' ? (
@@ -622,6 +623,7 @@ export const PostCard: FC<PostCardProps> = ({ post, userLocation, sessionUser, i
                   ) : post.mediatype === 'video' ? (
                     <video controls autoPlay src={post.mediaurls[0]} className="w-full h-full object-contain" />
                   ) : null}
+                </div>
               </DialogContent>
            </Dialog>
         </div>
