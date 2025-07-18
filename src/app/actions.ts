@@ -745,6 +745,17 @@ export async function searchUsers(query: string, currentUserId?: number): Promis
   }
 }
 
+export async function searchGroupMembers(query: string, conversationId: number): Promise<ConversationParticipant[]> {
+    const { user } = await getSession();
+    if (!query || !user) return [];
+    try {
+        return await db.searchGroupMembersDb(query, conversationId, user.id);
+    } catch (error) {
+        console.error("Server action error searching group members:", error);
+        return [];
+    }
+}
+
 // --- Poll Actions ---
 export async function castVote(pollId: number, optionId: number): Promise<{ poll: Poll | null; error?: string }> {
   const { user } = await getSession();

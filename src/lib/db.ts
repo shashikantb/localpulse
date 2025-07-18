@@ -1424,6 +1424,29 @@ export async function searchUsersDb(query: string, currentUserId?: number): Prom
   }
 }
 
+export async function searchGroupMembersDb(query: string, conversationId: number, currentUserId: number): Promise<ConversationParticipant[]> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return [];
+
+    const client = await dbPool.connect();
+    try {
+        const sqlQuery = `
+            SELECT u.id, u.name, u.profilepictureurl, cp.is_admin
+            FROM users u
+            JOIN conversation_participants cp ON u.id = cp.user_id
+            WHERE cp.conversation_id = $1
+            AND u.id != $2
+            AND u.name ILIKE $3
+            LIMIT 5;
+        `;
+        const result: QueryResult<ConversationParticipant> = await client.query(sqlQuery, [conversationId, currentUserId, `%${query}%`]);
+        return result.rows;
+    } finally {
+        client.release();
+    }
+}
+
 export async function getMentionsForPostsDb(postIds: number[]): Promise<Map<number, { id: number; name: string }[]>> {
   await ensureDbInitialized();
   const dbPool = getDbPool();

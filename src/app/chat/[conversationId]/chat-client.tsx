@@ -2,8 +2,8 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import type { Message, User, ConversationDetails, MessageReaction } from '@/lib/db-types';
-import { getMessages, sendMessage, deleteMessage, toggleMessageReaction } from '@/app/actions';
+import type { Message, User, ConversationDetails, MessageReaction, ConversationParticipant } from '@/lib/db-types';
+import { getMessages, sendMessage, deleteMessage, toggleMessageReaction, searchGroupMembers } from '@/app/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -45,16 +45,17 @@ interface ChatClientProps {
 
 const POLLING_INTERVAL = 3000; // 3 seconds
 
-// Helper function to render message content with clickable links
+// Helper function to render message content with clickable links and mentions
 const renderChatMessageContent = (content: string) => {
   if (!content) return content;
 
-  // Regex to find URLs
+  // Regex to find URLs and @mentions
   const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
-  const parts = content.split(urlRegex);
+  const mentionRegex = /@(\w+)/g;
+  const parts = content.split(new RegExp(`(${urlRegex.source}|${mentionRegex.source})`, 'g'));
 
   return parts.map((part, index) => {
-    if (part && part.match(urlRegex)) {
+    if (part?.match(urlRegex)) {
       const href = part.startsWith('www.') ? `https://www.${part}` : part;
       return (
         <a
@@ -68,6 +69,13 @@ const renderChatMessageContent = (content: string) => {
           {part}
         </a>
       );
+    }
+    if (part?.match(mentionRegex)) {
+        return (
+            <span key={`mention-${index}`} className="text-accent font-semibold bg-accent/10 rounded px-1 py-0.5">
+                {part}
+            </span>
+        );
     }
     return part;
   });
@@ -104,6 +112,9 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
   const [isSending, setIsSending] = useState(false);
   const { toast } = useToast();
   const { theme } = useTheme();
+  const [showMentionSuggestions, setShowMentionSuggestions] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [mentionResults, setMentionResults] = useState<ConversationParticipant[]>([]);
   
   const isSendingRef = useRef(isSending);
   isSendingRef.current = isSending;
@@ -137,6 +148,14 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
     };
   }, [conversationId]);
   
+  useEffect(() => {
+    if (showMentionSuggestions && mentionQuery) {
+        searchGroupMembers(mentionQuery, conversationId).then(setMentionResults);
+    } else {
+        setMentionResults([]);
+    }
+  }, [mentionQuery, showMentionSuggestions, conversationId]);
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || isSending) return;
@@ -203,6 +222,25 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
     }
   }
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const text = e.target.value;
+    setNewMessage(text);
+
+    const mentionMatch = text.match(/@(\w*)$/);
+    if (mentionMatch) {
+      setShowMentionSuggestions(true);
+      setMentionQuery(mentionMatch[1]);
+    } else {
+      setShowMentionSuggestions(false);
+    }
+  };
+
+  const handleSelectMention = (username: string) => {
+    setNewMessage(prev => prev.replace(/@\w*$/, `@${username} `));
+    setShowMentionSuggestions(false);
+    setMentionResults([]);
+  };
+
 
   const headerContent = (
       <div className="flex items-center gap-3 hover:bg-muted p-2 rounded-md">
@@ -239,13 +277,29 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
         </header>
 
         {/* Message Input Form */}
-        <div className="p-4 border-b">
+        <div className="p-4 border-b relative">
+            {showMentionSuggestions && mentionResults.length > 0 && (
+                <div className="absolute bottom-full left-4 mb-1 w-3/4 max-w-sm bg-background border rounded-lg shadow-lg z-10">
+                    <ScrollArea className="max-h-40">
+                        {mentionResults.map(user => (
+                            <button
+                                key={user.id}
+                                onClick={() => handleSelectMention(user.name)}
+                                className="flex items-center gap-2 p-2 w-full text-left hover:bg-muted"
+                            >
+                                <Avatar className="h-7 w-7"><AvatarImage src={user.profilepictureurl || undefined}/><AvatarFallback>{user.name.charAt(0)}</AvatarFallback></Avatar>
+                                <span className="text-sm font-medium">{user.name}</span>
+                            </button>
+                        ))}
+                    </ScrollArea>
+                </div>
+            )}
             <form onSubmit={handleSendMessage} className="flex items-center gap-3">
             <Textarea
                 value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Type a message..."
-                className="flex-1 resize-none"
+                onChange={handleInputChange}
+                placeholder="Type a message... (use @ to mention)"
+                className="flex-1 resize-none bg-background border"
                 rows={1}
                 disabled={isSending}
                 onKeyDown={(e) => {
