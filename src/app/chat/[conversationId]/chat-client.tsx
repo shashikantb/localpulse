@@ -96,9 +96,9 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
   const renderChatMessageContent = (content: string) => {
     if (!content) return null;
 
-    const participantNames = conversationDetails.participants.map(p => escapeRegExp(p.name));
+    const participantNames = conversationDetails.participants.map(p => escapeRegExp(`@${p.name}`));
     const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
-    const mentionRegex = participantNames.length > 0 ? new RegExp(`@(${participantNames.join('|')})\\b`, 'g') : null;
+    const mentionRegex = participantNames.length > 0 ? new RegExp(`(${participantNames.join('|')})\\b`, 'g') : null;
 
     const allMatches: { type: 'url' | 'mention', text: string, index: number }[] = [];
 
