@@ -47,6 +47,8 @@ export default async function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="LocalPulse" />
         <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+        {/* Preconnect to Google Cloud Storage to speed up image loading */}
+        <link rel="preconnect" href="https://storage.googleapis.com" />
       </head>
       <body className={`${GeistSans.variable} antialiased bg-background text-foreground flex flex-col min-h-svh`}>
         <Providers>
