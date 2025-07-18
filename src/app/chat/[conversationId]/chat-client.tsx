@@ -43,7 +43,7 @@ interface ChatClientProps {
   conversationId: number;
 }
 
-const POLLING_INTERVAL = 3000; // 3 seconds
+const POLLING_INTERVAL = 1500; // 1.5 seconds
 
 // Helper function to escape special characters for regex
 const escapeRegExp = (string: string) => {
