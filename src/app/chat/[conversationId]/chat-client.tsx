@@ -28,6 +28,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import ChatInfoSidebar from './chat-info-sidebar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -99,7 +100,7 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
     // Create a regex that specifically looks for @ followed by a known participant's name
     const participantNames = conversationDetails.participants.map(p => escapeRegExp(p.name));
     const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
-    const mentionRegex = new RegExp(`@(${participantNames.join('|')})`, 'g');
+    const mentionRegex = new RegExp(`@(${participantNames.join('|')})\\b`, 'g');
 
     const parts = content.split(new RegExp(`(${urlRegex.source}|${mentionRegex.source})`, 'g'));
 
