@@ -51,13 +51,13 @@ const StatusFeed: FC<StatusFeedProps> = ({ sessionUser }) => {
                                 {currentUserData ? (
                                     <div className="p-0.5 rounded-full bg-gradient-to-tr from-gray-400 via-gray-500 to-gray-600" onClick={(e) => { e.stopPropagation(); handleOpenViewer(statuses.findIndex(s => s.userId === sessionUser.id));}}>
                                         <Avatar className="h-16 w-16 border-2 border-background">
-                                            <AvatarImage src={currentUserData.userProfilePictureUrl ?? undefined} />
+                                            <AvatarImage src={currentUserData.userProfilePictureUrl ?? undefined} priority />
                                             <AvatarFallback>{currentUserData.userName.charAt(0)}</AvatarFallback>
                                         </Avatar>
                                     </div>
                                 ) : (
                                      <Avatar className="h-16 w-16 border-2 border-dashed border-primary/50">
-                                        <AvatarImage src={sessionUser.profilepictureurl ?? undefined} alt="Your Status" />
+                                        <AvatarImage src={sessionUser.profilepictureurl ?? undefined} alt="Your Status" priority/>
                                         <AvatarFallback><User className="h-7 w-7" /></AvatarFallback>
                                     </Avatar>
                                 )}
@@ -76,11 +76,11 @@ const StatusFeed: FC<StatusFeedProps> = ({ sessionUser }) => {
                     </DialogContent>
                 </Dialog>
 
-                {otherUsersStatuses.map((userWithStatus) => (
+                {otherUsersStatuses.map((userWithStatus, index) => (
                 <div key={userWithStatus.userId} onClick={() => handleOpenViewer(statuses.findIndex(s => s.userId === userWithStatus.userId))} className="flex flex-col items-center space-y-2 flex-shrink-0 w-20 text-center cursor-pointer">
                       <div className="p-0.5 rounded-full bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-500">
                           <Avatar className="h-16 w-16 border-2 border-background">
-                            <AvatarImage src={userWithStatus.userProfilePictureUrl ?? undefined} />
+                            <AvatarImage src={userWithStatus.userProfilePictureUrl ?? undefined} priority={index < 3} />
                             <AvatarFallback>{userWithStatus.userName.charAt(0)}</AvatarFallback>
                         </Avatar>
                       </div>
