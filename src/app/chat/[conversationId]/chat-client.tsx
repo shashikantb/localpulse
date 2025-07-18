@@ -28,7 +28,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import ChatInfoSidebar from './chat-info-sidebar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -45,40 +44,9 @@ interface ChatClientProps {
 
 const POLLING_INTERVAL = 3000; // 3 seconds
 
-// Helper function to render message content with clickable links and mentions
-const renderChatMessageContent = (content: string) => {
-  if (!content) return content;
-
-  // Regex to find URLs and @mentions
-  const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
-  const mentionRegex = /@(\w+(\s\w+)*)/g;
-  const parts = content.split(new RegExp(`(${urlRegex.source}|${mentionRegex.source})`, 'g'));
-
-  return parts.map((part, index) => {
-    if (part?.match(urlRegex)) {
-      const href = part.startsWith('www.') ? `https://www.${part}` : part;
-      return (
-        <a
-          key={`link-${index}`}
-          href={href}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-blue-400 hover:underline font-medium"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {part}
-        </a>
-      );
-    }
-    if (part?.match(mentionRegex)) {
-        return (
-            <span key={`mention-${index}`} className="text-accent font-semibold bg-accent/10 rounded px-1 py-0.5">
-                {part}
-            </span>
-        );
-    }
-    return part;
-  });
+// Helper function to escape special characters for regex
+const escapeRegExp = (string: string) => {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
 };
 
 const ReactionsDisplay = ({ reactions, onReactionClick }: { reactions: MessageReaction[]; onReactionClick: (reaction: string) => void }) => {
@@ -123,6 +91,47 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
   messagesRef.current = messages;
 
   const partner = !conversationDetails.is_group ? conversationDetails.participants?.find(p => p.id !== sessionUser.id) : null;
+  
+  // Helper function to render message content with clickable links and mentions
+  const renderChatMessageContent = (content: string) => {
+    if (!content) return content;
+    
+    // Create a regex that specifically looks for @ followed by a known participant's name
+    const participantNames = conversationDetails.participants.map(p => escapeRegExp(p.name));
+    const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
+    const mentionRegex = new RegExp(`@(${participantNames.join('|')})`, 'g');
+
+    const parts = content.split(new RegExp(`(${urlRegex.source}|${mentionRegex.source})`, 'g'));
+
+    return parts.map((part, index) => {
+      if (!part) return null;
+
+      if (part.match(urlRegex)) {
+        const href = part.startsWith('www.') ? `https://www.${part}` : part;
+        return (
+          <a
+            key={`link-${index}`}
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-400 hover:underline font-medium"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {part}
+          </a>
+        );
+      }
+      if (part.match(mentionRegex)) {
+          return (
+              <span key={`mention-${index}`} className="text-accent font-semibold bg-accent/10 rounded px-1 py-0.5">
+                  {part}
+              </span>
+          );
+      }
+      return part;
+    });
+  };
+
 
   useEffect(() => {
     let isMounted = true;
@@ -299,7 +308,7 @@ export default function ChatClient({ initialMessages, conversationDetails, sessi
                 value={newMessage}
                 onChange={handleInputChange}
                 placeholder="Type a message... (use @ to mention)"
-                className="flex-1 resize-none bg-white dark:bg-zinc-800 border"
+                className="flex-1 resize-none bg-background border"
                 rows={1}
                 disabled={isSending}
                 onKeyDown={(e) => {
