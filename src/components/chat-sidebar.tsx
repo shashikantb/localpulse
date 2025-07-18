@@ -1,11 +1,11 @@
 
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { getConversations, searchUsers, startChatAndRedirect, getFollowingList } from '@/app/actions';
-import type { Conversation, User, FollowUser } from '@/lib/db-types';
+import { getConversations, searchUsers, startChatAndRedirect } from '@/app/actions';
+import type { Conversation, User } from '@/lib/db-types';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
@@ -15,8 +15,16 @@ import { Input } from '@/components/ui/input';
 import { Search, Loader2, Users } from 'lucide-react';
 import CreateGroupDialog from './create-group-dialog';
 import { Button } from './ui/button';
+import { useToast } from '@/hooks/use-toast';
 
-const POLLING_INTERVAL = 5000; // 5 seconds
+const POLLING_INTERVAL = 15000; // 15 seconds
+const CACHE_KEY = 'localpulse-chat-cache';
+const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
+
+interface CachedChats {
+  timestamp: number;
+  conversations: Conversation[];
+}
 
 const ConversationItem = ({ conv }: { conv: Conversation }) => {
     const pathname = usePathname();
@@ -67,38 +75,67 @@ const ConversationItem = ({ conv }: { conv: Conversation }) => {
 const ChatSidebar = () => {
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const conversationsRef = useRef(conversations);
-    conversationsRef.current = conversations;
-
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState<User[]>([]);
     const [isSearching, setIsSearching] = useState(false);
+    const { toast } = useToast();
 
+    const fetchAndSetConversations = useCallback(async () => {
+        try {
+            const convos = await getConversations();
+            setConversations(convos);
+            
+            // Update cache with fresh data
+            const cacheData: CachedChats = {
+                timestamp: Date.now(),
+                conversations: convos,
+            };
+            localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
+
+        } catch (error) {
+            console.error("Failed to fetch conversations:", error);
+            toast({ variant: 'destructive', title: 'Could not load chats.' });
+        } finally {
+            setIsLoading(false);
+        }
+    }, [toast]);
+    
+    // Initial load effect
     useEffect(() => {
         let isMounted = true;
         
-        const fetchAndSetConversations = async () => {
-            try {
-                const convos = await getConversations();
-                if (isMounted) {
-                    if (JSON.stringify(conversationsRef.current) !== JSON.stringify(convos)) {
-                        setConversations(convos);
-                    }
+        // Load from cache first
+        try {
+            const cachedItem = localStorage.getItem(CACHE_KEY);
+            if(cachedItem) {
+                const cachedData: CachedChats = JSON.parse(cachedItem);
+                if(isMounted) {
+                    setConversations(cachedData.conversations);
+                    setIsLoading(false); // We have something to show
                 }
-            } catch (error) {
-                console.error("Failed to fetch conversations:", error);
-            } finally {
-                if (isMounted) setIsLoading(false);
+                
+                // Revalidate if cache is stale
+                if(Date.now() - cachedData.timestamp > CACHE_EXPIRY_MS) {
+                    fetchAndSetConversations();
+                }
+            } else {
+                // No cache, fetch from server
+                fetchAndSetConversations();
             }
-        };
+        } catch(error) {
+            console.warn("Failed to load chats from cache.", error);
+            fetchAndSetConversations();
+        }
 
-        fetchAndSetConversations();
+        return () => { isMounted = false; };
+    }, [fetchAndSetConversations]);
+
+    // Polling effect
+    useEffect(() => {
         const intervalId = setInterval(fetchAndSetConversations, POLLING_INTERVAL);
-        return () => {
-            isMounted = false;
-            clearInterval(intervalId);
-        };
-    }, []);
+        return () => clearInterval(intervalId);
+    }, [fetchAndSetConversations]);
+
 
     useEffect(() => {
         if (!searchQuery.trim()) {
