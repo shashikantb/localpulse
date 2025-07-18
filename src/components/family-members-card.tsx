@@ -23,7 +23,6 @@ const FamilyMembersCard: FC<FamilyMembersCardProps> = ({ userId }) => {
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, startRefreshTransition] = useTransition();
-  const [isRequestingLocation, setIsRequestingLocation] = useState<number | null>(null);
   const { toast } = useToast();
 
   const fetchFamilyMembers = React.useCallback(async () => {
@@ -44,21 +43,20 @@ const FamilyMembersCard: FC<FamilyMembersCardProps> = ({ userId }) => {
 
   const handleManualRefresh = () => {
     startRefreshTransition(async () => {
-      await fetchFamilyMembers();
-      toast({ title: 'Refreshed', description: 'Family member list and locations have been updated.' });
-    });
-  };
+      // 1. Send out all location requests in parallel
+      const locationRequestPromises = familyMembers
+        .filter(member => member.they_are_sharing_with_me)
+        .map(member => requestLocationUpdate(member.id));
+      
+      await Promise.all(locationRequestPromises);
+      
+      toast({ title: 'Refreshing...', description: 'Sent location requests. Give it a moment for devices to respond.' });
 
-  const handleRequestLiveLocation = async (targetUserId: number) => {
-    setIsRequestingLocation(targetUserId);
-    const result = await requestLocationUpdate(targetUserId);
-    if (result.success) {
-      toast({ title: 'Request Sent', description: 'A request for an updated location has been sent. Please refresh in a moment.' });
-    } else {
-      toast({ variant: 'destructive', title: 'Request Failed', description: result.error });
-    }
-    // Keep loader for a few seconds to give time for the update to come through
-    setTimeout(() => setIsRequestingLocation(null), 5000);
+      // 2. Wait a moment for devices to respond before re-fetching data.
+      setTimeout(() => {
+        fetchFamilyMembers();
+      }, 3000); // 3-second delay
+    });
   };
 
   if (isLoading) {
@@ -102,7 +100,7 @@ const FamilyMembersCard: FC<FamilyMembersCardProps> = ({ userId }) => {
                     <AvatarFallback>{member.name.charAt(0)}</AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-foreground truncate">{member.name}</p>
+                    <p className="font-medium text-sm text-foreground truncate">{member.name}</p>
                     {member.they_are_sharing_with_me && member.latitude && member.longitude ? (
                         <div className="flex items-center gap-2 mt-0.5">
                             <a
@@ -128,18 +126,6 @@ const FamilyMembersCard: FC<FamilyMembersCardProps> = ({ userId }) => {
                 </div>
             </Link>
             <div className="flex items-center gap-2 flex-shrink-0 self-end sm:self-center">
-                 {member.they_are_sharing_with_me && (
-                    <Button
-                        size="icon"
-                        variant="outline"
-                        className="h-8 w-8"
-                        onClick={() => handleRequestLiveLocation(member.id)}
-                        disabled={isRequestingLocation === member.id}
-                        title="Request live location update"
-                    >
-                        {isRequestingLocation === member.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                    </Button>
-                 )}
                 <span className="text-sm text-muted-foreground">Share My Location</span>
                 <LocationSharingToggle
                     targetUserId={member.id}
