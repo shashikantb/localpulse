@@ -1547,7 +1547,12 @@ export async function castVoteDb(userId: number, pollId: number, optionId: numbe
         await client.query('UPDATE poll_options SET vote_count = vote_count + 1 WHERE id = $1', [optionId]);
 
         // Fetch the updated poll data to return
-        const updatedPollResult = await getPollsForPostsDb([ (await client.query('SELECT post_id from polls where id=$1',[pollId])).rows[0].post_id ], userId);
+        const post_id_res = await client.query('SELECT post_id from polls where id=$1',[pollId]);
+        const post_id = post_id_res.rows[0]?.post_id;
+        if (!post_id) {
+          throw new Error("Could not find post for poll");
+        }
+        const updatedPollResult = await getPollsForPostsDb([post_id], userId);
         
         await client.query('COMMIT');
         

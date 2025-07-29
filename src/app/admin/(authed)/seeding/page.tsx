@@ -7,7 +7,7 @@ import SeedContentButton from './seed-content-button';
 
 export const dynamic = 'force-dynamic';
 
-const CITIES = ['Mumbai', 'Pune', 'Nashik'];
+const CITIES = ['Mumbai', 'Pune', 'Nashik', 'Dhule', 'Shirpur', 'Dondaicha'];
 
 const AdminSeedingPage: FC = () => {
 
@@ -25,7 +25,7 @@ const AdminSeedingPage: FC = () => {
             Seed City Content
           </CardTitle>
           <CardDescription>
-            Generate and post 5-7 anonymous, realistic-sounding "pulses" for a selected city.
+            Generate and post 5-7 anonymous, realistic-sounding "pulses" for a selected city. Some posts will include AI-generated images.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -33,7 +33,7 @@ const AdminSeedingPage: FC = () => {
             <Bot className="h-4 w-4" />
             <AlertTitle>How it Works</AlertTitle>
             <AlertDescription>
-              <p>This tool uses a Generative AI model to create fictional but plausible local updates for the selected city. The posts are published anonymously and geo-tagged to appear in that city's feed.</p>
+              <p>This tool uses a Generative AI model to create fictional but plausible local updates for the selected city. The posts are published anonymously and geo-tagged to appear in that city's feed. For some posts, it will also generate and attach a relevant image.</p>
               <p className="mt-2 text-xs text-muted-foreground">
                 This is great for making the app feel active to new users. The content is not real news.
               </p>
