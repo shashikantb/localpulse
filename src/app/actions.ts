@@ -9,12 +9,14 @@ import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { admin as firebaseAdmin } from '@/lib/firebase-admin';
 import { getGcsBucketName, getGcsClient } from '@/lib/gcs';
-import { seedCityContent } from '@/ai/flows/seed-content-flow';
+import { seedContent } from '@/ai/flows/seed-content-flow';
 
 
 async function geocodeCoordinates(latitude: number, longitude: number): Promise<string | null> {
-  // A simple reverse geocode lookup based on known city coordinates.
+  // This is a simple reverse geocode lookup based on known city coordinates.
   // In a real app, this would use a Geocoding API.
+  // This function is being kept for now for potential other uses but is no longer
+  // used by the live seeding feature.
   const cities: { [key: string]: { lat: number; lon: number; radius: number } } = {
     Mumbai: { lat: 19.076, lon: 72.8777, radius: 30 },
     Pune: { lat: 18.5204, lon: 73.8567, radius: 25 },
@@ -1490,26 +1492,27 @@ export async function triggerLiveSeeding(latitude: number, longitude: number): P
             return;
         }
         
-        const cityName = await geocodeCoordinates(latitude, longitude);
-        if (!cityName || cityName === 'Unknown City') {
-            return;
-        }
+        // The AI flow will now determine the city from coordinates.
+        // We will use a combination of lat/lon to create a unique key for the log.
+        const cityKey = `${latitude.toFixed(2)},${longitude.toFixed(2)}`;
         
-        const lastSeedTime = await db.getLastSeedTimeDb(cityName);
+        const lastSeedTime = await db.getLastSeedTimeDb(cityKey);
         const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
         
         if (!lastSeedTime || new Date(lastSeedTime) < twoHoursAgo) {
-            console.log(`Live seeding triggered for ${cityName}.`);
+            console.log(`Live seeding triggered for location: ${cityKey}.`);
+            
             // Don't await this, let it run in the background.
-            seedCityContent(cityName).then(async (result) => {
+            seedContent({ latitude, longitude }).then(async (result) => {
               if (result.success) {
-                await db.updateLastSeedTimeDb(cityName);
-                console.log(`Successfully completed live seeding for ${cityName}.`);
+                // Log the successful seeding using the same key.
+                await db.updateLastSeedTimeDb(cityKey);
+                console.log(`Successfully completed live seeding for ${result.cityName}.`);
               } else {
-                console.error(`Live seeding failed for ${cityName}:`, result.message);
+                console.error(`Live seeding failed for location ${cityKey}:`, result.message);
               }
             }).catch(err => {
-                console.error(`Unhandled error during live seeding for ${cityName}:`, err);
+                console.error(`Unhandled error during live seeding for location ${cityKey}:`, err);
             });
         }
     } catch (error) {
