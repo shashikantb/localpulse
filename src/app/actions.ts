@@ -9,7 +9,7 @@ import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { admin as firebaseAdmin } from '@/lib/firebase-admin';
 import { getGcsBucketName, getGcsClient } from '@/lib/gcs';
-import { seedCityContent } from './ai/flows/seed-content-flow';
+import { seedCityContent } from '@/ai/flows/seed-content-flow';
 
 
 async function geocodeCoordinates(latitude: number, longitude: number): Promise<string | null> {
