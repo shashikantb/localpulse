@@ -42,6 +42,11 @@ JWT_SECRET=your_super_secret_jwt_key_here
 # above the free limit, and this requires setting up a billing account.
 GOOGLE_GENAI_API_KEY=your_google_genai_api_key
 
+# SerpApi API Key (MANDATORY for AI Content Seeding)
+# This key is required for the content seeding feature to perform live web searches for news.
+# Get your key from https://serpapi.com/
+SERPAPI_API_KEY=your_serpapi_api_key
+
 # Admin Credentials (change these for production)
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=password123
