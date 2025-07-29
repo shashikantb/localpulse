@@ -1,13 +1,19 @@
 
+'use client';
+
 import type { FC } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Save, Bell, Shield } from 'lucide-react';
+import { Save, Bell, Shield, Bot } from 'lucide-react';
+import LiveSeedingToggle from './live-seeding-toggle';
+import { getAppSetting } from './actions';
 
-const AdminSettingsPage: FC = () => {
+const AdminSettingsPage: FC<{
+  liveSeedingEnabled: boolean;
+}> = ({ liveSeedingEnabled }) => {
   // Placeholder state for settings - in a real app, this would be fetched and updated
   // const [settings, setSettings] = useState({
   //   siteName: "LocalPulse",
@@ -22,6 +28,19 @@ const AdminSettingsPage: FC = () => {
         <h1 className="text-4xl font-bold tracking-tight text-foreground">Admin Settings</h1>
         <p className="text-lg text-muted-foreground">Configure general application settings.</p>
       </header>
+      
+      <Card className="shadow-lg">
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <Bot className="mr-2 h-6 w-6 text-primary" />
+            Live Content Seeding
+          </CardTitle>
+          <CardDescription>Automatically generate local news based on user location.</CardDescription>
+        </CardHeader>
+        <CardContent>
+            <LiveSeedingToggle initialValue={liveSeedingEnabled} />
+        </CardContent>
+      </Card>
 
       <Card className="shadow-lg">
         <CardHeader>

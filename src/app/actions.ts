@@ -9,14 +9,29 @@ import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { admin as firebaseAdmin } from '@/lib/firebase-admin';
 import { getGcsBucketName, getGcsClient } from '@/lib/gcs';
+import { seedCityContent } from './ai/flows/seed-content-flow';
 
 
 async function geocodeCoordinates(latitude: number, longitude: number): Promise<string | null> {
-  // ... (existing geocode placeholder logic)
-  if (latitude > 40.5 && latitude < 40.9 && longitude > -74.3 && longitude < -73.7) return "New York";
-  if (latitude > 33.8 && latitude < 34.2 && longitude > -118.5 && longitude < -118.0) return "Los Angeles";
-  if (latitude > 51.3 && latitude < 51.7 && longitude > -0.5 && longitude < 0.3) return "London";
-  if (latitude > 35.5 && latitude < 35.9 && longitude > 139.5 && longitude < 139.9) return "Tokyo";
+  // A simple reverse geocode lookup based on known city coordinates.
+  // In a real app, this would use a Geocoding API.
+  const cities: { [key: string]: { lat: number; lon: number; radius: number } } = {
+    Mumbai: { lat: 19.076, lon: 72.8777, radius: 30 },
+    Pune: { lat: 18.5204, lon: 73.8567, radius: 25 },
+    Nashik: { lat: 20.0112, lon: 73.7909, radius: 20 },
+    Dhule: { lat: 20.9042, lon: 74.7749, radius: 15 },
+    Shirpur: { lat: 21.3486, lon: 74.8797, radius: 10 },
+    Dondaicha: { lat: 21.3197, lon: 74.5765, radius: 10 },
+  };
+
+  for (const city in cities) {
+    const cityData = cities[city];
+    const distance = db.earthDistance(latitude, longitude, cityData.lat, cityData.lon);
+    if (distance <= cityData.radius * 1000) {
+      return city;
+    }
+  }
+
   return "Unknown City";
 }
 
@@ -1462,5 +1477,43 @@ export async function markFamilyFeedAsRead(): Promise<void> {
         revalidatePath('/'); // Revalidate to ensure updated state is fetched
     } catch (error) {
         console.error("Server action error marking family feed as read:", error);
+    }
+}
+
+// --- Live Seeding Action ---
+export async function triggerLiveSeeding(latitude: number, longitude: number): Promise<void> {
+    // This is a "fire-and-forget" action from the client's perspective.
+    // It runs in the background on the server.
+    try {
+        const liveSeedingEnabled = await db.getAppSettingDb('live_seeding_enabled');
+        if (liveSeedingEnabled !== 'true') {
+            return;
+        }
+        
+        const cityName = await geocodeCoordinates(latitude, longitude);
+        if (!cityName || cityName === 'Unknown City') {
+            return;
+        }
+        
+        const lastSeedTime = await db.getLastSeedTimeDb(cityName);
+        const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+        
+        if (!lastSeedTime || new Date(lastSeedTime) < twoHoursAgo) {
+            console.log(`Live seeding triggered for ${cityName}.`);
+            // Don't await this, let it run in the background.
+            seedCityContent(cityName).then(async (result) => {
+              if (result.success) {
+                await db.updateLastSeedTimeDb(cityName);
+                console.log(`Successfully completed live seeding for ${cityName}.`);
+              } else {
+                console.error(`Live seeding failed for ${cityName}:`, result.message);
+              }
+            }).catch(err => {
+                console.error(`Unhandled error during live seeding for ${cityName}:`, err);
+            });
+        }
+    } catch (error) {
+        // We catch errors here to prevent them from propagating to the client.
+        console.error('Error in triggerLiveSeeding action:', error);
     }
 }
