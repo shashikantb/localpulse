@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview An AI flow for seeding the database with realistic, fictional content.
@@ -38,6 +39,7 @@ const prompt = ai.definePrompt({
     name: 'seedContentPrompt',
     input: { schema: SeedContentInputSchema },
     output: { schema: SeedContentOutputSchema },
+    model: 'googleai/gemini-2.0-flash', // Specify the model to use
     prompt: `You are an AI for a social media app called LocalPulse. Your task is to generate 5 to 7 short, realistic, and engaging local news updates or "pulses" for the city of {{{city}}}.
 
     Guidelines:
