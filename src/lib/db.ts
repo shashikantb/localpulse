@@ -121,6 +121,8 @@ async function initializeDatabase(client: Pool | Client) {
     await initClient.query(`CREATE TABLE IF NOT EXISTS polls (id SERIAL PRIMARY KEY, post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE, question TEXT NOT NULL);`);
     await initClient.query(`CREATE TABLE IF NOT EXISTS poll_options (id SERIAL PRIMARY KEY, poll_id INTEGER NOT NULL REFERENCES polls(id) ON DELETE CASCADE, option_text TEXT NOT NULL, vote_count INTEGER DEFAULT 0);`);
     await initClient.query(`CREATE TABLE IF NOT EXISTS poll_votes (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, poll_id INTEGER NOT NULL REFERENCES polls(id) ON DELETE CASCADE, option_id INTEGER NOT NULL REFERENCES poll_options(id) ON DELETE CASCADE, PRIMARY KEY (user_id, poll_id));`);
+    await initClient.query(`CREATE TABLE IF NOT EXISTS app_settings (setting_key VARCHAR(255) PRIMARY KEY, setting_value TEXT);`);
+    await initClient.query(`CREATE TABLE IF NOT EXISTS city_seed_log (city_name VARCHAR(255) PRIMARY KEY, last_seeded_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP);`);
     
     console.log("All tables checked/created.");
 
@@ -208,6 +210,21 @@ async function ensureDbInitialized() {
 
 
 // --- Function Implementations ---
+
+export function earthDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371e3; // metres
+    const φ1 = lat1 * Math.PI/180;
+    const φ2 = lat2 * Math.PI/180;
+    const Δφ = (lat2-lat1) * Math.PI/180;
+    const Δλ = (lon2-lon1) * Math.PI/180;
+
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+    return R * c; // in metres
+}
 
 const POST_COLUMNS_WITH_JOINS = `
   p.id, p.content, p.latitude, p.longitude, p.createdat, p.likecount, 
@@ -2779,3 +2796,66 @@ export async function getUnreadFamilyPostCountDb(userId: number): Promise<number
     }
 }
     
+// --- Live Seeding Functions ---
+
+export async function getAppSettingDb(key: string): Promise<string | null> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return null;
+    const client = await dbPool.connect();
+    try {
+        const result = await client.query('SELECT setting_value FROM app_settings WHERE setting_key = $1', [key]);
+        return result.rows[0]?.setting_value || null;
+    } finally {
+        client.release();
+    }
+}
+
+export async function setAppSettingDb(key: string, value: string): Promise<void> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) throw new Error("Database not configured.");
+    const client = await dbPool.connect();
+    try {
+        const query = `
+            INSERT INTO app_settings (setting_key, setting_value)
+            VALUES ($1, $2)
+            ON CONFLICT (setting_key) DO UPDATE
+            SET setting_value = EXCLUDED.setting_value;
+        `;
+        await client.query(query, [key, value]);
+    } finally {
+        client.release();
+    }
+}
+
+export async function getLastSeedTimeDb(cityName: string): Promise<string | null> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) return null;
+    const client = await dbPool.connect();
+    try {
+        const result = await client.query('SELECT last_seeded_at FROM city_seed_log WHERE city_name = $1', [cityName]);
+        return result.rows[0]?.last_seeded_at || null;
+    } finally {
+        client.release();
+    }
+}
+
+export async function updateLastSeedTimeDb(cityName: string): Promise<void> {
+    await ensureDbInitialized();
+    const dbPool = getDbPool();
+    if (!dbPool) throw new Error("Database not configured.");
+    const client = await dbPool.connect();
+    try {
+        const query = `
+            INSERT INTO city_seed_log (city_name, last_seeded_at)
+            VALUES ($1, NOW())
+            ON CONFLICT (city_name) DO UPDATE
+            SET last_seeded_at = NOW();
+        `;
+        await client.query(query, [cityName]);
+    } finally {
+        client.release();
+    }
+}
