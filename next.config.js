@@ -35,6 +35,7 @@ const withPWA = require('next-pwa')({
 
 
 const nextConfig = {
+  output: 'standalone', // Required for optimized Docker builds
   productionBrowserSourceMaps: true,
   typescript: {
     ignoreBuildErrors: true,
