@@ -13,6 +13,7 @@ import { addPostDb } from '@/lib/db';
 import type { DbNewPost } from '@/lib/db-types';
 import { z } from 'zod';
 import { getGcsClient, getGcsBucketName } from '@/lib/gcs';
+import { getJson } from 'google-search-results-nodejs';
 
 // Define city coordinates
 const cityCoordinates: { [key: string]: { lat: number; lon: number } } = {
@@ -32,7 +33,7 @@ export type SeedContentInput = z.infer<typeof SeedContentInputSchema>;
 const SeedContentOutputSchema = z.object({
   posts: z.array(
     z.object({
-      content: z.string(),
+      content: z.string().describe('The rewritten, engaging local news update or "pulse" for the app.'),
       photo_hint: z
         .string()
         .optional()
@@ -43,6 +44,44 @@ const SeedContentOutputSchema = z.object({
   ),
 });
 export type SeedContentOutput = z.infer<typeof SeedContentOutputSchema>;
+
+// Tool for the AI to search the web for real news
+const searchTheWeb = ai.defineTool(
+    {
+        name: 'searchTheWeb',
+        description: 'Searches the web for recent news and updates for a specific city.',
+        inputSchema: z.object({
+            query: z.string().describe('The search query, e.g., "latest news in Mumbai".'),
+        }),
+        outputSchema: z.object({
+            results: z.array(z.object({
+                title: z.string(),
+                link: z.string(),
+                snippet: z.string(),
+            })),
+        }),
+    },
+    async (input) => {
+        if (!process.env.SERPAPI_API_KEY) {
+            throw new Error('SERPAPI_API_KEY environment variable is not set. Cannot perform web search.');
+        }
+
+        const json = await getJson({
+            engine: 'google',
+            q: input.query,
+            api_key: process.env.SERPAPI_API_KEY,
+        });
+
+        const results = (json.organic_results || []).slice(0, 5).map(res => ({
+            title: res.title,
+            link: res.link,
+            snippet: res.snippet,
+        }));
+
+        return { results };
+    }
+);
+
 
 // Helper function to upload base64 image to GCS
 async function uploadImageToGcs(base64Data: string, city: string): Promise<string> {
@@ -80,20 +119,15 @@ const generateContentPrompt = ai.definePrompt({
     input: { schema: SeedContentInputSchema },
     output: { schema: SeedContentOutputSchema },
     model: 'googleai/gemini-2.0-flash',
-    prompt: `You are an AI for a social media app called LocalPulse. Your task is to generate 5 to 7 short, realistic, and engaging local news updates or "pulses" for the city of {{{city}}}.
-
-    Guidelines:
-    - Keep each pulse under 280 characters.
-    - Cover a variety of topics: traffic, local events, public service announcements, interesting observations, new business openings, etc.
-    - For about half of the posts, provide a simple 1-2 word "photo_hint" describing a suitable image (e.g., "traffic jam", "food festival", "stray dog", "sunset view"). Omit the photo_hint for text-only posts.
-    - The tone should be informative but casual, like a real person sharing an update.
-    - DO NOT use hashtags.
-    - Generate completely fictional but plausible content. Do not use real, time-sensitive news.
-
-    Example for Mumbai:
-    - "Heads up, there's a big traffic jam on the Western Express Highway near Andheri. Might want to take the metro!", photo_hint: "traffic jam"
-    - "Wow, the sea link looks absolutely stunning in the monsoon mist today."
-    - "Looks like they're setting up for a food festival at the Bandra Kurla Complex this weekend. Smells amazing!", photo_hint: "food festival"
+    tools: [searchTheWeb],
+    prompt: `You are an AI for a social media app called LocalPulse. Your task is to act as a local news curator.
+    
+    1. First, use the 'searchTheWeb' tool to find 2-3 of the most recent and relevant news updates for the city of {{{city}}}, India. Use a search query like "latest news in {{{city}}}".
+    2. For each piece of news you find, rewrite it into a short, realistic, and engaging local news update or "pulse" for the app.
+    3. Keep each pulse under 280 characters.
+    4. For each rewritten pulse, provide a simple 1-2 word "photo_hint" describing a suitable image (e.g., "new metro line", "road construction", "community event"). Omit the photo_hint if no photo is suitable.
+    5. The tone should be informative but casual, like a real person sharing an update.
+    6. DO NOT use hashtags.
 
     Generate the content for the city of {{{city}}}.`,
 });
