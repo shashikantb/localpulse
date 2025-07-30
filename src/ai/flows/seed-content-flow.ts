@@ -30,7 +30,7 @@ const SeedContentOutputSchema = z.object({
         .string()
         .optional()
         .describe(
-          'A simple 1-2 word description for a photo if this post would benefit from one. E.g., "traffic jam" or "food festival". Omit if no photo is needed.'
+          'A simple 1-2 word description in ENGLISH for a photo if this post would benefit from one. E.g., "traffic jam" or "food festival". Omit if no photo is needed.'
         ),
     })
   ),
@@ -121,13 +121,14 @@ const generateContentPrompt = ai.definePrompt({
     tools: [searchTheWeb],
     prompt: `You are an AI for a social media app called LocalPulse. Your task is to act as a local news curator.
     
-    1.  First, determine the major city for the given latitude: {{{latitude}}} and longitude: {{{longitude}}}.
-    2.  Use the 'searchTheWeb' tool to find 2-3 of the most recent and relevant news updates for that city. Use a search query like "latest news in [city name]".
-    3.  For each piece of news you find, rewrite it into a short, realistic, and engaging local news update or "pulse" for the app.
-    4.  Keep each pulse under 280 characters.
-    5.  For each rewritten pulse, provide a simple 1-2 word "photo_hint" describing a suitable image (e.g., "new metro line", "road construction", "community event"). Omit the photo_hint if no photo is suitable.
-    6.  The tone should be informative but casual, like a real person sharing an update.
-    7.  DO NOT use hashtags.
+    1.  First, determine the major city, state, and country for the given latitude: {{{latitude}}} and longitude: {{{longitude}}}.
+    2.  Determine the primary local language for that location. For India, use the state language (e.g., Marathi for Maharashtra, Kannada for Karnataka). For other countries, use their primary language (e.g., German for Germany).
+    3.  Use the 'searchTheWeb' tool to find 2-3 of the most recent and relevant news updates for that city. Use a search query like "latest news in [city name]".
+    4.  For each piece of news you find, rewrite it in the determined **LOCAL LANGUAGE** as a short, realistic, and engaging local news update or "pulse" for the app.
+    5.  Keep each pulse under 280 characters.
+    6.  For each rewritten pulse, provide a simple 1-2 word "photo_hint" in **ENGLISH** describing a suitable image (e.g., "traffic jam", "food festival"). Omit the photo_hint if no photo is suitable.
+    7.  The tone should be informative but casual, like a real person sharing an update.
+    8.  DO NOT use hashtags.
 
     Generate the content for the location provided.`,
 });
