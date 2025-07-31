@@ -1,4 +1,5 @@
 /** @type {import('next').NextConfig} */
+const path = require('path');
 
 const gcsBucketName = process.env.GCS_BUCKET_NAME;
 
@@ -33,7 +34,6 @@ const withPWA = require('next-pwa')({
   disable: process.env.NODE_ENV === 'development',
 });
 
-
 const nextConfig = {
   output: 'standalone', // Required for optimized Docker builds
   productionBrowserSourceMaps: true,
@@ -46,6 +46,11 @@ const nextConfig = {
   images: {
     formats: ['image/avif', 'image/webp'],
     remotePatterns,
+  },
+  webpack: (config) => {
+    // Add alias for "@/..."
+    config.resolve.alias['@'] = path.resolve(__dirname, 'src');
+    return config;
   },
 };
 
