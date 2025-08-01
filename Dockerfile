@@ -17,6 +17,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Clean any old Next.js build artifacts
+RUN rm -rf .next
+
 # Build the Next.js application
 RUN npm run build
 
