@@ -145,7 +145,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser, initialPosts }) 
   const [businessFeed, setBusinessFeed] = useState<BusinessFeedState>(initialBusinessFeedState);
 
   const [activeTab, setActiveTab] = useState<FeedType>('nearby');
-  const [sortBy, setSortBy] = useState<SortOption>('newest');
+  const [sortBy, setSortBy] = useState<SortOption>('nearby');
   
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -250,6 +250,16 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser, initialPosts }) 
     }
   }, [sessionUser]);
   
+  // This effect will run ONCE when the location is first detected.
+  // It ensures the "Nearby" feed is immediately refreshed with location-sorted data,
+  // overriding the initial server-rendered posts.
+  useEffect(() => {
+    if (location && activeTab === 'nearby') {
+        console.log("Location detected, fetching nearby posts.");
+        fetchPosts('nearby', 1, sortBy, location);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location]); // Note: This intentionally only runs when `location` changes from null to a value.
 
   const handleTabChange = (value: string) => {
     const newTab = value as FeedType;
@@ -531,6 +541,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser, initialPosts }) 
                     <DropdownMenuLabel>Sort By</DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     <DropdownMenuRadioGroup value={sortBy} onValueChange={(v) => handleSortChange(v as SortOption)}>
+                      <DropdownMenuRadioItem value="nearby">Nearby</DropdownMenuRadioItem>
                       <DropdownMenuRadioItem value="newest">Newest</DropdownMenuRadioItem>
                       <DropdownMenuRadioItem value="likes">Most Popular</DropdownMenuRadioItem>
                       <DropdownMenuRadioItem value="comments">Most Discussed</DropdownMenuRadioItem>
