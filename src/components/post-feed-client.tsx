@@ -37,6 +37,9 @@ import { BUSINESS_CATEGORIES } from '@/lib/db-types';
 import BusinessCard from './business-card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { getMessaging, getToken } from 'firebase/messaging';
+import { getApp, getApps, initializeApp } from 'firebase/app';
+
 
 interface AndroidInterface {
   getFCMToken?: () => string | null;
@@ -155,6 +158,11 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser, initialPosts }) 
   
   const liveSeedingTriggered = useRef(false);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setNotificationPermissionStatus(Notification.permission);
+    }
+  }, []);
   
   // Fetch unread family post count on initial load and periodically
   useEffect(() => {
@@ -259,7 +267,7 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser, initialPosts }) 
         fetchPosts('nearby', 1, sortBy, location);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location]); // Note: This intentionally only runs when `location` changes from null to a value.
+  }, [location]);
 
   const handleTabChange = (value: string) => {
     const newTab = value as FeedType;
@@ -296,32 +304,30 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser, initialPosts }) 
 
     setNotificationPermissionStatus('loading');
     
-    const getTokenWithRetries = (retries = 3, delay = 500): Promise<string | null> => {
-        return new Promise((resolve) => {
-            let attempts = 0;
-            const tryGetToken = () => {
-                if (window.Android && typeof window.Android.getFCMToken === 'function') {
-                    const token = window.Android.getFCMToken();
-                    if (token) {
-                        resolve(token);
-                        return;
-                    }
-                }
-                
-                attempts++;
-                if (attempts < retries) {
-                    setTimeout(tryGetToken, delay);
-                } else {
-                    resolve(null);
-                }
-            };
-            tryGetToken();
-        });
+    const firebaseConfig = {
+      apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+      authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+      storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+      messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+      appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
     };
 
+    const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
+    if (!vapidKey) {
+        console.error("VAPID key is missing in environment variables (NEXT_PUBLIC_FIREBASE_VAPID_KEY). Cannot generate web token.");
+        toast({ variant: 'destructive', title: 'Setup Error', description: 'Web notification key is not configured on the server.' });
+        setNotificationPermissionStatus('denied');
+        return;
+    }
+    
     try {
-      if (window.Android && typeof window.Android.getFCMToken === 'function') {
-        const token = await getTokenWithRetries();
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+        const messaging = getMessaging(app);
+        const token = await getToken(messaging, { vapidKey });
+        
         if (token) {
           const result = await registerDeviceToken(token, location?.latitude, location?.longitude);
           if (result.success) {
@@ -332,12 +338,12 @@ const PostFeedClient: FC<PostFeedClientProps> = ({ sessionUser, initialPosts }) 
              setNotificationPermissionStatus('denied');
           }
         } else {
-          setShowTroubleshootingDialog(true);
-          setNotificationPermissionStatus('denied');
+            setNotificationPermissionStatus('denied');
+            toast({ variant: 'destructive', title: 'Token Error', description: 'Could not get a notification token. Please try again.' });
         }
       } else {
-        toast({ title: "Web Notifications", description: "Web push notifications are not yet available. Please use our Android app for real-time updates." });
         setNotificationPermissionStatus('denied');
+        toast({ variant: 'destructive', title: 'Permission Denied', description: 'You have blocked notifications.' });
       }
     } catch (error) {
         console.error("Error during notification registration:", error);
