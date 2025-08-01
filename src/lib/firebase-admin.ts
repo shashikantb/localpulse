@@ -1,4 +1,5 @@
 
+
 import * as admin from 'firebase-admin';
 
 const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
@@ -9,7 +10,13 @@ if (!serviceAccountJson) {
   );
 } else {
   try {
+    // This is the most robust way to parse a JSON string from an environment variable
+    // that may have escaping issues with newlines.
     const serviceAccount = JSON.parse(serviceAccountJson);
+
+    // The private_key needs to have its escaped newlines replaced with actual newlines.
+    serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+    
     if (admin.apps.length === 0) {
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
