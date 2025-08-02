@@ -29,6 +29,7 @@ WORKDIR /app
 
 # Set environment to production
 ENV NODE_ENV=production
+ENV GCS_BUCKET_NAME=localpulse
 
 # Create a non-root user for security
 RUN addgroup --system --gid 1001 nextjs
